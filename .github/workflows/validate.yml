@@ -1,0 +1,23 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  line-endings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require LF in tracked text files
+        shell: bash
+        run: |
+          files="$(git grep -Il $'\r' HEAD -- . || true)"
+          if [[ -n "$files" ]]; then
+            printf 'Tracked text files contain CR bytes:\n%s\n' "$files"
+            exit 1
+          fi
