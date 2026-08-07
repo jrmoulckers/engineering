@@ -16,7 +16,7 @@ jobs:
       - name: Require LF in tracked text files
         shell: bash
         run: |
-          files="$(git grep -Il $'\r' -- . || true)"
+          files="$(git grep -Il $'\r' HEAD -- . || true)"
           if [[ -n "$files" ]]; then
             printf 'Tracked text files contain CR bytes:\n%s\n' "$files"
             exit 1
