@@ -9,7 +9,7 @@
 - Evidence: Graph validation finds no cycles or undeclared edges; generated output is regenerated and matches source; clean repeated builds match by digest or documented normalization; parallel scheduling preserves results.
 - Owner and ratification: Engineering owns this Draft's deterministic build-graph mechanism; only the repository owner may change it to Ratified.
 - Handoff: `jrmoulckers/.github` owns workflow implementation and runner scheduling; Product owns release timing.
-- Legacy inputs: `studio-legacy:architecture:1`, `studio-legacy:architecture:4`, `studio-legacy:architecture:10`, `studio-legacy:devops:1`
+- Legacy inputs: `studio-legacy:architecture:1`, `studio-legacy:architecture:10`, `studio-legacy:devops:5`
 
 ## Immutable versioned artifacts
 
@@ -20,7 +20,7 @@
 - Evidence: Registries reject replacement; repeated retrieval matches the recorded digest; corrections create a new version and artifact.
 - Owner and ratification: Engineering owns this Draft's artifact-immutability mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns whether to ship a version; `jrmoulckers/.github` owns registry and distribution automation.
-- Legacy inputs: `studio-legacy:devops:2`, `studio-legacy:process:3`
+- Legacy inputs: `studio-legacy:devops:8`, `studio-legacy:process:5`, `studio-legacy:process:6`
 
 ## Additive semantic evolution
 
@@ -31,7 +31,7 @@
 - Evidence: Change records classify patch, minor, and major intent; compatibility tests exercise supported versions; breaking changes include migration and deprecation evidence.
 - Owner and ratification: Engineering owns this Draft's software-versioning and migration mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns rollout and support obligations; Studio owns versioning of its published contracts, and `jrmoulckers/.github` owns release automation.
-- Legacy inputs: `studio-legacy:architecture:4`, `studio-legacy:devops:5`, `studio-legacy:process:2`
+- Legacy inputs: `studio-legacy:architecture:4`, `studio-legacy:devops:8`, `studio-legacy:process:3`
 
 ## Generated changesets and changelogs
 
@@ -42,7 +42,7 @@
 - Evidence: Releasable changes include a reviewed change record; generation is deterministic; each changelog entry resolves to its change and pull request.
 - Owner and ratification: Engineering owns this Draft's changeset and changelog mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns customer-facing release meaning and go/no-go; `jrmoulckers/.github` owns generation and publishing automation.
-- Legacy inputs: `studio-legacy:devops:5`, `studio-legacy:devops:6`, `studio-legacy:process:3`
+- Legacy inputs: `studio-legacy:devops:8`, `studio-legacy:process:3`, `studio-legacy:process:5`
 
 ## Clean reproducible environments
 
@@ -53,7 +53,7 @@
 - Evidence: Authoritative checks emit required evidence for every pull request and release candidate; a clean install and build succeed from declared inputs; tool and dependency versions are recorded; fixtures replace production credentials.
 - Owner and ratification: Engineering owns this Draft's reproducible build-environment mechanism; only the repository owner may change it to Ratified.
 - Handoff: `jrmoulckers/.github` owns runner images, workflow permissions, and secret delivery; Product owns release readiness decisions.
-- Legacy inputs: `studio-legacy:architecture:10`, `studio-legacy:devops:1`, `studio-legacy:devops:4`, `studio-legacy:process:6`
+- Legacy inputs: `studio-legacy:architecture:10`, `studio-legacy:devops:1`
 
 ## Build dependency hygiene
 
@@ -64,7 +64,7 @@
 - Evidence: Dependency review records purpose and provenance; frozen installation succeeds with lifecycle scripts disabled unless justified; stale or duplicate tools are removed.
 - Owner and ratification: Engineering owns this Draft's build-dependency hygiene mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns license and accepted-risk obligations; `jrmoulckers/.github` owns dependency update and scanner automation.
-- Legacy inputs: `studio-legacy:security:2`, `studio-legacy:devops:1`, `studio-legacy:compliance:6`
+- Legacy inputs: `studio-legacy:security:2`, `studio-legacy:devops:6`, `studio-legacy:compliance:5`
 
 ## Release artifact identity
 
@@ -75,7 +75,7 @@
 - Evidence: Provenance resolves artifact digest to version, commit, changesets, pull requests, and required checks; runtime identity matches the deployed artifact.
 - Owner and ratification: Engineering owns this Draft's release-provenance and artifact-identity mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns release approval and communication; `jrmoulckers/.github` owns provenance generation, repository checks, and distribution.
-- Legacy inputs: `studio-legacy:devops:7`, `studio-legacy:devops:8`, `studio-legacy:devops:9`, `studio-legacy:process:5`, `studio-legacy:process:6`
+- Legacy inputs: `studio-legacy:devops:8`, `studio-legacy:devops:9`, `studio-legacy:process:5`, `studio-legacy:process:6`
 
 ## Rollback-compatible releases
 
@@ -86,4 +86,4 @@
 - Evidence: Release tests exercise old and new versions through migration and rollback order; activation is atomic; recovery instructions name compatibility limits and artifact identity.
 - Owner and ratification: Engineering owns this Draft's rollback-compatibility mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns the go/no-go and rollback decision; Studio owns user-facing recovery states, and `jrmoulckers/.github` owns deployment automation.
-- Legacy inputs: `studio-legacy:architecture:11`, `studio-legacy:devops:8`, `studio-legacy:process:4`, `studio-legacy:process:5`
+- Legacy inputs: `studio-legacy:backend:3`, `studio-legacy:frontend:9`

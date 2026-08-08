@@ -53,7 +53,7 @@
 - Evidence: Concurrent-load tests bound foreground latency; schedulers yield or prioritize foreground work; background throughput remains observable.
 - Owner and ratification: Engineering owns this Draft's responsiveness mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product defines critical interactions; Studio owns perceived-performance expression, and `jrmoulckers/.github` owns automated load execution.
-- Legacy inputs: `studio-legacy:performance:5`, `studio-legacy:frontend:5`
+- Legacy inputs: `studio-legacy:performance:6`, `studio-legacy:frontend:5`
 
 ## Bounded fallible work
 

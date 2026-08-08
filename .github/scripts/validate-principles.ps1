@@ -80,7 +80,7 @@ $legacyIdPattern = (
     "performance:[1-9]|" +
     "testing:(?:[1-9]|10)|" +
     "devops:(?:[1-9]|1[0-5])|" +
-    "process:[1-6]|" +
+    "process:[1-7]|" +
     "compliance:[1-8]"
 )
 $legacyListPattern = (

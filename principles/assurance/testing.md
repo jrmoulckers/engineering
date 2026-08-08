@@ -26,12 +26,12 @@
 
 - ID: ENG-TEST-003
 - Status: Draft
-- Statement: Add a failing regression test at the narrowest authoritative boundary for every corrected defect or changed shared contract.
+- Statement: Add a failing regression test at the narrowest authoritative boundary for every new behavior, corrected defect, or changed shared contract.
 - Rationale: A fix without evidence at the decision boundary can regress through another caller or implementation path.
 - Evidence: The test fails before the fix, passes after it, names the defect cause, and exercises the layer where the rule is obeyed.
 - Owner and ratification: Engineering owns this Draft's regression-testing mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns intended outcomes and priority; Studio owns UI-specific regression evidence, and `jrmoulckers/.github` runs blocking checks.
-- Legacy inputs: `studio-legacy:testing:3`
+- Legacy inputs: `studio-legacy:testing:3`, `studio-legacy:testing:7`
 
 ## Distinct static signals
 
@@ -75,7 +75,7 @@
 - Evidence: Paired fixtures prove allow and deny outcomes; preconditions identify the exercised path; repeat tests detect duplicate effects and lost state.
 - Owner and ratification: Engineering owns this Draft's polarity-and-precondition testing mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product defines permitted outcomes; Studio owns interaction-specific polarity, and `jrmoulckers/.github` executes the suite.
-- Legacy inputs: `studio-legacy:testing:7`, `studio-legacy:backend:5`
+- Legacy inputs: `studio-legacy:testing:8`, `studio-legacy:backend:5`
 
 ## Discriminating mutation evidence
 

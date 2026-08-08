@@ -9,7 +9,7 @@
 - Evidence: Repository, artifact, client, and log scans find no secret; runtime injection is documented; exposure drills revoke and replace the value.
 - Owner and ratification: Engineering owns this Draft's secret-lifecycle mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns access obligations and risk acceptance; `jrmoulckers/.github` owns repository scanners and workflow secret delivery.
-- Legacy inputs: `studio-legacy:security:1`, `studio-legacy:backend:4`, `studio-legacy:frontend:7`
+- Legacy inputs: `studio-legacy:security:1`, `studio-legacy:frontend:7`
 
 ## Verified supply chain
 
@@ -20,7 +20,7 @@
 - Evidence: Frozen lockfile installation succeeds; dependency review records necessity, provenance, vulnerabilities, licenses, and lifecycle scripts; exploitable HIGH or CRITICAL findings block release until remediation or Product-owned risk acceptance; external actions use immutable revisions.
 - Owner and ratification: Engineering owns this Draft's software supply-chain mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns risk acceptance and license obligations; `jrmoulckers/.github` owns platform scanners, workflow permissions, and action implementation.
-- Legacy inputs: `studio-legacy:security:2`, `studio-legacy:devops:1`, `studio-legacy:compliance:6`
+- Legacy inputs: `studio-legacy:security:2`, `studio-legacy:architecture:11`, `studio-legacy:devops:6`, `studio-legacy:compliance:5`
 
 ## Boundary threat models
 
@@ -31,7 +31,7 @@
 - Evidence: Boundary changes link a reviewed threat model; named mitigations map to tests or operational evidence; unresolved risks name an owner.
 - Owner and ratification: Engineering owns this Draft's threat-modeling mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns impact, obligations, and risk acceptance; Studio owns UI-specific abuse-resistant interaction, and `jrmoulckers/.github` owns GitHub-platform threat controls.
-- Legacy inputs: `studio-legacy:security:3`, `studio-legacy:architecture:7`, `studio-legacy:architecture:11`, `studio-legacy:architecture:14`
+- Legacy inputs: `studio-legacy:security:3`
 
 ## Least authority
 
@@ -42,7 +42,7 @@
 - Evidence: Authorization tests cover absent, invalid, cross-tenant, cross-role, and cross-resource access; credentials and file permissions are scoped and time-bounded.
 - Owner and ratification: Engineering owns this Draft's least-authority mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product defines permitted actors and actions; Studio owns access UX, and `jrmoulckers/.github` owns workflow token permissions.
-- Legacy inputs: `studio-legacy:security:4`, `studio-legacy:backend:4`
+- Legacy inputs: `studio-legacy:security:4`, `studio-legacy:architecture:7`, `studio-legacy:backend:4`
 
 ## Trust-boundary validation
 
@@ -64,7 +64,7 @@
 - Evidence: Triggering changes link a review; findings record category, severity, exploitability, impact, owner, disposition, and regression evidence.
 - Owner and ratification: Engineering owns this Draft's application-security review mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product alone accepts residual risk and owns compliance obligations; `jrmoulckers/.github` owns platform scanner execution.
-- Legacy inputs: `studio-legacy:security:6`, `studio-legacy:compliance:6`
+- Legacy inputs: `studio-legacy:security:6`
 
 ## Secure failure
 
@@ -75,7 +75,7 @@
 - Evidence: Boot and request tests reject missing critical configuration; denied operations produce no protected effect; responses, logs, caches, and artifacts omit stacks, queries, internal IDs, and secrets.
 - Owner and ratification: Engineering owns this Draft's secure-failure mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product defines acceptable unavailable outcomes; Studio owns safe recovery UX, and `jrmoulckers/.github` owns automation failure presentation.
-- Legacy inputs: `studio-legacy:security:7`, `studio-legacy:backend:5`
+- Legacy inputs: `studio-legacy:security:7`
 
 ## Privacy-minimizing lifecycle evidence
 
@@ -86,4 +86,4 @@
 - Evidence: An obligation-linked inventory names source, category, purpose, owner, control, retention, residency, processor, and evidence; rights and consent tests use synthetic data; audit records contain actor, action, target, and time but no payload.
 - Owner and ratification: Engineering owns this Draft's privacy-minimization and lifecycle-evidence mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns legal basis, policy, retention, residency, rights, metrics, and risk acceptance; Studio owns disclosure and consent UX.
-- Legacy inputs: `studio-legacy:security:8`, `studio-legacy:backend:7`, `studio-legacy:compliance:1`, `studio-legacy:compliance:2`, `studio-legacy:compliance:3`, `studio-legacy:compliance:4`, `studio-legacy:compliance:7`, `studio-legacy:compliance:8`
+- Legacy inputs: `studio-legacy:backend:7`, `studio-legacy:compliance:1`, `studio-legacy:compliance:2`, `studio-legacy:compliance:3`, `studio-legacy:compliance:4`, `studio-legacy:compliance:6`, `studio-legacy:compliance:7`, `studio-legacy:compliance:8`

@@ -53,7 +53,7 @@
 - Evidence: Schema allowlists and adversarial fixtures reject sensitive fields; retention follows a referenced obligation; audit signals record actor, action, target, and time without payload.
 - Owner and ratification: Engineering owns this Draft's telemetry-redaction mechanism; only the repository owner may change it to Ratified.
 - Handoff: Product owns permitted data, retention, and compliance policy; Studio owns disclosure UX, and `jrmoulckers/.github` owns platform log handling.
-- Legacy inputs: `studio-legacy:backend:7`, `studio-legacy:security:7`, `studio-legacy:security:8`, `studio-legacy:compliance:3`
+- Legacy inputs: `studio-legacy:backend:7`, `studio-legacy:security:7`, `studio-legacy:compliance:6`
 
 ## SLO evidence
 
