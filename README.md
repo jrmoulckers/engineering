@@ -24,10 +24,10 @@ alone ratifies engineering principles; agents may only propose changes.
 
 ## Status
 
-The first architecture and software platform principles are available as
-**Draft** proposals under [`principles/`](principles/README.md). They are not
-ratified instructions. No shared implementation, package, or runtime behavior
-has been published here.
+The architecture, software platform, assurance, and operations principles are
+available as **Draft** proposals under [`principles/`](principles/README.md).
+They are not ratified instructions. No shared implementation, package, or
+runtime behavior has been published here.
 
 ## Near-term roadmap
 
