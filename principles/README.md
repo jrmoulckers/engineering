@@ -18,6 +18,16 @@ but cannot ratify them.
   `ENG-INT-001` through `ENG-INT-005`
 - [Local-first systems](platforms/local-first.md):
   `ENG-LOCAL-001` through `ENG-LOCAL-004`
+- [Security and privacy](assurance/security-and-privacy.md):
+  `ENG-SEC-001` through `ENG-SEC-008`
+- [Testing](assurance/testing.md):
+  `ENG-TEST-001` through `ENG-TEST-010`
+- [Performance](assurance/performance.md):
+  `ENG-PERF-001` through `ENG-PERF-009`
+- [Observability](operations/observability.md):
+  `ENG-OBS-001` through `ENG-OBS-007`
+- [Build and release](operations/build-and-release.md):
+  `ENG-BUILD-001` through `ENG-BUILD-008`
 
 Each principle states one imperative rule with its rationale, observable
 evidence, ratification owner, authority handoff, and exact legacy inputs.
