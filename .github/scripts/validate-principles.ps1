@@ -23,7 +23,8 @@ $imperativeVerbPattern = (
     "Separate|Source|Start|Test|Treat|Use|Validate|Version|Verify"
 )
 $ratificationPattern = (
-    "^Engineering owns this Draft's .+; " +
+    "^Engineering owns this Draft's " +
+    "(?![^;]*(?i:ratif|change it to Ratified))[^;]+; " +
     "only the repository owner may change it to Ratified\.$"
 )
 $handoffPattern = (
@@ -62,12 +63,15 @@ $expectedCounts = @{
     "operations/build-and-release.md" = 8
 }
 $authorityCollisionPattern = (
-    "Engineering (?:owns|defines|sets|accepts|decides) [^.;]*" +
+    "Engineering (?:owns|defines|sets|accepts|decides|implements|runs|" +
+    "executes|governs|approves|controls|configures) [^.;]*" +
     "(?:outcomes?|obligations?|risk acceptance|release (?:approval|decision|" +
-    "timing|readiness)|go/no-go|metrics?|compliance policy|legal basis|" +
+    "timing|readiness)|ship decision|go/no-go|metrics?|analytics|" +
+    "compliance policy|legal basis|" +
     "retention policy|residency policy|UI|accessibility|visual|" +
     "design tokens?|GitHub Actions|repository governance|" +
-    "workflow automation|distribution)"
+    "scanners?|workflow permissions?|(?:GitHub|repository|workflow) automation|" +
+    "provenance generation|distribution)"
 )
 $legacyIdPattern = (
     "architecture:(?:[1-9]|1[0-5])|" +
@@ -107,7 +111,8 @@ function Test-Principle {
 
     $principleId = $Values["ID"]
     if ($principleId) {
-        if ($principleId -cnotmatch "^ENG-[A-Z]+-\d{3}$") {
+        $validId = $principleId -cmatch "^ENG-[A-Z]+-\d{3}$"
+        if (-not $validId) {
             $errors.Add("${location}: invalid ID '$principleId'")
         }
         elseif ($seenIds.ContainsKey($principleId)) {
@@ -120,6 +125,7 @@ function Test-Principle {
             $seenIds[$principleId] = $location
         }
         if (
+            $validId -and
             $ExpectedPrefix -and
             $principleId -cnotmatch "^ENG-$ExpectedPrefix-\d{3}$"
         ) {
