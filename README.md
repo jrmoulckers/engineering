@@ -24,8 +24,10 @@ alone ratifies engineering principles; agents may only propose changes.
 
 ## Status
 
-Bootstrap only. No engineering principle, shared implementation, package, or
-runtime behavior has been ratified or published here.
+The first architecture and software platform principles are available as
+**Draft** proposals under [`principles/`](principles/README.md). They are not
+ratified instructions. No shared implementation, package, or runtime behavior
+has been published here.
 
 ## Near-term roadmap
 
