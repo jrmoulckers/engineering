@@ -21,3 +21,43 @@ jobs:
             printf 'Tracked text files contain CR bytes:\n%s\n' "$files"
             exit 1
           fi
+      - name: Validate principle metadata
+        shell: pwsh
+        run: pwsh -File .github/scripts/validate-principles.ps1
+      - name: Reject invalid principle metadata
+        shell: pwsh
+        run: |
+          $fixture = Join-Path $env:RUNNER_TEMP ([Guid]::NewGuid())
+          $missing = Join-Path $fixture "missing"
+          $duplicate = Join-Path $fixture "duplicate"
+          New-Item -ItemType Directory -Path $missing, $duplicate | Out-Null
+
+          @(
+            "# Invalid fixture"
+            "- ID: ENG-TEST-001"
+            "- Status: Ratified"
+          ) | Set-Content -Encoding utf8 (Join-Path $missing "invalid.md")
+          & pwsh -File .github/scripts/validate-principles.ps1 -Root $missing
+          if ($LASTEXITCODE -eq 0) {
+            throw "Validator accepted invalid principle metadata"
+          fi
+
+          foreach ($name in "first", "second") {
+            @(
+              "# Duplicate fixture"
+              "- ID: ENG-TEST-001"
+              "- Status: Draft"
+              "- Statement: Keep IDs unique."
+              "- Rationale: Stable references require unique identifiers."
+              "- Evidence: Validation succeeds."
+              "- Owner and ratification: Engineering owns this Draft; the repository owner alone ratifies it."
+              "- Handoff: none"
+              "- Legacy inputs: none"
+            ) | Set-Content -Encoding utf8 (Join-Path $duplicate "$name.md")
+          }
+          & pwsh -File .github/scripts/validate-principles.ps1 -Root $duplicate
+          if ($LASTEXITCODE -eq 0) {
+            throw "Validator accepted duplicate principle IDs"
+          }
+          Remove-Item -Recurse -Force $fixture
+          $global:LASTEXITCODE = 0
