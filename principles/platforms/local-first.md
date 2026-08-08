@@ -1,19 +1,45 @@
 # Local-first systems
 
+## Local durable ownership
+
 - ID: ENG-LOCAL-001
 - Status: Draft
-- Statement: Make local durable ownership primary and keep sync, conflict resolution, and external services explicit optional layers.
-- Rationale: Local-first behavior is a trust contract: users must retain useful operation and ownership when networks, accounts, or providers are unavailable.
-- Evidence: Offline tests complete core writes and exports; durable-write failures are surfaced; portable and device-local data are separated; sync providers satisfy one narrow contract; conflict fixtures verify the declared merge model; optional services have tested degraded behavior.
-- Owner and ratification: Engineering owns this Draft's local persistence, sync seam, conflict, and degradation mechanisms; the repository owner alone may ratify it.
-- Handoff: Product defines which capabilities and data must remain available, Studio owns conflict/error/offline UX, and `jrmoulckers/.github` owns repository or fleet synchronization rather than product data sync.
-- Legacy inputs: `studio-legacy:local-first:1`, `studio-legacy:local-first:2`, `studio-legacy:local-first:3`, `studio-legacy:local-first:4`, `studio-legacy:security:7.1`
+- Statement: Treat the device's durable store as the system of record, persist before reflecting success, and keep portable data exportable.
+- Rationale: Local-first behavior is a trust contract only when core work and user-owned data survive network and account loss.
+- Evidence: Offline tests complete core writes and full portable-data export; durable-write failures are surfaced; portable and device-local data are distinct in types and storage.
+- Owner and ratification: Engineering owns this Draft's local persistence and ownership mechanism; only the repository owner may change it to Ratified.
+- Handoff: Reference Product for required local outcomes and Studio for write-failure and export UX; reference `jrmoulckers/.github` only for repository or fleet sync, not product-data sync.
+- Legacy inputs: `studio-legacy:local-first:1`
 
-## Rule
+## Optional sync seam
 
-- Treat the device's durable store as the system of record for local-first data; persist before reflecting success and surface write failures.
-- Separate portable data from device-local state in the type and storage model, and support complete user-controlled export of portable data.
-- Put optional sync behind one narrow provider contract; local operation must not require an account or reachable service unless Product explicitly requires it.
-- Declare and test the conflict model, including ordering, tombstones, concurrency checks, and merge invariants.
-- Degrade unavailable optional services to an explicit local behavior without discarding writes or presenting false success.
-- Fail production preflight when security-critical configuration is absent or malformed; optional-service degradation must not weaken a trust boundary.
+- ID: ENG-LOCAL-002
+- Status: Draft
+- Statement: Put product-data sync behind one narrow provider contract without making core local operation wait for an account, provider, or network.
+- Rationale: Sync is an optional replication layer, not the authority for local-first data.
+- Evidence: Core reads and writes pass with the provider absent; provider contract tests cover upload, download, retry, and unavailable states; local data remains authoritative.
+- Owner and ratification: Engineering owns this Draft's product-data sync seam; only the repository owner may change it to Ratified.
+- Handoff: Product decides whether sync is offered, Studio owns sync UX, and `jrmoulckers/.github` owns repository and fleet synchronization only.
+- Legacy inputs: `studio-legacy:local-first:2`
+
+## Declared conflict model
+
+- ID: ENG-LOCAL-003
+- Status: Draft
+- Statement: Declare and test ordering, tombstone, concurrency, and merge rules for every synchronized data type.
+- Rationale: Implicit conflict behavior loses data unpredictably and cannot be reasoned about during offline edits.
+- Evidence: Conflict fixtures cover concurrent create, update, delete, replay, and clock-order cases; merge results satisfy documented invariants.
+- Owner and ratification: Engineering owns this Draft's local-first conflict mechanism; only the repository owner may change it to Ratified.
+- Handoff: Product defines acceptable domain outcomes and Studio owns conflict-resolution UX; Engineering defines only the data behavior.
+- Legacy inputs: `studio-legacy:local-first:3`
+
+## Zero-config safe degradation
+
+- ID: ENG-LOCAL-004
+- Status: Draft
+- Statement: Start core local operation with zero external-service configuration and degrade unavailable optional services to explicit local behavior.
+- Rationale: Optional dependencies must not block local ownership or turn an unavailable service into data loss or false success.
+- Evidence: Zero-config tests complete core flows; unavailable-service tests preserve writes, avoid false success, and require no account or provider handshake.
+- Owner and ratification: Engineering owns this Draft's local degradation and configuration mechanism; only the repository owner may change it to Ratified.
+- Handoff: Product defines acceptable degraded outcomes, Studio owns offline and unavailable-service UX, and `jrmoulckers/.github` owns deployment automation.
+- Legacy inputs: `studio-legacy:local-first:4`

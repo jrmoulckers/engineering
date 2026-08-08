@@ -1,18 +1,34 @@
 # Data systems
 
+## Owned durable integrity
+
 - ID: ENG-DATA-001
 - Status: Draft
-- Statement: Design owned, versioned data systems that preserve integrity while collecting and retaining only the data an authorized obligation requires.
-- Rationale: Durable schemas outlive individual features, so ownership, migration safety, privacy minimization, and evidence must be designed into the storage and event model.
-- Evidence: Every store and schema has an owner; constraints and access paths are tested; migrations are reviewed and forward-safe; event schemas are versioned and cardinality-bounded; collection, retention, export, erasure, and audit mechanisms are verified against Product-defined obligations.
-- Owner and ratification: Engineering owns this Draft's persistence, migration, event-schema, and privacy-enforcement mechanisms; the repository owner alone may ratify it.
-- Handoff: Product owns metrics, hypotheses, consent and retention obligations, and permitted collection; Studio owns any UI that communicates or controls those obligations; `jrmoulckers/.github` owns automation.
-- Legacy inputs: `studio-legacy:backend:2`, `studio-legacy:backend:3`, `studio-legacy:backend:7`, `studio-legacy:data-analytics:1`, `studio-legacy:data-analytics:2`, `studio-legacy:data-analytics:3`, `studio-legacy:data-analytics:4`, `studio-legacy:data-analytics:6`, `studio-legacy:data-analytics:7`
+- Statement: Give every durable store and schema one owner, enforce invariants in the data model, and migrate through reviewed forward-safe steps.
+- Rationale: Durable data outlives individual service versions and needs explicit integrity and recovery boundaries.
+- Evidence: Ownership is recorded; typed parameterized access, constraints, and required indexes are tested; migrations are reviewed, observable, recoverable, and compatible with their deployment sequence.
+- Owner and ratification: Engineering owns this Draft's persistence-integrity and migration mechanism; only the repository owner may change it to Ratified.
+- Handoff: Product owns data lifecycle obligations, Studio owns migration-facing UX, and `jrmoulckers/.github` owns deployment automation.
+- Legacy inputs: `studio-legacy:backend:2`, `studio-legacy:backend:3`
 
-## Rule
+## Versioned bounded data contracts
 
-- Assign one authoritative owner to each durable store and schema; enforce invariants with typed access, parameterization, constraints, and indexes.
-- Make migrations reviewed, forward-safe, observable, and recoverable before relying on a new schema.
-- Version event and interchange schemas, bound names and cardinality, and reject unrecognized shapes rather than inferring them.
-- Minimize at collection: prefer scoped identifiers, enums, aggregates, and buckets over raw identity or free text, and prevent reversible cross-product identity graphs.
-- Implement consent gates, retention, export, erasure, anonymization, and auditability only from explicit Product-owned obligations; do not invent the obligation in Engineering.
+- ID: ENG-DATA-002
+- Status: Draft
+- Statement: Version event and interchange schemas, bound their names and cardinality, and reject unrecognized shapes.
+- Rationale: Governed schemas keep analytical and operational consumers stable while preventing accidental high-cardinality data growth.
+- Evidence: Schema validation runs before release; compatibility fixtures cover supported versions; taxonomy and cardinality checks reject unknown or unbounded fields.
+- Owner and ratification: Engineering owns this Draft's event and data-schema mechanism; only the repository owner may change it to Ratified.
+- Handoff: Reference Product's metric definitions and hypotheses rather than defining them; Studio owns any instrumentation-related UI contract and `jrmoulckers/.github` owns automation.
+- Legacy inputs: `studio-legacy:data-analytics:3`, `studio-legacy:data-analytics:4`, `studio-legacy:data-analytics:7`
+
+## Minimized governed data
+
+- ID: ENG-DATA-003
+- Status: Draft
+- Statement: Minimize data at collection and implement consent, retention, export, erasure, anonymization, and audit mechanisms only from an explicit authorized obligation.
+- Rationale: Privacy-preserving mechanics reduce exposure without letting Engineering invent the policy or legal basis for processing.
+- Evidence: Payload reviews prefer scoped identifiers, enums, aggregates, and buckets; cross-product identity is not reversible; lifecycle tests verify the referenced Product-owned obligation.
+- Owner and ratification: Engineering owns this Draft's data-minimization and lifecycle-enforcement mechanism; only the repository owner may change it to Ratified.
+- Handoff: Reference Product for permitted collection, consent, retention, metrics, and compliance obligations; Studio owns related disclosure and control UX.
+- Legacy inputs: `studio-legacy:backend:7`, `studio-legacy:data-analytics:1`, `studio-legacy:data-analytics:2`, `studio-legacy:data-analytics:6`
