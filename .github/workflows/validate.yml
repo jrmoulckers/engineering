@@ -40,7 +40,7 @@ jobs:
           & pwsh -File .github/scripts/validate-principles.ps1 -Root $missing
           if ($LASTEXITCODE -eq 0) {
             throw "Validator accepted invalid principle metadata"
-          fi
+          }
 
           foreach ($name in "first", "second") {
             @(
