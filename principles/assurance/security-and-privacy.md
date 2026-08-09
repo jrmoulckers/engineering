@@ -3,7 +3,7 @@
 ## Secret lifecycle
 
 - ID: ENG-SEC-001
-- Status: Draft
+- Status: Ratified
 - Statement: Keep secrets out of source, artifacts, logs, and clients; inject them at runtime, detect exposure independently, and rotate every exposed value.
 - Rationale: Deleting a leaked value does not revoke copies or protect environments that accepted it.
 - Evidence: Repository, artifact, client, and log scans find no secret; runtime injection is documented; exposure drills revoke and replace the value.
@@ -14,7 +14,7 @@
 ## Verified supply chain
 
 - ID: ENG-SEC-002
-- Status: Draft
+- Status: Ratified
 - Statement: Verify a minimal locked dependency chain, suppress unneeded install execution, pin external build actions immutably, and resolve exploitable or prohibited inputs before release.
 - Rationale: Build dependencies and automation execute with the product's trust even when application code does not call them directly.
 - Evidence: Frozen lockfile installation succeeds; dependency review records necessity, provenance, vulnerabilities, licenses, and lifecycle scripts; exploitable HIGH or CRITICAL findings block release until remediation or Product-owned risk acceptance; external actions use immutable revisions.
@@ -25,7 +25,7 @@
 ## Boundary threat models
 
 - ID: ENG-SEC-003
-- Status: Draft
+- Status: Ratified
 - Statement: Record assets, entry points, trust boundaries, abuse paths, and mitigations before introducing or materially changing a security boundary.
 - Rationale: Security controls cannot be reviewed coherently when the protected assets and attacker paths remain implicit.
 - Evidence: Boundary changes link a reviewed threat model; named mitigations map to tests or operational evidence; unresolved risks name an owner.
@@ -36,7 +36,7 @@
 ## Least authority
 
 - ID: ENG-SEC-004
-- Status: Draft
+- Status: Ratified
 - Statement: Enforce default-deny authentication and authorization with the least privilege, scope, and credential lifetime needed for each operation.
 - Rationale: Broad or implicit authority turns one compromised identity or component into unrelated access.
 - Evidence: Authorization tests cover absent, invalid, cross-tenant, cross-role, and cross-resource access; credentials and file permissions are scoped and time-bounded.
@@ -47,7 +47,7 @@
 ## Trust-boundary validation
 
 - ID: ENG-SEC-005
-- Status: Draft
+- Status: Ratified
 - Statement: Parse, schema-check, and bound every trust-boundary input, then parameterize or encode it for the exact storage, execution, path, or output context.
 - Rationale: Untrusted data becomes dangerous when its shape, size, path, or interpretation reaches a more privileged sink.
 - Evidence: Negative tests reject malformed, oversized, traversal, injection, and unsupported input; paths remain under declared roots; output tests verify context-appropriate encoding.
@@ -58,7 +58,7 @@
 ## Risk-focused security review
 
 - ID: ENG-SEC-006
-- Status: Draft
+- Status: Ratified
 - Statement: Run an OWASP-aligned security review when authentication, input, dependency, or build boundaries change, and track each finding through remediation or explicit risk acceptance.
 - Rationale: Passing automated checks does not prove that design-level abuse paths or contextual vulnerabilities were considered.
 - Evidence: Triggering changes link a review; findings record category, severity, exploitability, impact, owner, disposition, and regression evidence.
@@ -69,7 +69,7 @@
 ## Secure failure
 
 - ID: ENG-SEC-007
-- Status: Draft
+- Status: Ratified
 - Statement: Fail closed at security decisions, reject unsafe configuration before service, and map faults once to stable errors that disclose no sensitive internals.
 - Rationale: Ambiguous startup and success-shaped fallbacks can bypass controls while verbose failures leak exploitable context.
 - Evidence: Boot and request tests reject missing critical configuration; denied operations produce no protected effect; responses, logs, caches, and artifacts omit stacks, queries, internal IDs, and secrets.
@@ -80,7 +80,7 @@
 ## Privacy-minimizing lifecycle evidence
 
 - ID: ENG-SEC-008
-- Status: Draft
+- Status: Ratified
 - Statement: Minimize personal data and produce auditable lifecycle evidence for each authorized collection, use, retention, export, correction, deletion, consent, and processor control.
 - Rationale: Privacy mechanisms are trustworthy only when they implement an explicit obligation and prove effects across derived stores without exposing payloads.
 - Evidence: An obligation-linked inventory names source, category, purpose, owner, control, retention, residency, processor, and evidence; rights and consent tests use synthetic data; audit records contain actor, action, target, and time but no payload.

@@ -25,12 +25,14 @@ alone ratifies engineering principles; agents may only propose changes.
 ## Status
 
 The architecture, software platform, assurance, and operations principles are
-available as **Draft** proposals under [`principles/`](principles/README.md).
-They are not ratified instructions. No shared implementation, package, or
-runtime behavior has been published here.
+cataloged as **Ratified** under [`principles/`](principles/README.md). Their
+Ratification becomes effective only when the repository owner merges the
+matching [Ratification decision](docs/ratification/2026-08-09-engineering-principles.md);
+an unmerged status change is only a proposal. No shared implementation,
+package, or runtime behavior has been published here.
 
 ## Near-term roadmap
 
-1. Ratify the first domain principles through reviewed proposals.
+1. Apply the ratified principles through reviewed engineering decisions.
 2. Record consequential implementation decisions as ADRs.
 3. Add reusable implementations only when a demonstrated need and ownership model exist.

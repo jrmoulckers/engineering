@@ -3,7 +3,7 @@
 ## Layered test portfolio
 
 - ID: ENG-TEST-001
-- Status: Draft
+- Status: Ratified
 - Statement: Build a test pyramid with many isolated domain tests, fewer real-seam integration and contract tests, and thin end-to-end coverage of critical paths.
 - Rationale: Fast direct feedback and selective seam realism find different failures without making every check depend on the whole system.
 - Evidence: Domain rules run without framework or network setup; integration tests cross real owned seams; end-to-end tests are limited to named critical outcomes.
@@ -14,7 +14,7 @@
 ## Contract-focused assertions
 
 - ID: ENG-TEST-002
-- Status: Draft
+- Status: Ratified
 - Statement: Test stable public behavior and producer-consumer contracts instead of incidental implementation structure.
 - Rationale: Refactoring should not break assurance when externally observable behavior remains correct.
 - Evidence: Assertions exercise public inputs, outputs, errors, schemas, compatibility, migrations, and distributed artifacts without reaching private internals.
@@ -25,7 +25,7 @@
 ## Regression boundaries
 
 - ID: ENG-TEST-003
-- Status: Draft
+- Status: Ratified
 - Statement: Add a failing regression test at the narrowest authoritative boundary for every new behavior, corrected defect, or changed shared contract.
 - Rationale: A fix without evidence at the decision boundary can regress through another caller or implementation path.
 - Evidence: The test fails before the fix, passes after it, names the defect cause, and exercises the layer where the rule is obeyed.
@@ -36,7 +36,7 @@
 ## Distinct static signals
 
 - ID: ENG-TEST-004
-- Status: Draft
+- Status: Ratified
 - Statement: Separate type, lint, build, format, and security checks from behavior tests, and make statically decidable invariants blocking at the narrowest scope.
 - Rationale: Static checks and executable tests prove different properties and should fail with actionable ownership.
 - Evidence: CI reports each signal independently; a fixture demonstrates each rule can fail; no green static stage is reported as test coverage.
@@ -47,7 +47,7 @@
 ## Clean deterministic verification
 
 - ID: ENG-TEST-005
-- Status: Draft
+- Status: Ratified
 - Statement: Run release-blocking verification from a clean declared environment and require generated or distributed interfaces to reproduce deterministically.
 - Rationale: Local residue and nondeterministic generation can hide missing inputs or publish output that source does not explain.
 - Evidence: Clean repeated runs pass with frozen dependencies; generated interfaces match committed or packaged output by digest or documented normalization.
@@ -58,7 +58,7 @@
 ## Risk-based meaningful coverage
 
 - ID: ENG-TEST-006
-- Status: Draft
+- Status: Ratified
 - Statement: Require changed behavior, defect causes, and shared contracts to cover meaningful branches and edge conditions in proportion to risk.
 - Rationale: Line totals can increase while the decisions most likely to harm users remain untested.
 - Evidence: Change review links risks to named assertions; coverage reports show decision and branch gaps; exclusions record a scoped rationale and owner.
@@ -69,7 +69,7 @@
 ## Positive and negative polarity
 
 - ID: ENG-TEST-007
-- Status: Draft
+- Status: Ratified
 - Statement: Test both accepted and rejected behavior, assert the named-path preconditions, and repeat stateful operations where idempotence or persistence matters.
 - Rationale: A passing happy path does not prove the guard ran, the fixture reached the intended branch, or repetition preserved invariants.
 - Evidence: Paired fixtures prove allow and deny outcomes; preconditions identify the exercised path; repeat tests detect duplicate effects and lost state.
@@ -80,7 +80,7 @@
 ## Discriminating mutation evidence
 
 - ID: ENG-TEST-008
-- Status: Draft
+- Status: Ratified
 - Statement: Verify important tests can fail by killing a targeted behavior-changing mutation and naming the assertions that discriminate it.
 - Rationale: Executed tests can remain green while never observing the behavior they claim to protect.
 - Evidence: A scoped mutation changes one risk-bearing decision; the expected test fails for the named reason; evidence records assertions rather than fragile aggregate counts.
@@ -91,7 +91,7 @@
 ## Independent real-world evidence
 
 - ID: ENG-TEST-009
-- Status: Draft
+- Status: Ratified
 - Statement: Derive expected values independently from the recorded result and pin offline real-world observations with revision, date, method, and recheck trigger.
 - Rationale: Self-derived expectations and stale external facts can make tests agree with the same defect or obsolete referent.
 - Evidence: Tests cite an independent oracle or invariant; recorded observations include provenance and expiry conditions; fixtures do not call the implementation to compute their expected result.
@@ -102,7 +102,7 @@
 ## Executable procedures
 
 - ID: ENG-TEST-010
-- Status: Draft
+- Status: Ratified
 - Statement: Convert every repeatable documented verification procedure into an executable assertion with a known failure mode.
 - Rationale: Manual prose drifts and cannot continuously prove the property it describes.
 - Evidence: Documentation links the executable check; a negative fixture demonstrates failure; unavoidable manual steps name an owner, evidence format, and expiration.

@@ -3,7 +3,7 @@
 ## Owned durable integrity
 
 - ID: ENG-DATA-001
-- Status: Draft
+- Status: Ratified
 - Statement: Give every durable store and schema one owner, enforce invariants in the data model, and migrate through reviewed forward-safe steps.
 - Rationale: Durable data outlives individual service versions and needs explicit integrity and recovery boundaries.
 - Evidence: Ownership is recorded; typed parameterized access, constraints, and required indexes are tested; migrations are reviewed, observable, recoverable, and compatible with their deployment sequence.
@@ -14,7 +14,7 @@
 ## Versioned bounded data contracts
 
 - ID: ENG-DATA-002
-- Status: Draft
+- Status: Ratified
 - Statement: Version event and interchange schemas, bound their names and cardinality, and reject unrecognized shapes.
 - Rationale: Governed schemas keep analytical and operational consumers stable while preventing accidental high-cardinality data growth.
 - Evidence: Schema validation runs before release; compatibility fixtures cover supported versions; taxonomy and cardinality checks reject unknown or unbounded fields.
@@ -25,7 +25,7 @@
 ## Minimized governed data
 
 - ID: ENG-DATA-003
-- Status: Draft
+- Status: Ratified
 - Statement: Minimize data at collection and implement consent, retention, export, erasure, anonymization, and audit mechanisms only from an explicit authorized obligation.
 - Rationale: Privacy-preserving mechanics reduce exposure without letting Engineering invent the policy or legal basis for processing.
 - Evidence: Payload reviews prefer scoped identifiers, enums, aggregates, and buckets; cross-product identity is not reversible; lifecycle tests verify the referenced Product-owned obligation.
