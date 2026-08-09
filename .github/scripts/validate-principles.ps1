@@ -1,7 +1,8 @@
 param(
     [string]$Root = "principles",
     [switch]$RequireCatalog,
-    [string]$DecisionRecord
+    [string]$DecisionRecord,
+    [string]$BaselineRef
 )
 
 $ErrorActionPreference = "Stop"
@@ -347,6 +348,35 @@ foreach ($file in $files) {
                 $errors.Add(
                     "$($file.FullName): semantic content hash mismatch for '$relativePath'"
                 )
+            }
+            if ($BaselineRef) {
+                $baselineLines = @(
+                    & git show "${BaselineRef}:principles/$relativePath" 2>$null
+                )
+                if ($LASTEXITCODE -ne 0) {
+                    $errors.Add(
+                        "$($file.FullName): principle is absent from baseline '$BaselineRef'"
+                    )
+                }
+                else {
+                    $baselineHash = Get-NormalizedHash -Lines @(
+                        $baselineLines |
+                            Where-Object { $_ -cnotmatch "^- Status:" }
+                    )
+                    if ($actualHash -cne $baselineHash) {
+                        $errors.Add(
+                            "$($file.FullName): semantic content drift from baseline '$BaselineRef' for '$relativePath'"
+                        )
+                    }
+                    if (
+                        $expectedSemanticHashes[$relativePath] -cne
+                        $baselineHash
+                    ) {
+                        $errors.Add(
+                            "$($file.FullName): semantic hash manifest does not match baseline '$BaselineRef' for '$relativePath'"
+                        )
+                    }
+                }
             }
         }
     }
