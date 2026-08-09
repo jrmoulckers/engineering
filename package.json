@@ -12,7 +12,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test \"packages/*/test/*.test.mjs\"",
+    "test": "node --test",
     "principles:index": "node scripts/build-principles-index.mjs",
     "principles:check": "node scripts/build-principles-index.mjs --check"
   },
