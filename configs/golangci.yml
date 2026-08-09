@@ -1,0 +1,52 @@
+# Engineering-owned golangci-lint configuration.
+#
+# Consumed by Go repositories that have no npm path. Copy or reference from
+# jrmoulckers/engineering; see practices/go.md.
+#
+# Enables the checks that `go vet` alone does not cover, without enabling
+# opinionated style linters that fight `gofmt`.
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck      # unchecked errors — ENG-INT-001
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose     # leaked HTTP response bodies
+    - errorlint     # %w chains and errors.Is/As misuse — ENG-INT-001
+    - nilerr        # returning nil after a non-nil error
+    - rowserrcheck
+    - misspell
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    staticcheck:
+      checks:
+        - all
+
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # Test helpers legitimately ignore cleanup errors.
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

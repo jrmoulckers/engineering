@@ -38,3 +38,16 @@ jobs:
       - name: Reject invalid principle metadata
         shell: pwsh
         run: pwsh -File .github/scripts/test-validate-principles.ps1
+
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Verify the principle index matches the principle files
+        run: npm run principles:check
+      - name: Test shared configuration packages
+        run: npm test

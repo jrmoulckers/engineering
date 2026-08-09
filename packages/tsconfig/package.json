@@ -1,0 +1,25 @@
+{
+  "name": "@jrmoulckers/tsconfig",
+  "version": "0.1.0",
+  "description": "Engineering-owned TypeScript compiler configurations.",
+  "license": "UNLICENSED",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jrmoulckers/engineering.git",
+    "directory": "packages/tsconfig"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "base.json",
+    "vite-app.json",
+    "vite-node.json",
+    "next.json",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

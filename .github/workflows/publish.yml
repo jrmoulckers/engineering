@@ -1,0 +1,44 @@
+name: Publish packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://npm.pkg.github.com
+          scope: '@jrmoulckers'
+      - run: npm ci
+      - name: Verify the principle index matches the principle files
+        run: npm run principles:check
+      - name: Test shared configuration packages
+        run: npm test
+      - name: Publish every changed package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for dir in packages/*/; do
+            name="$(node -p "require('./${dir}package.json').name")"
+            version="$(node -p "require('./${dir}package.json').version")"
+            if npm view "${name}@${version}" version --registry https://npm.pkg.github.com >/dev/null 2>&1; then
+              echo "skip ${name}@${version} (already published)"
+              continue
+            fi
+            echo "publishing ${name}@${version}"
+            npm publish --workspace "${name}"
+          done
