@@ -111,6 +111,12 @@ Workflows that install dependencies: `reusable-ci-lint`, `reusable-ci-web`,
 `reusable-deploy-pages`, `reusable-deploy-preview`, `reusable-perf-budget`,
 and `reusable-smoke-test`.
 
+`reusable-security-ci` needs the same treatment for a different reason: it
+runs `npm audit` / `pnpm audit`, which resolves package metadata from
+whatever registry the scope is routed to. Once your `.npmrc` points
+`@jrmoulckers` at GitHub Packages, the audit can fail on a private scoped
+package even though nothing is being installed.
+
 ### Install
 
 ```bash
