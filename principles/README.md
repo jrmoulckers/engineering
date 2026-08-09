@@ -1,10 +1,10 @@
 # Engineering principles
 
-This directory contains Engineering-owned principle proposals. Every principle
-is **Draft** until the repository owner ratifies it; agents may propose changes
-but cannot ratify them.
+This directory contains 66 Engineering-owned principles cataloged as
+**Ratified**. Ratification is effective only through repository-owner merge of
+the matching decision record; agents may propose changes but cannot ratify them.
 
-## Draft tree
+## Ratified tree
 
 - [Boundaries and contracts](architecture/boundaries-and-contracts.md):
   `ENG-ARCH-001` through `ENG-ARCH-004`
@@ -35,3 +35,7 @@ Engineering owns
 generic software mechanisms and contracts. Product owns obligations and
 outcomes, Studio owns UI and design contracts, and `jrmoulckers/.github` owns
 GitHub, Copilot, AI, automation, and distribution.
+
+The catalog's Ratification decision and immutable semantic-content evidence are
+recorded in
+[`docs/ratification/2026-08-09-engineering-principles.md`](../docs/ratification/2026-08-09-engineering-principles.md).

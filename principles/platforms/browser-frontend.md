@@ -3,7 +3,7 @@
 ## Browser trust seam
 
 - ID: ENG-WEB-001
-- Status: Draft
+- Status: Ratified
 - Statement: Treat browser code, rendered input, and client-visible configuration as an untrusted seam.
 - Rationale: Anything delivered to or accepted by a browser can be inspected, modified, or replayed.
 - Evidence: Deployable clients contain no secrets; executable sources are constrained; untrusted content is validated or encoded; browser security tests exercise the seam.
@@ -14,7 +14,7 @@
 ## Capability-safe enhancement
 
 - ID: ENG-WEB-002
-- Status: Draft
+- Status: Ratified
 - Statement: Detect optional browser capabilities before use and preserve a safe operational baseline when they are absent or fail.
 - Rationale: Browser support, permissions, and runtime resources vary independently of application intent.
 - Evidence: Capability tests disable each optional API; core paths still complete; enhancement failures do not corrupt durable state or block unrelated work.
@@ -26,7 +26,7 @@
 ## Measured foreground performance
 
 - ID: ENG-WEB-003
-- Status: Draft
+- Status: Ratified
 - Statement: Enforce separate delivery and runtime budgets while prioritizing foreground interaction over background work.
 - Rationale: A small bundle can still run poorly, and background work must not leave active interaction unknown or stuck.
 - Evidence: Per-route size and runtime responsiveness are measured independently; fallible operations have timeouts and progress signals; background work yields under foreground load.
@@ -37,7 +37,7 @@
 ## Session-safe frontend state
 
 - ID: ENG-WEB-004
-- Status: Draft
+- Status: Ratified
 - Statement: Expose typed frontend states and activate application updates only at a boundary that cannot replace assets beneath a running session.
 - Rationale: Explicit states and atomic activation prevent ambiguous UI behavior and mixed-version execution.
 - Evidence: Contracts enumerate loading, empty, failure, and update states; update tests commit durable state before activation and keep a running session on one asset version.

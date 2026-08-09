@@ -3,7 +3,7 @@
 ## Minimal directed boundaries
 
 - ID: ENG-ARCH-001
-- Status: Draft
+- Status: Ratified
 - Statement: Choose the smallest explicit boundary that keeps dependencies acyclic and each fact in one authoritative home.
 - Rationale: Narrow, directional seams limit coordination and prevent implementation details from becoming accidental contracts.
 - Evidence: Dependency graphs contain no cycles; boundary records name assets, entry points, trust assumptions, and owners; duplicate sources of truth are absent.
@@ -14,7 +14,7 @@
 ## Explicit additive contracts
 
 - ID: ENG-ARCH-002
-- Status: Draft
+- Status: Ratified
 - Statement: Publish typed, versioned, consumer-neutral contracts and evolve them additively until a declared breaking boundary.
 - Rationale: Stable contracts let implementations and platforms change independently without surprising consumers.
 - Evidence: Compatibility tests exercise old and new consumers; schemas classify additive and breaking changes; policy modules run without a renderer or consumer framework.
@@ -26,7 +26,7 @@
 ## Durable decisions
 
 - ID: ENG-ARCH-003
-- Status: Draft
+- Status: Ratified
 - Statement: Record consequential architectural tradeoffs as ADRs before treating them as durable constraints.
 - Rationale: Future maintainers need the forces and consequences behind a decision, not only its surviving implementation.
 - Evidence: Each consequential durable choice links to a Proposed or Accepted ADR; routine implementation choices do not create records.
@@ -37,7 +37,7 @@
 ## Reproducible construction
 
 - ID: ENG-ARCH-004
-- Status: Draft
+- Status: Ratified
 - Statement: Require equivalent declared inputs to produce equivalent build outputs.
 - Rationale: Reproducibility is an architectural property needed for trustworthy diagnosis, release, and recovery.
 - Evidence: Clean repeated builds match by digest or a documented normalized comparison; undeclared environment state does not alter outputs.

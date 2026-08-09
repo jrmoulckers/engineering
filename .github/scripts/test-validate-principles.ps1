@@ -1,7 +1,17 @@
 $ErrorActionPreference = "Stop"
 $validator = Join-Path $PSScriptRoot "validate-principles.ps1"
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
+$canonicalDecisionRecord = Join-Path $repositoryRoot (
+    "docs/ratification/2026-08-09-engineering-principles.md"
+)
+$fixtureBaselineRef = if ($env:BASELINE_REF) {
+    $env:BASELINE_REF
+}
+else {
+    "main"
+}
 $fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid())
+$temporaryValidators = [System.Collections.Generic.List[string]]::new()
 $defaultOwner = (
     "Engineering owns this Draft's fixture mechanism; " +
     "only the repository owner may change it to Ratified."
@@ -55,12 +65,21 @@ function Assert-ValidationFailure {
     param(
         [string]$Root,
         [string[]]$ExpectedDiagnostics,
-        [switch]$RequireCatalog
+        [switch]$RequireCatalog,
+        [string]$DecisionRecord,
+        [string]$BaselineRef,
+        [string]$ValidatorPath = $validator
     )
 
-    $arguments = @("-NoProfile", "-File", $validator, "-Root", $Root)
+    $arguments = @("-NoProfile", "-File", $ValidatorPath, "-Root", $Root)
     if ($RequireCatalog) {
         $arguments += "-RequireCatalog"
+    }
+    if ($DecisionRecord) {
+        $arguments += @("-DecisionRecord", $DecisionRecord)
+    }
+    if ($BaselineRef) {
+        $arguments += @("-BaselineRef", $BaselineRef)
     }
     $output = @(& pwsh @arguments 2>&1 | ForEach-Object { "$_" })
     $exitCode = $LASTEXITCODE
@@ -82,14 +101,47 @@ function Assert-ValidationFailure {
     }
 }
 
+function Get-StatusExcludedHash {
+    param([string]$Path)
+
+    $lines = @(
+        Get-Content -LiteralPath $Path -Encoding utf8 |
+            Where-Object { $_ -cnotmatch "^- Status:" }
+    )
+    $content = [string]::Join("`n", $lines) + "`n"
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($content)
+        return (
+            [System.BitConverter]::ToString(
+                $sha256.ComputeHash($bytes)
+            ).Replace("-", "").ToLowerInvariant()
+        )
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
 function Copy-PrincipleCatalog {
     param([string]$Name)
 
     $root = Join-Path $fixtureRoot $Name
-    New-Item -ItemType Directory -Path $root | Out-Null
+    $principles = Join-Path $root "principles"
+    $decision = Join-Path $root (
+        "docs/ratification/2026-08-09-engineering-principles.md"
+    )
+    New-Item -ItemType Directory -Path $principles -Force | Out-Null
+    New-Item -ItemType Directory -Path (Split-Path -Parent $decision) -Force |
+        Out-Null
     Copy-Item -Path (Join-Path $repositoryRoot "principles/*") `
-        -Destination $root -Recurse
-    return $root
+        -Destination $principles -Recurse
+    Copy-Item -LiteralPath $canonicalDecisionRecord -Destination $decision
+    return @{
+        Root = $root
+        Principles = $principles
+        Decision = $decision
+    }
 }
 
 try {
@@ -125,10 +177,16 @@ try {
         "duplicate ID 'ENG-TEST-001'"
     )
 
-    $nonDraft = New-FixturePath "non-draft"
-    Write-PrincipleFixture -Fixture $nonDraft -Status "Ratified"
-    Assert-ValidationFailure -Root $nonDraft.Root -ExpectedDiagnostics @(
-        "status must be 'Draft'"
+    $unauthorizedStatus = New-FixturePath "unauthorized-status"
+    Write-PrincipleFixture -Fixture $unauthorizedStatus -Status "Proposed"
+    Assert-ValidationFailure -Root $unauthorizedStatus.Root -ExpectedDiagnostics @(
+        "status must be 'Draft' or 'Ratified'"
+    )
+
+    $statusOnly = New-FixturePath "status-only"
+    Write-PrincipleFixture -Fixture $statusOnly -Status "Ratified"
+    Assert-ValidationFailure -Root $statusOnly.Root -ExpectedDiagnostics @(
+        "Ratified status requires a matching Ratification decision record"
     )
 
     $nestedLegacy = New-FixturePath "nested-legacy"
@@ -232,8 +290,143 @@ try {
         "handoff assigns reserved external authority to Engineering"
     )
 
+    $mixedCatalog = Copy-PrincipleCatalog "mixed-catalog"
+    $mixedFile = Join-Path $mixedCatalog.Principles (
+        "architecture/boundaries-and-contracts.md"
+    )
+    $mixedContent = Get-Content -LiteralPath $mixedFile -Raw
+    ([regex]::new("- Status: Ratified")).Replace(
+        $mixedContent,
+        "- Status: Draft",
+        1
+    ) | Set-Content -LiteralPath $mixedFile -Encoding utf8 -NoNewline
+    Assert-ValidationFailure -Root $mixedCatalog.Principles -RequireCatalog `
+        -DecisionRecord $mixedCatalog.Decision -ExpectedDiagnostics @(
+            "catalog status must be 'Ratified'"
+        )
+
+    $missingDecision = Copy-PrincipleCatalog "missing-decision"
+    Assert-ValidationFailure -Root $missingDecision.Principles -RequireCatalog `
+        -ExpectedDiagnostics @(
+            "Ratified catalog requires matching Ratification decision record"
+        )
+
+    $wordingDrift = Copy-PrincipleCatalog "wording-drift"
+    $wordingFile = Join-Path $wordingDrift.Principles "assurance/testing.md"
+    $wordingContent = Get-Content -LiteralPath $wordingFile -Raw
+    $wordingContent.Replace(
+        "Require changed behavior, defect causes, and shared contracts",
+        "Require changed behavior, defect origins, and shared contracts"
+    ) | Set-Content -LiteralPath $wordingFile -Encoding utf8 -NoNewline
+    Assert-ValidationFailure -Root $wordingDrift.Principles -RequireCatalog `
+        -DecisionRecord $wordingDrift.Decision `
+        -BaselineRef $fixtureBaselineRef `
+        -ExpectedDiagnostics @(
+            "semantic content hash mismatch for 'assurance/testing.md'"
+            "semantic content drift from baseline '$fixtureBaselineRef' for 'assurance/testing.md'"
+        )
+
+    $legacyDrift = Copy-PrincipleCatalog "legacy-drift"
+    $legacyFile = Join-Path $legacyDrift.Principles "assurance/testing.md"
+    $legacyContent = Get-Content -LiteralPath $legacyFile -Raw
+    $legacyContent.Replace(
+        "- Legacy inputs: ``studio-legacy:testing:1``",
+        "- Legacy inputs: ``studio-legacy:testing:2``"
+    ) | Set-Content -LiteralPath $legacyFile -Encoding utf8 -NoNewline
+    Assert-ValidationFailure -Root $legacyDrift.Principles -RequireCatalog `
+        -DecisionRecord $legacyDrift.Decision `
+        -BaselineRef $fixtureBaselineRef `
+        -ExpectedDiagnostics @(
+            "semantic content hash mismatch for 'assurance/testing.md'"
+            "semantic content drift from baseline '$fixtureBaselineRef' for 'assurance/testing.md'"
+        )
+
+    $selfBaseline = Copy-PrincipleCatalog "self-baseline"
+    $selfBaselineFile = Join-Path $selfBaseline.Principles (
+        "assurance/testing.md"
+    )
+    $selfBaselineContent = Get-Content -LiteralPath $selfBaselineFile -Raw
+    $selfBaselineContent.Replace(
+        "Require changed behavior, defect causes, and shared contracts",
+        "Require changed behavior, defect origins, and shared contracts"
+    ) | Set-Content -LiteralPath $selfBaselineFile -Encoding utf8 -NoNewline
+    $mutatedHash = Get-StatusExcludedHash -Path $selfBaselineFile
+    $selfValidator = Join-Path $PSScriptRoot (
+        "validate-principles-$([Guid]::NewGuid()).ps1"
+    )
+    $temporaryValidators.Add($selfValidator)
+    $selfValidatorContent = Get-Content -LiteralPath $validator -Raw
+    $selfValidatorContent.Replace(
+        "23efc72776ee4a4b4ae34848b2308673e05318744eec7a0dfcedc19c8d44cb46",
+        $mutatedHash
+    ) | Set-Content -LiteralPath $selfValidator -Encoding utf8 -NoNewline
+    Assert-ValidationFailure -Root $selfBaseline.Principles -RequireCatalog `
+        -DecisionRecord $selfBaseline.Decision `
+        -BaselineRef $fixtureBaselineRef `
+        -ValidatorPath $selfValidator -ExpectedDiagnostics @(
+            "semantic content drift from baseline '$fixtureBaselineRef' for 'assurance/testing.md'"
+            "semantic hash manifest does not match baseline '$fixtureBaselineRef' for 'assurance/testing.md'"
+        )
+
+    $ambiguousApproval = Copy-PrincipleCatalog "ambiguous-approval"
+    $ambiguousContent = Get-Content -LiteralPath $ambiguousApproval.Decision -Raw
+    $ambiguousContent.Replace(
+        "- Approval: Repository-owner merge of this pull request is the effective approval; opening or reviewing it does not approve or Ratify the catalog.",
+        "- Approval: Approval may be inferred from review or merge."
+    ) | Set-Content -LiteralPath $ambiguousApproval.Decision -Encoding utf8 `
+        -NoNewline
+    Assert-ValidationFailure -Root $ambiguousApproval.Principles -RequireCatalog `
+        -DecisionRecord $ambiguousApproval.Decision -ExpectedDiagnostics @(
+            "must reserve effective approval to repository-owner merge"
+        )
+
+    $nonOwnerApproval = Copy-PrincipleCatalog "non-owner-approval"
+    $nonOwnerContent = Get-Content -LiteralPath $nonOwnerApproval.Decision -Raw
+    $nonOwnerContent.Replace(
+        "- Approval: Repository-owner merge of this pull request is the effective approval; opening or reviewing it does not approve or Ratify the catalog.",
+        "- Approval: Maintainer merge of this pull request is the effective approval."
+    ) | Set-Content -LiteralPath $nonOwnerApproval.Decision -Encoding utf8 `
+        -NoNewline
+    Assert-ValidationFailure -Root $nonOwnerApproval.Principles -RequireCatalog `
+        -DecisionRecord $nonOwnerApproval.Decision -ExpectedDiagnostics @(
+            "must reserve effective approval to repository-owner merge"
+        )
+
+    $scopeMismatch = Copy-PrincipleCatalog "scope-mismatch"
+    $scopeContent = Get-Content -LiteralPath $scopeMismatch.Decision -Raw
+    $scopeContent.Replace(
+        "(66 total: 24 architecture/platform and 42 assurance/operations).",
+        "(65 total: 24 architecture/platform and 41 assurance/operations)."
+    ) | Set-Content -LiteralPath $scopeMismatch.Decision -Encoding utf8 `
+        -NoNewline
+    Assert-ValidationFailure -Root $scopeMismatch.Principles -RequireCatalog `
+        -DecisionRecord $scopeMismatch.Decision -ExpectedDiagnostics @(
+            "Ratification decision field 'Catalog' does not match the exact catalog manifest"
+        )
+
+    $evidenceMismatch = Copy-PrincipleCatalog "evidence-mismatch"
+    $evidenceContent = Get-Content -LiteralPath $evidenceMismatch.Decision -Raw
+    $evidenceContent.Replace(
+        "PR #4 final head ``b3ea073e461f666387cc5df449151055526c6bfc``",
+        "PR #4 final head ``0000000000000000000000000000000000000000``"
+    ) | Set-Content -LiteralPath $evidenceMismatch.Decision -Encoding utf8 `
+        -NoNewline
+    Assert-ValidationFailure -Root $evidenceMismatch.Principles -RequireCatalog `
+        -DecisionRecord $evidenceMismatch.Decision -ExpectedDiagnostics @(
+            "Ratification decision field 'Final review evidence' does not match the exact catalog manifest"
+        )
+
+    $addedApproval = Copy-PrincipleCatalog "added-approval"
+    Add-Content -LiteralPath $addedApproval.Decision -Encoding utf8 -Value (
+        "A maintainer approved this catalog before merge."
+    )
+    Assert-ValidationFailure -Root $addedApproval.Principles -RequireCatalog `
+        -DecisionRecord $addedApproval.Decision -ExpectedDiagnostics @(
+            "Ratification decision record does not match the exact Ratification manifest"
+        )
+
     $deletedCatalog = Copy-PrincipleCatalog "deleted-catalog"
-    $deletedFile = Join-Path $deletedCatalog "assurance/testing.md"
+    $deletedFile = Join-Path $deletedCatalog.Principles "assurance/testing.md"
     $deletedContent = Get-Content -LiteralPath $deletedFile -Raw
     $marker = $deletedContent.IndexOf("## Executable procedures")
     if ($marker -lt 0) {
@@ -241,21 +434,33 @@ try {
     }
     $deletedContent.Substring(0, $marker).TrimEnd() |
         Set-Content -LiteralPath $deletedFile -Encoding utf8
-    Assert-ValidationFailure -Root $deletedCatalog -RequireCatalog `
-        -ExpectedDiagnostics @("missing expected principle ID 'ENG-TEST-010'")
+    Assert-ValidationFailure -Root $deletedCatalog.Principles -RequireCatalog `
+        -DecisionRecord $deletedCatalog.Decision -ExpectedDiagnostics @(
+            "semantic content hash mismatch for 'assurance/testing.md'"
+            "missing expected principle ID 'ENG-TEST-010'"
+        )
 
     $renumberedCatalog = Copy-PrincipleCatalog "renumbered-catalog"
-    $renumberedFile = Join-Path $renumberedCatalog "assurance/testing.md"
+    $renumberedFile = Join-Path $renumberedCatalog.Principles (
+        "assurance/testing.md"
+    )
     $renumberedContent = Get-Content -LiteralPath $renumberedFile -Raw
     $renumberedContent.Replace("ENG-TEST-010", "ENG-TEST-999") |
         Set-Content -LiteralPath $renumberedFile -Encoding utf8 -NoNewline
-    Assert-ValidationFailure -Root $renumberedCatalog -RequireCatalog `
+    Assert-ValidationFailure -Root $renumberedCatalog.Principles -RequireCatalog `
+        -DecisionRecord $renumberedCatalog.Decision `
         -ExpectedDiagnostics @(
+            "semantic content hash mismatch for 'assurance/testing.md'"
             "missing expected principle ID 'ENG-TEST-010'"
             "unexpected principle ID 'ENG-TEST-999'"
         )
 }
 finally {
+    foreach ($temporaryValidator in $temporaryValidators) {
+        if (Test-Path -LiteralPath $temporaryValidator) {
+            Remove-Item -LiteralPath $temporaryValidator -Force
+        }
+    }
     if (Test-Path -LiteralPath $fixtureRoot) {
         Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
     }

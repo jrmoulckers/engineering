@@ -11,8 +11,12 @@ permissions:
 jobs:
   line-endings:
     runs-on: ubuntu-latest
+    env:
+      BASELINE_REF: ${{ github.event.pull_request.base.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Require LF in tracked text files
         shell: bash
         run: |
@@ -23,7 +27,14 @@ jobs:
           fi
       - name: Validate principle metadata
         shell: pwsh
-        run: pwsh -File .github/scripts/validate-principles.ps1
+        run: |
+          if ($env:BASELINE_REF) {
+            pwsh -File .github/scripts/validate-principles.ps1 `
+              -BaselineRef $env:BASELINE_REF
+          }
+          else {
+            pwsh -File .github/scripts/validate-principles.ps1
+          }
       - name: Reject invalid principle metadata
         shell: pwsh
         run: pwsh -File .github/scripts/test-validate-principles.ps1
