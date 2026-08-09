@@ -1,0 +1,37 @@
+{
+  "name": "@jrmoulckers/prettier-config",
+  "version": "0.1.0",
+  "description": "Engineering-owned Prettier configuration.",
+  "license": "UNLICENSED",
+  "private": false,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jrmoulckers/engineering.git",
+    "directory": "packages/prettier-config"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./svelte": "./svelte.js"
+  },
+  "files": [
+    "index.js",
+    "svelte.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "prettier": "^3.0.0",
+    "prettier-plugin-svelte": "^3.2.0"
+  },
+  "peerDependenciesMeta": {
+    "prettier-plugin-svelte": {
+      "optional": true
+    }
+  }
+}
