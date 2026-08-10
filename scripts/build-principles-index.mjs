@@ -10,7 +10,7 @@
 
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const principlesDir = join(repoRoot, 'principles');
@@ -46,12 +46,26 @@ function parsePrinciples(text, sourcePath) {
     const lines = section.split('\n');
     const title = lines[0].trim();
     const record = { title, source: sourcePath };
+    // Tracks the field a wrapped list item is still continuing onto.
+    let open = null;
 
     for (const line of lines.slice(1)) {
-      const match = /^- ([^:]+):\s*(.+)$/.exec(line);
-      if (!match) continue;
-      const key = FIELDS[match[1]];
-      if (key) record[key] = match[2].trim();
+      const match = /^- ([^:]+):\s*(.*)$/.exec(line);
+      if (match) {
+        open = FIELDS[match[1]] ?? null;
+        if (open) record[open] = match[2].trim();
+        continue;
+      }
+
+      // A wrapped list item continues on indented, non-empty lines. Without
+      // this, a reflowed file keeps only the value's first line and truncates
+      // the rest silently, which is indistinguishable from an edit.
+      if (open && /^\s+\S/.test(line)) {
+        record[open] = `${record[open]} ${line.trim()}`.trim();
+        continue;
+      }
+
+      open = null;
     }
 
     if (record.id) principles.push(record);
@@ -95,26 +109,33 @@ async function build() {
   };
 }
 
-const index = await build();
-const serialized = `${JSON.stringify(index, null, 2)}\n`;
+export { parsePrinciples, build };
 
-if (process.argv.includes('--check')) {
-  let committed;
-  try {
-    committed = await readFile(indexPath, 'utf8');
-  } catch {
-    console.error('principles/index.json is missing. Run: node scripts/build-principles-index.mjs');
-    process.exit(1);
+// Only run as a CLI; importing this module for tests must not touch the index.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const index = await build();
+  const serialized = `${JSON.stringify(index, null, 2)}\n`;
+
+  if (process.argv.includes('--check')) {
+    let committed;
+    try {
+      committed = await readFile(indexPath, 'utf8');
+    } catch {
+      console.error(
+        'principles/index.json is missing. Run: node scripts/build-principles-index.mjs',
+      );
+      process.exit(1);
+    }
+    if (committed !== serialized) {
+      console.error(
+        'principles/index.json has drifted from the principle files.\n' +
+          'Run: node scripts/build-principles-index.mjs',
+      );
+      process.exit(1);
+    }
+    console.log(`principles/index.json is current (${index.total} principles).`);
+  } else {
+    await writeFile(indexPath, serialized);
+    console.log(`Wrote principles/index.json (${index.total} principles).`);
   }
-  if (committed !== serialized) {
-    console.error(
-      'principles/index.json has drifted from the principle files.\n' +
-        'Run: node scripts/build-principles-index.mjs',
-    );
-    process.exit(1);
-  }
-  console.log(`principles/index.json is current (${index.total} principles).`);
-} else {
-  await writeFile(indexPath, serialized);
-  console.log(`Wrote principles/index.json (${index.total} principles).`);
 }
