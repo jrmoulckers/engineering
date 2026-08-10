@@ -43,8 +43,13 @@ curl -s https://raw.githubusercontent.com/jrmoulckers/engineering/main/principle
 ## 2. Install the shared configuration
 
 The packages are published to **GitHub Packages**, which requires the
-`@jrmoulckers` scope and authentication even for reads, because this
-repository is private.
+`@jrmoulckers` scope to be routed explicitly, and requires authentication on
+every read — even for a public package, and even though this repository is
+public. There is no anonymous access to the npm registry.
+
+What being public changes is *authorization*, not authentication: any
+authenticated token can read a public package, so no per-repository access
+grant is needed. You still have to send a token.
 
 > **GitHub Packages only supports classic personal access tokens.**
 > Fine-grained PATs are rejected by the npm registry. A fine-grained token
@@ -75,12 +80,12 @@ Use a classic PAT with only the `read:packages` scope.
 
 ### CI
 
-Prefer granting the consuming repository access to the package over storing a
-token. In each package's settings, under **Manage Actions access**, add the
-consuming repository with **Read**. `GITHUB_TOKEN` then works with no stored
-secret, and GitHub recommends this over a PAT.
+Use the job's own `GITHUB_TOKEN`. Because the packages are public, no secret
+has to be created, shared, or rotated in any consuming repository.
 
-The job must request the permission explicitly:
+The permission must be requested explicitly. Without it the token is minted
+without package scope and the install fails with the same 401 as no token at
+all:
 
 ```yaml
 permissions:
@@ -98,8 +103,9 @@ steps:
       NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-Fall back to a `read:packages` classic PAT in a secret only where an access
-grant is not possible.
+If a package is ever made private again, each consuming repository must be
+added under the package's **Manage Actions access** settings with **Read**.
+Prefer that over storing a PAT in a secret.
 
 #### If your CI delegates to the reusable workflows in `jrmoulckers/.github`
 
@@ -114,8 +120,8 @@ and `reusable-smoke-test`.
 `reusable-security-ci` needs the same treatment for a different reason: it
 runs `npm audit` / `pnpm audit`, which resolves package metadata from
 whatever registry the scope is routed to. Once your `.npmrc` points
-`@jrmoulckers` at GitHub Packages, the audit can fail on a private scoped
-package even though nothing is being installed.
+`@jrmoulckers` at GitHub Packages, the audit hits a registry that requires
+authentication even though nothing is being installed.
 
 ### Install
 
@@ -207,8 +213,43 @@ one script.
 
 ## Go repositories
 
-No npm path. Follow [practices/go.md](../practices/go.md) and reference
-[`configs/golangci.yml`](../configs/golangci.yml).
+There is no npm path, so the shared lint configuration is fetched over HTTP at
+CI time. This repository is public, so the fetch is anonymous — no token, no
+secret, no access grant.
+
+Follow [practices/go.md](../practices/go.md) and fetch
+[`configs/golangci.yml`](../configs/golangci.yml):
+
+```bash
+curl -fsSL --retry 3 \
+  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.0/configs/golangci.yml \
+  -o .golangci.yml
+```
+
+Three details carry the weight here:
+
+**Pin to a tag, never `main`.** An unpinned fetch means an unrelated commit
+here can turn a consumer's build red with no change on their side, which is
+the same failure mode `GH-ACT-003` pins action SHAs to avoid.
+
+**`-f` is not optional.** Without it `curl` writes the error body to the output
+file and exits zero, so lint then runs against a config that is HTML. That
+passes, which is worse than failing.
+
+**Verify the file is non-empty before running the linter.** A truncated
+transfer produces a valid, empty config, and an empty config lints nothing
+while reporting success.
+
+Do not vendor the file into the repository. A committed copy silently drifts
+from the shared config, and the drift is invisible precisely because nothing
+fails.
+
+## Non-npm configuration generally
+
+The same reasoning applies to any config this repository publishes that has no
+package-manager channel — Go today, shell or Python later. Fetch by tag from
+`raw.githubusercontent.com`, fail loudly on a non-200, and check the result is
+non-empty before using it.
 
 ## Expected diff
 
