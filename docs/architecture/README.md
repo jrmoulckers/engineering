@@ -1,8 +1,8 @@
 # Architecture decisions
 
-Use ADRs only for consequential decisions with durable tradeoffs. Do not create
-ADRs for hypothetical systems, routine implementation details, or decisions
-owned by Product, Studio, or `jrmoulckers/.github`.
+Use ADRs only for consequential decisions with durable tradeoffs. Do not create ADRs for
+hypothetical systems, routine implementation details, or decisions owned by Product, Studio, or
+`jrmoulckers/.github`.
 
 Name records `NNNN-short-title.md`. Keep them concise and use this structure:
 
@@ -30,5 +30,5 @@ What becomes easier, harder, or constrained?
 How will the decision be validated?
 ```
 
-Agents may author `Proposed` records. Only the repository owner may mark one
-`Accepted`; superseding records must link the decision they replace.
+Agents may author `Proposed` records. Only the repository owner may mark one `Accepted`;
+superseding records must link the decision they replace.

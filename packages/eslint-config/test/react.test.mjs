@@ -58,7 +58,11 @@ describe('react preset', () => {
   });
 
   test('still carries the base rules', () => {
-    const messages = lint(reactConfig(), `const x = 1;\nif (x == '1') console.log(x);\n`, 'src/a.ts');
+    const messages = lint(
+      reactConfig(),
+      `const x = 1;\nif (x == '1') console.log(x);\n`,
+      'src/a.ts',
+    );
     const ids = ruleIds(messages);
     assert.ok(ids.has('eqeqeq'));
     assert.ok(ids.has('no-console'));

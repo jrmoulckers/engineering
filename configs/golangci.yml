@@ -6,7 +6,7 @@
 # Enables the checks that `go vet` alone does not cover, without enabling
 # opinionated style linters that fight `gofmt`.
 
-version: "2"
+version: '2'
 
 run:
   timeout: 5m
@@ -15,14 +15,14 @@ run:
 linters:
   default: none
   enable:
-    - errcheck      # unchecked errors — ENG-INT-001
+    - errcheck # unchecked errors — ENG-INT-001
     - govet
     - ineffassign
     - staticcheck
     - unused
-    - bodyclose     # leaked HTTP response bodies
-    - errorlint     # %w chains and errors.Is/As misuse — ENG-INT-001
-    - nilerr        # returning nil after a non-nil error
+    - bodyclose # leaked HTTP response bodies
+    - errorlint # %w chains and errors.Is/As misuse — ENG-INT-001
+    - nilerr # returning nil after a non-nil error
     - rowserrcheck
     - misspell
 

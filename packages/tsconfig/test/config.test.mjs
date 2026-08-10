@@ -106,7 +106,9 @@ describe('variants', () => {
 describe('package manifest', () => {
   test('ships every variant it declares', async () => {
     const pkg = await readJson('package.json');
-    const onDisk = (await readdir(pkgDir)).filter((f) => f.endsWith('.json') && f !== 'package.json');
+    const onDisk = (await readdir(pkgDir)).filter(
+      (f) => f.endsWith('.json') && f !== 'package.json',
+    );
     for (const file of onDisk) {
       assert.ok(pkg.files.includes(file), `${file} exists but is not in package.json files`);
     }

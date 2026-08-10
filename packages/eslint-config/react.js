@@ -119,7 +119,11 @@ export function reactConfig(options = {}) {
     ...rest,
     extend: [
       ...asConfigArray('eslint-plugin-react', reactFlat.recommended, 'configs.flat.recommended'),
-      ...asConfigArray('eslint-plugin-react', reactFlat['jsx-runtime'], "configs.flat['jsx-runtime']"),
+      ...asConfigArray(
+        'eslint-plugin-react',
+        reactFlat['jsx-runtime'],
+        "configs.flat['jsx-runtime']",
+      ),
       ...asConfigArray(
         'eslint-plugin-jsx-a11y',
         jsxA11y.flatConfigs?.recommended ?? jsxA11y.configs?.recommended,

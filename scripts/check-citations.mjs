@@ -14,50 +14,35 @@
 // migration used a real ID that meant something else, so `--review` output is
 // the point of this tool, not the pass/fail exit code.
 
-import { readFile, readdir, stat } from "node:fs/promises";
-import path from "node:path";
+import { readFile, readdir, stat } from 'node:fs/promises';
+import path from 'node:path';
 
 const CITATION = /\bENG-[A-Z]+-\d{3}\b/g;
 const DEFAULT_INDEX =
-  "https://raw.githubusercontent.com/jrmoulckers/engineering/main/principles/index.json";
-const TEXT_EXT = new Set([
-  ".md",
-  ".mdx",
-  ".markdown",
-  ".txt",
-  ".yml",
-  ".yaml",
-  ".json",
-]);
-const SKIP_DIR = new Set([
-  "node_modules",
-  ".git",
-  "dist",
-  "build",
-  ".svelte-kit",
-  "vendor",
-]);
+  'https://raw.githubusercontent.com/jrmoulckers/engineering/main/principles/index.json';
+const TEXT_EXT = new Set(['.md', '.mdx', '.markdown', '.txt', '.yml', '.yaml', '.json']);
+const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', '.svelte-kit', 'vendor']);
 
 function parseArgs(argv) {
   const opts = { paths: [], index: DEFAULT_INDEX, review: false, json: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === "--index") {
+    if (arg === '--index') {
       opts.index = argv[i + 1];
       i += 1;
-    } else if (arg === "--review") {
+    } else if (arg === '--review') {
       opts.review = true;
-    } else if (arg === "--json") {
+    } else if (arg === '--json') {
       opts.json = true;
-    } else if (arg === "--help" || arg === "-h") {
+    } else if (arg === '--help' || arg === '-h') {
       opts.help = true;
-    } else if (arg.startsWith("-")) {
+    } else if (arg.startsWith('-')) {
       throw new Error(`Unknown option: ${arg}`);
     } else {
       opts.paths.push(arg);
     }
   }
-  if (opts.paths.length === 0) opts.paths.push(".");
+  if (opts.paths.length === 0) opts.paths.push('.');
   return opts;
 }
 
@@ -80,13 +65,11 @@ async function loadIndex(source) {
   if (/^https?:\/\//.test(source)) {
     const res = await fetch(source);
     if (!res.ok) {
-      throw new Error(
-        `Could not fetch ${source} — HTTP ${res.status} ${res.statusText}`,
-      );
+      throw new Error(`Could not fetch ${source} — HTTP ${res.status} ${res.statusText}`);
     }
     raw = await res.text();
   } else {
-    raw = await readFile(source, "utf8");
+    raw = await readFile(source, 'utf8');
   }
 
   const parsed = JSON.parse(raw);
@@ -104,7 +87,7 @@ async function collectFiles(target) {
   const found = [];
   const walk = async (dir) => {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
-      if (entry.name.startsWith(".") && entry.name !== ".github") continue;
+      if (entry.name.startsWith('.') && entry.name !== '.github') continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (SKIP_DIR.has(entry.name)) continue;
@@ -120,7 +103,7 @@ async function collectFiles(target) {
 
 async function scanFile(file) {
   const hits = [];
-  const lines = (await readFile(file, "utf8")).split(/\r?\n/);
+  const lines = (await readFile(file, 'utf8')).split(/\r?\n/);
   lines.forEach((text, i) => {
     for (const match of text.matchAll(CITATION)) {
       hits.push({
@@ -134,7 +117,7 @@ async function scanFile(file) {
         window: lines
           .slice(Math.max(0, i - 2), i + 3)
           .map((l, k) => ({ n: Math.max(0, i - 2) + k + 1, text: l }))
-          .filter((l) => l.text.trim() !== ""),
+          .filter((l) => l.text.trim() !== ''),
       });
     }
   });
@@ -189,21 +172,19 @@ async function main() {
         console.log(`\n${c.file}`);
       }
       const principle = known.get(c.id);
-      const title = principle ? principle.title : "*** UNKNOWN ID ***";
-      console.log(
-        `  ${String(c.line).padStart(5)}  ${c.id.padEnd(14)} ${title}`,
-      );
+      const title = principle ? principle.title : '*** UNKNOWN ID ***';
+      console.log(`  ${String(c.line).padStart(5)}  ${c.id.padEnd(14)} ${title}`);
       for (const l of c.window ?? [{ n: c.line, text: c.context }]) {
-        console.log(`      ${l.n === c.line ? ">" : " "}  ${l.text.trim()}`);
+        console.log(`      ${l.n === c.line ? '>' : ' '}  ${l.text.trim()}`);
       }
     }
-    console.log("");
+    console.log('');
   }
 
   if (unknown.length > 0) {
     console.error(`${unknown.length} unknown citation(s):\n`);
     for (const c of unknown) console.error(`  ${c.file}:${c.line}  ${c.id}`);
-    console.error("\nResolve each against principles/index.json.");
+    console.error('\nResolve each against principles/index.json.');
     return 1;
   }
 
@@ -214,8 +195,8 @@ async function main() {
   );
   if (!opts.review) {
     console.log(
-      "Existence is not correctness — re-run with --review to check each ID " +
-        "means what the surrounding text claims.",
+      'Existence is not correctness — re-run with --review to check each ID ' +
+        'means what the surrounding text claims.',
     );
   }
   return 0;

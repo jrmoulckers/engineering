@@ -9,10 +9,7 @@ import { config } from './index.js';
 export const svelteConfig = {
   ...config,
   plugins: ['prettier-plugin-svelte'],
-  overrides: [
-    { files: '*.svelte', options: { parser: 'svelte' } },
-    ...(config.overrides ?? []),
-  ],
+  overrides: [{ files: '*.svelte', options: { parser: 'svelte' } }, ...(config.overrides ?? [])],
 };
 
 export default svelteConfig;
