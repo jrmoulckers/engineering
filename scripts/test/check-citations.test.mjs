@@ -1,40 +1,36 @@
-import { test, describe } from "node:test";
-import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const script = path.join(here, "..", "check-citations.mjs");
-const index = path.join(here, "..", "..", "principles", "index.json");
+const script = path.join(here, '..', 'check-citations.mjs');
+const index = path.join(here, '..', '..', 'principles', 'index.json');
 
 function run(target, extra = []) {
   try {
-    const stdout = execFileSync(
-      process.execPath,
-      [script, target, "--index", index, ...extra],
-      {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
+    const stdout = execFileSync(process.execPath, [script, target, '--index', index, ...extra], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     return { code: 0, out: stdout };
   } catch (err) {
-    return { code: err.status, out: `${err.stdout ?? ""}${err.stderr ?? ""}` };
+    return { code: err.status, out: `${err.stdout ?? ''}${err.stderr ?? ''}` };
   }
 }
 
 function fixture(contents) {
-  const dir = mkdtempSync(path.join(tmpdir(), "citations-"));
-  writeFileSync(path.join(dir, "DOC.md"), contents, "utf8");
+  const dir = mkdtempSync(path.join(tmpdir(), 'citations-'));
+  writeFileSync(path.join(dir, 'DOC.md'), contents, 'utf8');
   return dir;
 }
 
-describe("check-citations", () => {
-  test("accepts a real principle ID", () => {
-    const dir = fixture("Secrets follow `ENG-SEC-001`.\n");
+describe('check-citations', () => {
+  test('accepts a real principle ID', () => {
+    const dir = fixture('Secrets follow `ENG-SEC-001`.\n');
     try {
       const { code, out } = run(dir);
       assert.equal(code, 0);
@@ -44,8 +40,8 @@ describe("check-citations", () => {
     }
   });
 
-  test("fails on an ID that does not exist", () => {
-    const dir = fixture("Invented citation `ENG-FAKE-999`.\n");
+  test('fails on an ID that does not exist', () => {
+    const dir = fixture('Invented citation `ENG-FAKE-999`.\n');
     try {
       const { code, out } = run(dir);
       assert.equal(code, 1);
@@ -55,14 +51,14 @@ describe("check-citations", () => {
     }
   });
 
-  test("--review prints the real title beside a wrong-meaning citation", () => {
+  test('--review prints the real title beside a wrong-meaning citation', () => {
     // The defect this tool exists for: every miscitation seen during the
     // migration used a valid ID that meant something else, so the exit code
     // stays 0 and the title is the only signal. ENG-ARCH-003 is "Durable
     // decisions" (ADRs), not a rule about server tiers.
-    const dir = fixture("libro has no server tier, per `ENG-ARCH-003`.\n");
+    const dir = fixture('libro has no server tier, per `ENG-ARCH-003`.\n');
     try {
-      const { code, out } = run(dir, ["--review"]);
+      const { code, out } = run(dir, ['--review']);
       assert.equal(code, 0);
       assert.match(out, /ENG-ARCH-003\s+Durable decisions/);
       assert.match(out, /no server tier/);
@@ -71,20 +67,20 @@ describe("check-citations", () => {
     }
   });
 
-  test("--review shows neighbouring lines so a wrapped link is judgeable", () => {
+  test('--review shows neighbouring lines so a wrapped link is judgeable', () => {
     // A markdown link wrapped onto its own line leaves the citing line a bare
     // URL. Printing only that line hides the claim being checked and makes a
     // correct citation look unsupported -- which caused a real misjudgement.
     const dir = fixture(
       [
-        "6. **Accessibility is a gate.** WCAG 2.2 AA.",
-        "   [`ENG-PERF-009`](https://example.invalid/performance.md)",
-        "   additionally forbids trading accessibility away for performance.",
-        "",
-      ].join("\n"),
+        '6. **Accessibility is a gate.** WCAG 2.2 AA.',
+        '   [`ENG-PERF-009`](https://example.invalid/performance.md)',
+        '   additionally forbids trading accessibility away for performance.',
+        '',
+      ].join('\n'),
     );
     try {
-      const { out } = run(dir, ["--review"]);
+      const { out } = run(dir, ['--review']);
       assert.match(out, /Accessibility is a gate/);
       assert.match(out, /additionally forbids trading accessibility away/);
     } finally {
@@ -92,8 +88,8 @@ describe("check-citations", () => {
     }
   });
 
-  test("reminds the author that existence is not correctness", () => {
-    const dir = fixture("See `ENG-SEC-001`.\n");
+  test('reminds the author that existence is not correctness', () => {
+    const dir = fixture('See `ENG-SEC-001`.\n');
     try {
       const { out } = run(dir);
       assert.match(out, /Existence is not correctness/);
@@ -102,8 +98,8 @@ describe("check-citations", () => {
     }
   });
 
-  test("reports cleanly when a tree holds no citations", () => {
-    const dir = fixture("No citations here.\n");
+  test('reports cleanly when a tree holds no citations', () => {
+    const dir = fixture('No citations here.\n');
     try {
       const { code, out } = run(dir);
       assert.equal(code, 0);
@@ -113,24 +109,20 @@ describe("check-citations", () => {
     }
   });
 
-  test("every citation in this repository resolves", () => {
-    const { code } = run(path.join(here, "..", "..", "docs"));
+  test('every citation in this repository resolves', () => {
+    const { code } = run(path.join(here, '..', '..', 'docs'));
     assert.equal(code, 0);
   });
 
-  test("exits 2 rather than 0 when the index cannot be read", () => {
-    const dir = fixture("See `ENG-SEC-001`.\n");
+  test('exits 2 rather than 0 when the index cannot be read', () => {
+    const dir = fixture('See `ENG-SEC-001`.\n');
     try {
       let code = 0;
       try {
-        execFileSync(
-          process.execPath,
-          [script, dir, "--index", path.join(dir, "missing.json")],
-          {
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "pipe"],
-          },
-        );
+        execFileSync(process.execPath, [script, dir, '--index', path.join(dir, 'missing.json')], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
       } catch (err) {
         code = err.status;
       }

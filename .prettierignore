@@ -1,0 +1,19 @@
+# Generated. Written by scripts/build-principles-index.mjs, which controls its
+# formatting; letting Prettier own it too would produce a drift loop.
+principles/index.json
+
+# Governed artifacts under a ratification seal.
+#
+# .github/scripts/validate-principles.ps1 pins these files with semantic content
+# hashes and line-level structural rules. Reformatting them does not merely fail
+# CI — it invalidates the evidence that the ratified text is the text the
+# repository owner approved. Only the owner may change ratified content, and a
+# formatter is not an owner.
+#
+# Verified: reflowing these produces `semantic content hash mismatch` across the
+# platform catalogs plus structural failures where wrapping moved text off the
+# line the validator inspects.
+principles/
+docs/ratification/
+
+node_modules/

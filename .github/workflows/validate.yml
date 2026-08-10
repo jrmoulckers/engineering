@@ -47,6 +47,8 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - name: Check formatting with this repository's own Prettier config
+        run: npm run format:check
       - name: Verify the principle index matches the principle files
         run: npm run principles:check
       - name: Test shared configuration packages
