@@ -402,6 +402,43 @@ curl -fsSL https://raw.githubusercontent.com/jrmoulckers/engineering/main/princi
   | jq -r '.principles[] | select(.id=="ENG-LOCAL-001") | .statement'
 ```
 
+Run the checker over your repository before opening the PR. It needs no
+install and no auth — a pinned `--index` URL is all it reads:
+
+```bash
+curl -fsSL -o /tmp/check-citations.mjs \
+  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.10/scripts/check-citations.mjs
+
+node /tmp/check-citations.mjs . --review \
+  --index https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.10/principles/index.json
+```
+
+**Read the `--review` output; do not just check the exit code.** The exit code
+only catches an ID that does not exist, and that is the rarer mistake. Every
+miscitation found during the seven-repo migration used a **real ID that meant
+something else** — those exit 0. `--review` prints each principle's real title
+against the line citing it, which makes the mismatch obvious:
+
+```
+  AGENTS.md
+      3  ENG-PERF-009   Assurance precedence
+         Accessibility follows ENG-PERF-009.
+      4  ENG-TEST-003   Regression boundaries
+         Tests are colocated with source per ENG-TEST-003.
+```
+
+Both IDs exist. Neither says what the line claims: `ENG-PERF-009` forbids
+trading accessibility away *for performance* rather than stating an
+accessibility rule, and `ENG-TEST-003` is about regression tests at the
+narrowest authoritative boundary, not file placement. There is no ratified
+principle for either subject, so the honest fix is to keep the prose as
+product-specific and cite nothing.
+
+**If no principle covers it, cite nothing.** A near-miss citation is the one
+failure mode this whole scheme cannot survive: it transfers authorship of a
+rule to this repository, which never agreed to it, and the next reader treats
+it as ratified. Restated prose is recoverable; a false citation is not.
+
 **Do not cite a principle your repository does not follow.** Some principles
 are conditional on an architecture, and the directory says which:
 
