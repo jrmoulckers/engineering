@@ -123,7 +123,19 @@ async function scanFile(file) {
   const lines = (await readFile(file, "utf8")).split(/\r?\n/);
   lines.forEach((text, i) => {
     for (const match of text.matchAll(CITATION)) {
-      hits.push({ file, line: i + 1, id: match[0], context: text.trim() });
+      hits.push({
+        file,
+        line: i + 1,
+        id: match[0],
+        context: text.trim(),
+        // A wrapped markdown link puts the ID on a line of its own, with the
+        // claim it supports on a neighbouring line. Showing only the citing
+        // line renders as a bare URL and hides the very thing being checked.
+        window: lines
+          .slice(Math.max(0, i - 2), i + 3)
+          .map((l, k) => ({ n: Math.max(0, i - 2) + k + 1, text: l }))
+          .filter((l) => l.text.trim() !== ""),
+      });
     }
   });
   return hits;
@@ -181,7 +193,9 @@ async function main() {
       console.log(
         `  ${String(c.line).padStart(5)}  ${c.id.padEnd(14)} ${title}`,
       );
-      console.log(`         ${c.context}`);
+      for (const l of c.window ?? [{ n: c.line, text: c.context }]) {
+        console.log(`      ${l.n === c.line ? ">" : " "}  ${l.text.trim()}`);
+      }
     }
     console.log("");
   }

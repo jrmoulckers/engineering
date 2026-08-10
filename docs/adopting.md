@@ -407,37 +407,58 @@ install and no auth — a pinned `--index` URL is all it reads:
 
 ```bash
 curl -fsSL -o /tmp/check-citations.mjs \
-  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.10/scripts/check-citations.mjs
+  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.11/scripts/check-citations.mjs
 
 node /tmp/check-citations.mjs . --review \
-  --index https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.10/principles/index.json
+  --index https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.11/principles/index.json
 ```
 
 **Read the `--review` output; do not just check the exit code.** The exit code
-only catches an ID that does not exist, and that is the rarer mistake. Every
-miscitation found during the seven-repo migration used a **real ID that meant
-something else** — those exit 0. `--review` prints each principle's real title
-against the line citing it, which makes the mismatch obvious:
+only catches an ID that does not exist, and that is the rarer mistake. A real
+ID used for the wrong rule exits 0. `--review` prints each principle's real
+title, plus the neighbouring lines, against every citation:
 
 ```
-  AGENTS.md
+    171  ENG-PERF-009   Assurance precedence
+         keyboard control and correctly labelled transport controls.
+      >  [`ENG-PERF-009`](…/assurance/performance.md)
+         additionally forbids trading accessibility away for performance.
+```
+
+The neighbouring lines are the point. A wrapped markdown link leaves the citing
+line a bare URL, so the claim being checked sits on the line above or below it.
+Judging that citation from the URL line alone is not possible — and reading a
+summary of it instead of the file is how a correct citation gets mistaken for a
+wrong one.
+
+The example above is **correct**, and reads as correct: `ENG-PERF-009` is not
+an accessibility rule, and the prose does not claim it is — it says the
+principle *additionally* forbids trading accessibility away for performance,
+which is exactly what it says. Compare a wrong one:
+
+```
       3  ENG-PERF-009   Assurance precedence
-         Accessibility follows ENG-PERF-009.
-      4  ENG-TEST-003   Regression boundaries
-         Tests are colocated with source per ENG-TEST-003.
+      >  Accessibility follows ENG-PERF-009.
 ```
 
-Both IDs exist. Neither says what the line claims: `ENG-PERF-009` forbids
-trading accessibility away *for performance* rather than stating an
-accessibility rule, and `ENG-TEST-003` is about regression tests at the
-narrowest authoritative boundary, not file placement. There is no ratified
-principle for either subject, so the honest fix is to keep the prose as
-product-specific and cite nothing.
+That asserts an equivalence the principle does not support. There is no
+ratified accessibility principle, so the fix is to state the accessibility rule
+as your own and cite `ENG-PERF-009` only for what it actually constrains.
 
 **If no principle covers it, cite nothing.** A near-miss citation is the one
 failure mode this whole scheme cannot survive: it transfers authorship of a
 rule to this repository, which never agreed to it, and the next reader treats
 it as ratified. Restated prose is recoverable; a false citation is not.
+
+Two shapes that stay honest when nothing covers the subject:
+
+- **Name it as yours.** "Colocate tests … a libro convention; the obligation it
+  serves is `ENG-TEST-003` (regress at the narrowest authoritative boundary)."
+  The convention is local, the cited principle is the real obligation beneath
+  it, and neither is misattributed.
+- **Record it as a decision.** A constraint with no principle behind it is an
+  ADR, and `ENG-ARCH-003` is what requires you to write one before treating it
+  as durable. Cite `ENG-ARCH-003` for the *recording*, not for the constraint.
 
 **Do not cite a principle your repository does not follow.** Some principles
 are conditional on an architecture, and the directory says which:
