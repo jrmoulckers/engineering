@@ -14,7 +14,9 @@
   "scripts": {
     "test": "node --test",
     "principles:index": "node scripts/build-principles-index.mjs",
-    "principles:check": "node scripts/build-principles-index.mjs --check"
+    "principles:check": "node scripts/build-principles-index.mjs --check",
+    "citations:check": "node scripts/check-citations.mjs . --index principles/index.json",
+    "citations:review": "node scripts/check-citations.mjs . --index principles/index.json --review"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^16.3.0",
