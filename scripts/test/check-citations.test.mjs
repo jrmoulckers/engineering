@@ -71,6 +71,27 @@ describe("check-citations", () => {
     }
   });
 
+  test("--review shows neighbouring lines so a wrapped link is judgeable", () => {
+    // A markdown link wrapped onto its own line leaves the citing line a bare
+    // URL. Printing only that line hides the claim being checked and makes a
+    // correct citation look unsupported -- which caused a real misjudgement.
+    const dir = fixture(
+      [
+        "6. **Accessibility is a gate.** WCAG 2.2 AA.",
+        "   [`ENG-PERF-009`](https://example.invalid/performance.md)",
+        "   additionally forbids trading accessibility away for performance.",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { out } = run(dir, ["--review"]);
+      assert.match(out, /Accessibility is a gate/);
+      assert.match(out, /additionally forbids trading accessibility away/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("reminds the author that existence is not correctness", () => {
     const dir = fixture("See `ENG-SEC-001`.\n");
     try {
