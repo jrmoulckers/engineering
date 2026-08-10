@@ -213,6 +213,28 @@ most.** Every one of these callees requests `packages: read` at job level, and a
 only `contents: read` caps the callee below what it asks for and the run dies at startup with no
 readable log. See the callout in the previous section.
 
+**The grant tracks what the callee declares, not whether it installs anything.** This is the
+part that catches people. `reusable-perf-budget` consumes a build artifact and runs no install,
+so `packages: read` looks obviously irrelevant and gets left off — and the whole workflow dies
+at startup in about a second. Match this table exactly, per callee you call:
+
+| Callee                      | Permissions the caller must grant                         |
+| --------------------------- | --------------------------------------------------------- |
+| `reusable-ci-lint`          | `contents: read`, `packages: read`, `pull-requests: read` |
+| `reusable-ci-web`           | `contents: read`, `packages: read`                        |
+| `reusable-deploy-pages`     | `contents: read`, `packages: read`, `id-token: write`     |
+| `reusable-deploy-preview`   | `contents: read`, `packages: read`                        |
+| `reusable-perf-budget`      | `contents: read`, `packages: read` — **installs nothing** |
+| `reusable-smoke-test`       | `contents: read`, `packages: read`                        |
+| `reusable-security-ci`      | `contents: read`                                          |
+| `reusable-change-detection` | `contents: read`                                          |
+
+A caller with **no** `permissions:` block at all inherits the repository default and is
+unaffected by any of this. The failure only appears once you write the block down.
+
+`actionlint` does not model caller-callee permission ceilings and passes on both sides, so this
+is not caught before it runs.
+
 The token is resolved as
 `inputs.registry-url != '' && (secrets.NODE_AUTH_TOKEN || github.token) || ''`, so it is only
 present on runs that opted into a registry. Callers passing no registry inputs get an unchanged
