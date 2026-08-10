@@ -374,14 +374,37 @@ curl -fsSL https://raw.githubusercontent.com/jrmoulckers/engineering/main/princi
 ```
 
 **Do not cite a principle your repository does not follow.** Some principles
-are conditional on an architecture. `ENG-LOCAL-001` makes the device's durable
-store the system of record, which is correct for a local-first product and
-flatly wrong for one where the server is canonical and clients are never
-authoritative. Citing it there would encode a false claim about the system.
+are conditional on an architecture, and the directory says which:
 
-If a principle does not apply, say so plainly rather than citing it, and tell
-Engineering — a genuine architectural difference is worth knowing about, and
-may mean the principle needs a stated scope.
+| Directory | Applies to |
+| --- | --- |
+| `principles/architecture/` | every repository |
+| `principles/assurance/` | every repository |
+| `principles/operations/` | every repository |
+| `principles/platforms/` | **only repositories on that platform** |
+
+A `platforms/` principle is scoped to its platform the same way
+`browser-frontend.md` has nothing to say about a Go CLI. So a repository on a
+different architecture is **out of scope, not non-compliant**, and should not
+be measured against it.
+
+`ENG-LOCAL-001` is the case that shows why this matters. It makes the device's
+durable store the system of record — correct for a local-first product, and
+flatly wrong for one where the server is canonical and clients are optimistic
+caches. A server-authoritative product does not fail that principle; it is not
+addressed by it. Citing it there would encode a false claim about the system,
+and so would recording it as a compliance gap.
+
+Being out of scope is not a free pass on the neighbours. Where a `platforms/`
+principle does not apply but a reader would reasonably assume it does, state
+the departure and the reason where the architecture is described, and check
+whether the parts of it that are platform-independent still bind — the
+exportability half of `ENG-LOCAL-001` holds regardless of who is authoritative.
+
+If a principle genuinely does not apply, say so plainly rather than citing it,
+and tell Engineering. Only the repository owner may ratify a change to
+principle text, so a real scope gap needs a decision record rather than an
+edit.
 
 ## Expected diff
 
