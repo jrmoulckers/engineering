@@ -300,7 +300,7 @@ silently installs a build in which `@jrmoulckers/eslint-config/react` and
 
 | Package                        | Minimum  | Why                                                                        |
 | ------------------------------ | -------- | -------------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `^0.4.0` | ESLint 10 support; `./react`; ESLint v16 `flatConfig` handling in `./next` |
+| `@jrmoulckers/eslint-config`   | `^0.6.0` | Type-aware crash fix; opt-in `strictTypeChecked`; ESLint 10; `./react`     |
 | `@jrmoulckers/tsconfig`        | `^0.3.0` | `vite-react.json`; TypeScript 6 and 7 support                              |
 | `@jrmoulckers/prettier-config` | `^0.2.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                       |
 
