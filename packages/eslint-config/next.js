@@ -1,8 +1,6 @@
 import next from '@next/eslint-plugin-next';
-import tseslint from 'typescript-eslint';
 
 import { base } from './base.js';
-import { toolingFiles } from './ignores.js';
 
 /**
  * Is this a flat config, rather than a legacy eslintrc object?
@@ -74,6 +72,7 @@ export function nextConfig(options = {}) {
   return base({
     ...rest,
     env: 'both',
+    typeAware,
     ignores: [
       '**/.next/**',
       '**/playwright-report/**',
@@ -96,16 +95,15 @@ export function nextConfig(options = {}) {
           '@typescript-eslint/no-explicit-any': 'warn',
         },
       },
-      // Type-aware linting, scoped to TypeScript. `no-misused-promises` lives
-      // here rather than in the block above because a type-aware rule enabled
-      // on a file with no type information fails the entire run, not just that
-      // rule — so it must never be switched on more broadly than the project
-      // service that backs it.
+      // Scoped to TypeScript, matching exactly the files `base` gives a project
+      // service to. A type-aware rule enabled on a file with no type
+      // information aborts the whole run, so it must never apply more widely —
+      // including to plain .js sources, which are not tooling files and would
+      // otherwise be caught by an unscoped rules entry.
       ...(typeAware
         ? [
             {
               files: ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts'],
-              languageOptions: { parserOptions: { projectService: true } },
               rules: {
                 // Passing an async function where a void return is expected
                 // silently drops the rejection. JSX attributes are exempt
@@ -115,14 +113,6 @@ export function nextConfig(options = {}) {
                   { checksVoidReturn: { attributes: false } },
                 ],
               },
-            },
-            // Config files and scripts are routinely outside tsconfig.json, and
-            // the project service errors on a file it cannot place. Must come
-            // after the block above: the last matching entry wins.
-            {
-              files: toolingFiles,
-              languageOptions: { parserOptions: { projectService: false } },
-              rules: tseslint.configs.disableTypeChecked.rules,
             },
           ]
         : []),

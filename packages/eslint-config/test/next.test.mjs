@@ -77,55 +77,74 @@ describe('next preset', () => {
 describe('next preset type-aware wiring (ENG-TEST-008)', () => {
   const TYPE_AWARE_RULE = '@typescript-eslint/no-misused-promises';
 
-  /** Last matching entry wins in flat config, so resolve like ESLint does. */
-  function resolveRule(config, ruleName, matches) {
-    let resolved;
-    for (const entry of config) {
-      if (entry.files && !matches(entry.files)) continue;
-      const value = entry.rules?.[ruleName];
-      if (value !== undefined) resolved = value;
-    }
-    return resolved;
+  /** Minimal glob matcher covering the shapes these presets use. */
+  function matches(glob, filePath) {
+    const pattern = String(glob)
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*\*\//g, '(?:.*/)?')
+      .replace(/\*/g, '[^/]*');
+    return new RegExp(`^${pattern}$`).test(filePath);
   }
 
-  const isTs = (files) => files.includes('**/*.tsx');
-  const isTooling = (files) => files.includes('**/*.config.mjs');
+  /**
+   * Resolve as ESLint does: every matching entry applies, last one wins.
+   * Behavioural rather than structural — what matters is what a given file
+   * ends up with, not which entry supplied it.
+   */
+  function resolve(config, filePath) {
+    let rule;
+    let projectService;
+    for (const entry of config) {
+      if (entry.files && !entry.files.some((g) => matches(g, filePath))) continue;
+      if (entry.rules?.[TYPE_AWARE_RULE] !== undefined) rule = entry.rules[TYPE_AWARE_RULE];
+      const ps = entry.languageOptions?.parserOptions?.projectService;
+      if (ps !== undefined) projectService = ps;
+    }
+    return { rule, projectService };
+  }
 
-  test('a type-aware rule is never enabled without a project service backing it', () => {
-    // The failure this guards is total: a type-aware rule on a file with no
-    // type information aborts the whole run, not just that rule. An explicit
-    // 'off' is the safe state, so only enabled entries must carry a service.
-    for (const entry of nextConfig()) {
-      const rule = entry.rules?.[TYPE_AWARE_RULE];
-      if (rule === undefined || rule === 'off') continue;
-      assert.equal(
-        entry.languageOptions?.parserOptions?.projectService,
-        true,
-        `${TYPE_AWARE_RULE} is enabled in an entry that supplies no project service`,
-      );
-      assert.ok(entry.files?.length, `${TYPE_AWARE_RULE} is enabled without a files scope`);
+  const enabled = (rule) => rule !== undefined && rule !== 'off';
+
+  test('no file ever gets a type-aware rule without a project service', () => {
+    // This is the invariant. Violating it aborts the entire ESLint run rather
+    // than failing one rule, so it is checked per file shape, including the
+    // plain .js case that is neither TypeScript nor a tooling file.
+    const paths = [
+      'src/a.ts',
+      'src/a.tsx',
+      'src/a.mts',
+      'src/a.js',
+      'src/a.jsx',
+      'src/a.mjs',
+      'vite.config.mjs',
+      'eslint.config.js',
+      'scripts/build.mjs',
+      'src/a.test.ts',
+    ];
+    for (const p of paths) {
+      const { rule, projectService } = resolve(nextConfig(), p);
+      if (!enabled(rule)) continue;
+      assert.equal(projectService, true, `${p} enables ${TYPE_AWARE_RULE} with no project service`);
     }
   });
 
-  test('tooling files end up with the type-aware rule off', () => {
-    // Config files and scripts routinely sit outside tsconfig.json.
-    assert.notEqual(resolveRule(nextConfig(), TYPE_AWARE_RULE, isTooling), 'error');
-    assert.equal(
-      resolveRule(nextConfig(), TYPE_AWARE_RULE, isTooling),
-      'off',
-      'tooling files must disable the rule explicitly, not merely fail to enable it',
-    );
+  test('TypeScript sources keep the rule enabled', () => {
+    const { rule, projectService } = resolve(nextConfig(), 'src/a.ts');
+    assert.ok(Array.isArray(rule) && rule[0] === 'error');
+    assert.equal(projectService, true);
   });
 
-  test('TypeScript files keep the rule enabled', () => {
-    const resolved = resolveRule(nextConfig(), TYPE_AWARE_RULE, isTs);
-    assert.ok(Array.isArray(resolved) && resolved[0] === 'error');
+  test('tooling files disable the rule explicitly', () => {
+    const { rule, projectService } = resolve(nextConfig(), 'vite.config.mjs');
+    assert.equal(rule, 'off');
+    assert.equal(projectService, false);
   });
 
   test('typeAware: false drops the rule rather than leaving it to crash', () => {
-    for (const entry of nextConfig({ typeAware: false })) {
-      assert.equal(entry.rules?.[TYPE_AWARE_RULE], undefined);
-      assert.notEqual(entry.languageOptions?.parserOptions?.projectService, true);
+    for (const p of ['src/a.ts', 'src/a.js']) {
+      const { rule, projectService } = resolve(nextConfig({ typeAware: false }), p);
+      assert.ok(!enabled(rule));
+      assert.notEqual(projectService, true);
     }
   });
 
