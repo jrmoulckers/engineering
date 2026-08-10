@@ -113,6 +113,18 @@ pnpm config set "//npm.pkg.github.com/:_authToken" ghp_...
 
 Use a classic PAT with only the `read:packages` scope.
 
+**A missing token reports as a bad one.** With `NODE_AUTH_TOKEN` unset, npm sends an _empty_
+credential rather than none, so the registry answers:
+
+```
+npm error 401 unauthenticated: User cannot be authenticated with the token provided.
+```
+
+That message describes a credential that was rejected, and the usual response is to reissue a
+token that was never the problem. Fine-grained tokens fail with the same text, so no token, an
+empty token and a wrong token are indistinguishable from the error alone. Check that the variable
+is set and that the token is classic before reissuing anything.
+
 ### CI
 
 Use the job's own `GITHUB_TOKEN`. Because the packages are public, no secret has to be created,
@@ -223,7 +235,7 @@ silently installs a build in which `@jrmoulckers/eslint-config/react` and
 | ------------------------------ | -------- | ------------------------------------------------------- |
 | `@jrmoulckers/eslint-config`   | `^0.2.0` | `./react`; ESLint v16 `flatConfig` handling in `./next` |
 | `@jrmoulckers/tsconfig`        | `^0.2.0` | `vite-react.json`                                       |
-| `@jrmoulckers/prettier-config` | `^0.1.0` | unchanged since `0.1.0`                                 |
+| `@jrmoulckers/prettier-config` | `^0.2.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown    |
 
 This bites hardest where a repository verified against the source tree — a `file:` or `link:`
 dependency onto a local checkout resolves to whatever is checked out, which is current, while
@@ -263,12 +275,35 @@ long way from its cause.
 
 ### Landing the first format pass
 
-`proseWrap: always` reflows Markdown, which for a large corpus touches many files at once. Land
-that pass as its **own commit**, separate from any semantic change, or the real diff is
-unreviewable inside it.
+Markdown formatting uses `proseWrap: 'preserve'`, so adopting this config **does not reflow your
+prose**. There is no mechanical markdown commit to land and no large diff to review.
 
-Reflow churn is bounded to the edited paragraph, not the file: changing one word rewraps the
-remaining lines of that paragraph and nothing else.
+The `.md` override narrows `printWidth` to 96, which affects only constructs Prettier does
+reformat — tables, lists, code fences. Paragraph line breaks are left exactly as authored.
+
+### Write prose in semantic line breaks
+
+Since the formatter no longer decides where lines end, the convention does. Break lines at
+sentence or clause boundaries; one sentence per line is the simplest form.
+
+```md
+The sync layer reconciles local mutations against the remote authority.
+It uses a last-writer-wins strategy scoped per field rather than per record.
+```
+
+This is not a style preference. It is measurably better on the two things that matter for
+review, and `preserve` exists to permit it:
+
+| Shape           | One-word edit | Two edits, same paragraph | Bounded line length |
+| --------------- | ------------- | ------------------------- | ------------------- |
+| Hard-wrapped    | 3 lines       | merges                    | yes                 |
+| One long line   | 1 line        | **conflicts**             | no                  |
+| Semantic breaks | 1 line        | merges                    | yes                 |
+
+Hard wrapping rewraps every following line in the paragraph, so a one-word change arrives as a
+multi-line diff and the real edit has to be hunted for. A single unbroken line avoids that but
+collides on any concurrent edit, since every change touches the same line. Semantic breaks avoid
+both — and `proseWrap: 'always'` destroys them on write, which is why it is not the default.
 
 ## 3. Wire it up
 

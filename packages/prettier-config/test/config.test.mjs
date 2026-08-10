@@ -39,8 +39,29 @@ describe('prettier config', () => {
   test('narrows print width for markdown prose', () => {
     const md = config.overrides.find((o) => o.files === '*.md');
     assert.ok(md);
-    assert.equal(md.options.proseWrap, 'always');
     assert.equal(md.options.printWidth, 96);
+  });
+
+  test('preserves author line breaks in markdown', async () => {
+    const md = config.overrides.find((o) => o.files === '*.md');
+    assert.equal(md.options.proseWrap, 'preserve');
+
+    // The reason for the value: semantic line breaks must survive formatting.
+    // Under 'always' these four lines collapse into filled prose, which is
+    // what made every prose edit rewrap its whole paragraph.
+    const semantic = [
+      'The sync layer reconciles local mutations against the remote authority.',
+      'It uses a last-writer-wins strategy scoped per field rather than per record.',
+      'This avoids the failure where an unrelated concurrent edit clobbers an untouched field.',
+      '',
+    ].join('\n');
+
+    const out = await prettier.format(semantic, {
+      ...config,
+      ...md.options,
+      parser: 'markdown',
+    });
+    assert.equal(out, semantic, 'formatting must not re-flow authored line breaks');
   });
 });
 
