@@ -1,7 +1,7 @@
 # Go services and tools
 
-Implements `ENG-ARCH-001`–`ENG-ARCH-004`, `ENG-TEST-001`–`ENG-TEST-010`, and
-`ENG-BUILD-001`–`ENG-BUILD-008`. This guide adds no rules.
+Implements `ENG-ARCH-001`, `ENG-ARCH-002`, `ENG-ARCH-004`, `ENG-API-001`, `ENG-TEST-001`,
+`ENG-TEST-004`, `ENG-TEST-007`, `ENG-TEST-010`, and `ENG-BUILD-001`. This guide adds no rules.
 
 Go repositories consume Engineering practice through this guide and
 [`configs/golangci.yml`](../configs/golangci.yml). There is no npm path; the `@jrmoulckers/*`

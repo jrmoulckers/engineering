@@ -30,7 +30,9 @@ export async function coverage() {
   );
 
   const text = (
-    await Promise.all(guides.map((name) => readFile(join(practicesDir, name), 'utf8')))
+    await Promise.all(
+      guides.map(async (name) => stripClaim(await readFile(join(practicesDir, name), 'utf8'))),
+    )
   ).join('\n');
 
   const covered = [];
@@ -40,6 +42,25 @@ export async function coverage() {
   }
 
   return { covered, uncovered, total: principles.length, guides };
+}
+
+/**
+ * Remove a guide's leading "Implements ..." claim before counting.
+ *
+ * The claim is what a guide asserts; the body is what it delivers. Counting the
+ * claim lets a header cover a principle no section implements. Range notation
+ * made that concrete: `ENG-BUILD-001`-`ENG-BUILD-008` marked both endpoints
+ * covered while implementing only the first, and said nothing about the six in
+ * between — so the ratchet reported coverage the repository did not have.
+ */
+export function stripClaim(source) {
+  const lines = source.split('\n');
+  const start = lines.findIndex((line) => line.startsWith('Implements '));
+  if (start === -1) return source;
+
+  let end = start;
+  while (end < lines.length && lines[end].trim() !== '') end += 1;
+  return [...lines.slice(0, start), ...lines.slice(end)].join('\n');
 }
 
 function byArea(ids) {

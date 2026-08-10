@@ -34,8 +34,8 @@ needs a recorded reason; a budget that only ever ratchets upward is a budget in 
 
 ## Runtime budget
 
-Foreground interaction outranks background work (`ENG-WEB-003`). Background tasks — sync,
-indexing, prefetch — yield under foreground load rather than competing with it.
+Foreground interaction outranks background work (`ENG-PERF-005`, `ENG-WEB-003`). Background
+tasks — sync, indexing, prefetch — yield under foreground load rather than competing with it.
 
 Every fallible operation carries a timeout and a progress signal. Without both, a slow path and
 a hung path are indistinguishable to the user and to the operator.
