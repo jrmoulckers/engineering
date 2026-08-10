@@ -204,20 +204,44 @@ and `reusable-smoke-test`. Passing none of the new inputs leaves behaviour uncha
 
 **Route by scope. Never replace the default registry.** Setting
 `registry=https://npm.pkg.github.com/` wholesale, rather than scoping it, breaks `npm audit` /
-`pnpm audit` with `ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS` — GitHub Packages implements no audit
-endpoint. That failure is not an auth problem and no token will fix it. Always pass
-`registry-scope` alongside `registry-url`.
+`pnpm audit` — GitHub Packages implements no advisory endpoint. Under npm the failure reads:
+
+```
+npm warn audit 404 Not Found - POST https://npm.pkg.github.com/-/npm/v1/security/advisories/bulk
+npm error audit endpoint returned an error
+```
+
+pnpm reports the same condition as `ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`. Neither is an auth
+problem and **no token will fix either** — the endpoint does not exist at that host. Always pass
+`registry-scope` alongside `registry-url`, and keep the committed `.npmrc` to a single scoped
+line.
 
 `reusable-security-ci` needs **no** registry configuration. Audit never contacts the scoped
 registry: `@npmcli/arborist` resolves the advisory endpoint as
-`options.auditRegistry || options.registry`, which is the default registry. Verified against a
-lockfile holding a private `@jrmoulckers` package and a vulnerable `minimist`, with no
-credentials — the advisory was reported and no auth error occurred, in both npm and pnpm.
+`options.auditRegistry || options.registry`, which is the default registry.
+
+That claim is easy to believe and easy to get wrong, so it was tested by trying to falsify it —
+the scope was routed to a host that cannot resolve at all:
+
+```ini
+@jrmoulckers:registry=https://blackhole.invalid/
+```
+
+If audit contacted the scoped registry, this must fail with a DNS error. It did not: the
+`minimist` advisory was reported normally, exit 1 for the vulnerability, with no network error.
+A 401 requires reaching a host; an unroutable host cannot return one. Reproduced independently in
+both npm and pnpm.
 
 > **Audit sends your private package names to `registry.npmjs.org`.** The bulk advisory request
 > contains the name and version of every dependency, `@jrmoulckers/*` included. This is inherent
 > `npm audit` behaviour rather than anything this toolchain adds, but it is worth knowing before
 > pointing audit at a repository whose dependency names are themselves sensitive.
+
+The no-auth conclusion holds for a plain `npm audit` / `pnpm audit`, which only reads advisory
+data. It does **not** hold for a command that resolves or installs — `npm audit fix`, or any
+install-then-audit sequence — because those do contact the scoped registry and will 401 without
+a token. If you override `reusable-security-ci`'s `audit-command` input with anything of that
+shape, you are back to needing registry configuration.
 
 ### Install
 
