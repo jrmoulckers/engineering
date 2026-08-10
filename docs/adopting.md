@@ -2,11 +2,11 @@
 
 How a repository consumes this one. Three layers, adopt in order.
 
-| Layer | What you get | Transport |
-| --- | --- | --- |
-| [Principles](../principles/README.md) | 66 ratified `ENG-*` rules + evidence | Cite by ID; resolve via `principles/index.json` |
-| [Practices](../practices/README.md) | Technique for satisfying them | Link by URL |
-| [Packages](#2-install-the-shared-configuration) | Executable enforcement | GitHub Packages |
+| Layer                                           | What you get                         | Transport                                       |
+| ----------------------------------------------- | ------------------------------------ | ----------------------------------------------- |
+| [Principles](../principles/README.md)           | 66 ratified `ENG-*` rules + evidence | Cite by ID; resolve via `principles/index.json` |
+| [Practices](../practices/README.md)             | Technique for satisfying them        | Link by URL                                     |
+| [Packages](#2-install-the-shared-configuration) | Executable enforcement               | GitHub Packages                                 |
 
 ## 1. Cite principles by ID
 
@@ -47,7 +47,7 @@ The packages are published to **GitHub Packages**, which requires the
 every read — even for a public package, and even though this repository is
 public. There is no anonymous access to the npm registry.
 
-What being public changes is *authorization*, not authentication: any
+What being public changes is _authorization_, not authentication: any
 authenticated token can read a public package, so no per-repository access
 grant is needed. You still have to send a token.
 
@@ -67,6 +67,19 @@ even one that interpolates an environment variable: it makes every local
 command fail confusingly when the variable is unset, and it puts a
 credential-shaped string in version control.
 
+**pnpm refuses to honour it regardless.** pnpm 11 ignores any credential in a
+project-level `.npmrc` and says why:
+
+> environment variables are not expanded in registry credentials that come
+> from a project `.npmrc`, because that file is committed to the repository
+> and could leak the secret to an attacker-controlled registry
+
+It then fails the install with a 401. The warning scrolls past in a wall of
+install output, so the visible symptom is an unexplained 401 while a token is
+demonstrably set — worth recognising. This is deliberate hardening on pnpm's
+part and the same instinct as `ENG-SEC-001`, so the guidance above is what to
+follow under either package manager.
+
 ### Local development
 
 Put the token in your **user-level** `~/.npmrc`, where it is shared across
@@ -74,6 +87,13 @@ every repository and never committed:
 
 ```ini
 //npm.pkg.github.com/:_authToken=ghp_...
+```
+
+Under pnpm, write it with `pnpm config set` rather than by hand, so it lands
+in the user-level file pnpm actually reads:
+
+```bash
+pnpm config set "//npm.pkg.github.com/:_authToken" ghp_...
 ```
 
 Use a classic PAT with only the `read:packages` scope.
@@ -97,7 +117,7 @@ steps:
     with:
       node-version: 20
       registry-url: https://npm.pkg.github.com
-      scope: '@jrmoulckers'
+      scope: "@jrmoulckers"
   - run: npm ci
     env:
       NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -131,12 +151,12 @@ npm i -D @jrmoulckers/eslint-config @jrmoulckers/prettier-config @jrmoulckers/ts
 
 Peer dependencies are not bundled — install the ones your stack needs:
 
-| Stack | Also install |
-| --- | --- |
-| Any | `eslint prettier typescript` |
-| Svelte | `eslint-plugin-svelte prettier-plugin-svelte` |
-| React | `eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y` |
-| Next.js | `@next/eslint-plugin-next` |
+| Stack   | Also install                                                           |
+| ------- | ---------------------------------------------------------------------- |
+| Any     | `eslint prettier typescript`                                           |
+| Svelte  | `eslint-plugin-svelte prettier-plugin-svelte`                          |
+| React   | `eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y` |
+| Next.js | `@next/eslint-plugin-next`                                             |
 
 ## 3. Wire it up
 
@@ -169,7 +189,10 @@ export default nextConfig({
   extend: [
     {
       rules: {
-        'drizzle/enforce-delete-with-where': ['error', { drizzleObjectName: ['db'] }],
+        "drizzle/enforce-delete-with-where": [
+          "error",
+          { drizzleObjectName: ["db"] },
+        ],
       },
     },
   ],
@@ -179,8 +202,24 @@ export default nextConfig({
 ### Prettier — `prettier.config.js`
 
 ```js
-export { default } from '@jrmoulckers/prettier-config/svelte'; // or '@jrmoulckers/prettier-config'
+export { default } from "@jrmoulckers/prettier-config/svelte"; // or '@jrmoulckers/prettier-config'
 ```
+
+#### `.gitattributes` — required on Windows
+
+The shared config sets `endOfLine: 'lf'`. Commit a `.gitattributes` alongside
+it:
+
+```
+* text=auto eol=lf
+```
+
+Without it, a Windows checkout under `core.autocrlf=true` gets CRLF in the
+working tree while the index stays LF. `format:check` then **passes in CI and
+fails on every Windows machine**, which reads as a broken developer setup
+rather than a missing file. Adding it may reformat many files in the working
+tree while producing a zero-byte commit diff — that is the fix working, not a
+mass rewrite.
 
 ### TypeScript — `tsconfig.json`
 
@@ -188,13 +227,13 @@ export { default } from '@jrmoulckers/prettier-config/svelte'; // or '@jrmoulcke
 { "extends": "@jrmoulckers/tsconfig/vite-app.json", "include": ["src"] }
 ```
 
-| Variant | For |
-| --- | --- |
-| `base.json` | Any TypeScript |
-| `vite-app.json` | Browser app — adds DOM libs and `vite/client` |
+| Variant           | For                                                  |
+| ----------------- | ---------------------------------------------------- |
+| `base.json`       | Any TypeScript                                       |
+| `vite-app.json`   | Browser app — adds DOM libs and `vite/client`        |
 | `vite-react.json` | React browser app — `vite-app` plus `jsx: react-jsx` |
-| `vite-node.json` | Build scripts and Node tooling |
-| `next.json` | Next.js — adds `jsx: preserve` and the Next plugin |
+| `vite-node.json`  | Build scripts and Node tooling                       |
+| `next.json`       | Next.js — adds `jsx: preserve` and the Next plugin   |
 
 ### Scripts
 
@@ -250,6 +289,30 @@ The same reasoning applies to any config this repository publishes that has no
 package-manager channel — Go today, shell or Python later. Fetch by tag from
 `raw.githubusercontent.com`, fail loudly on a non-200, and check the result is
 non-empty before using it.
+
+## Citing principles
+
+Replace prose that restates a rule with a citation to its ID. Two things make
+a citation wrong rather than merely untidy.
+
+**Verify every ID against `principles/index.json`.** IDs are not guessable from
+the subject matter, and a citation that points at the wrong principle is worse
+than the restated prose it replaced, because it looks authoritative.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jrmoulckers/engineering/main/principles/index.json \
+  | jq -r '.principles[] | select(.id=="ENG-LOCAL-001") | .statement'
+```
+
+**Do not cite a principle your repository does not follow.** Some principles
+are conditional on an architecture. `ENG-LOCAL-001` makes the device's durable
+store the system of record, which is correct for a local-first product and
+flatly wrong for one where the server is canonical and clients are never
+authoritative. Citing it there would encode a false claim about the system.
+
+If a principle does not apply, say so plainly rather than citing it, and tell
+Engineering — a genuine architectural difference is worth knowing about, and
+may mean the principle needs a stated scope.
 
 ## Expected diff
 
