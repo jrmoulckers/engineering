@@ -41,12 +41,26 @@ curl -s https://raw.githubusercontent.com/jrmoulckers/engineering/main/principle
 ## 2. Install the shared configuration
 
 The packages are published to **GitHub Packages**, which requires the `@jrmoulckers` scope to be
-routed explicitly, and requires authentication on every read — even for a public package, and
-even though this repository is public. There is no anonymous access to the npm registry.
+routed explicitly, and requires authentication on every read. This holds whatever the package's
+visibility is: there is no anonymous access to the npm registry.
 
-What being public changes is _authorization_, not authentication: any authenticated token can
-read a public package, so no per-repository access grant is needed. You still have to send a
-token.
+Visibility changes _authorization_, not authentication. A public package can be read by any
+authenticated token, with no per-repository grant. A private one additionally requires each
+consuming repository to be granted access. Either way you must send a token.
+
+> **A package's visibility is not the repository's visibility.** `jrmoulckers/engineering` is a
+> **public** repository, and all three packages are currently **private** — publishing from a
+> public repository does not make the package public, and nothing about the repository page
+> hints otherwise. Check the package, never the repo:
+>
+> ```bash
+> # Anonymous. Lists only public packages; the repo page itself returns 200 either way,
+> # which is what makes the repo a misleading proxy for the answer.
+> curl -s https://github.com/jrmoulckers/engineering/packages | grep -c eslint-config
+> ```
+>
+> While that returns `0`, the grants below are required. This is the current state and the
+> single blocker for adopting the presets.
 
 > **GitHub Packages only supports classic personal access tokens.** Fine-grained PATs are
 > rejected by the npm registry. A fine-grained token fails with a 401 that is indistinguishable
@@ -127,8 +141,9 @@ is set and that the token is classic before reissuing anything.
 
 ### CI
 
-Use the job's own `GITHUB_TOKEN`. Because the packages are public, no secret has to be created,
-shared, or rotated in any consuming repository.
+Use the job's own `GITHUB_TOKEN`. No secret has to be created, shared, or rotated in any
+consuming repository — but while the packages are private, that token also needs an access grant
+per the note below.
 
 The permission must be requested explicitly. Without it the token is minted without package
 scope and the install fails with the same 401 as no token at all:
@@ -156,13 +171,13 @@ steps:
 > than a missing scope, so check this first. Workflows with no `permissions:` block at all
 > inherit the repository default and are unaffected.
 
-While a package is private, `GITHUB_TOKEN` is not enough on its own: each consuming repository
-must also be added under the package's **Manage Actions access** settings with **Read**. That is
-one grant per repository per package, so seven repositories across three packages is twenty-one
-grants to create and maintain.
+**The packages are private today, so `GITHUB_TOKEN` is not enough on its own**: each consuming
+repository must also be added under the package's **Manage Actions access** settings with
+**Read**. That is one grant per repository per package, so seven repositories across three
+packages is twenty-one grants to create and maintain.
 
-Making the package public collapses all of that to nothing, because any authenticated token may
-then read it. Note that public does **not** mean anonymous — the registry still rejects an
+Making the packages public collapses all of that to nothing, because any authenticated token may
+then read them. Note that public does **not** mean anonymous — the registry still rejects an
 unauthenticated read with a 401, so `packages: read` and the token remain required either way.
 What changes is authorization, not authentication.
 
@@ -191,6 +206,12 @@ jobs:
 
 Pass a `secrets: NODE_AUTH_TOKEN:` block only for a registry the job's own token cannot reach.
 If you staged one for GitHub Packages, delete it.
+
+**The `packages: read` line above is not optional here, and this is where omitting it hurts
+most.** Every one of these callees requests `packages: read` at job level, and a caller's
+`permissions:` block _replaces_ the default rather than adding to it — so a caller that lists
+only `contents: read` caps the callee below what it asks for and the run dies at startup with no
+readable log. See the callout in the previous section.
 
 The token is resolved as
 `inputs.registry-url != '' && (secrets.NODE_AUTH_TOKEN || github.token) || ''`, so it is only
@@ -255,11 +276,11 @@ The React presets and the ESLint v16 fix shipped in `0.2.0`, so a manifest pinne
 silently installs a build in which `@jrmoulckers/eslint-config/react` and
 `@jrmoulckers/tsconfig/vite-react.json` **do not exist**. Current floors:
 
-| Package                        | Minimum  | Why                                                     |
-| ------------------------------ | -------- | ------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `^0.3.0` | `./react`; ESLint v16 `flatConfig` handling in `./next` |
-| `@jrmoulckers/tsconfig`        | `^0.3.0` | `vite-react.json`; TypeScript 6 and 7 support           |
-| `@jrmoulckers/prettier-config` | `^0.2.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown    |
+| Package                        | Minimum  | Why                                                                        |
+| ------------------------------ | -------- | -------------------------------------------------------------------------- |
+| `@jrmoulckers/eslint-config`   | `^0.4.0` | ESLint 10 support; `./react`; ESLint v16 `flatConfig` handling in `./next` |
+| `@jrmoulckers/tsconfig`        | `^0.3.0` | `vite-react.json`; TypeScript 6 and 7 support                              |
+| `@jrmoulckers/prettier-config` | `^0.2.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                       |
 
 ### The two packages support different TypeScript versions, on purpose
 
