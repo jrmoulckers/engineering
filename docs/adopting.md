@@ -129,6 +129,7 @@ Peer dependencies are not bundled — install the ones your stack needs:
 | --- | --- |
 | Any | `eslint prettier typescript` |
 | Svelte | `eslint-plugin-svelte prettier-plugin-svelte` |
+| React | `eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y` |
 | Next.js | `@next/eslint-plugin-next` |
 
 ## 3. Wire it up
@@ -139,6 +140,10 @@ Peer dependencies are not bundled — install the ones your stack needs:
 // Svelte
 import { svelteConfig } from '@jrmoulckers/eslint-config/svelte';
 export default svelteConfig();
+
+// React (Vite, or any non-Next React app)
+import { reactConfig } from '@jrmoulckers/eslint-config/react';
+export default reactConfig();
 
 // Next.js
 import { nextConfig } from '@jrmoulckers/eslint-config/next';
@@ -181,6 +186,7 @@ export { default } from '@jrmoulckers/prettier-config/svelte'; // or '@jrmoulcke
 | --- | --- |
 | `base.json` | Any TypeScript |
 | `vite-app.json` | Browser app — adds DOM libs and `vite/client` |
+| `vite-react.json` | React browser app — `vite-app` plus `jsx: react-jsx` |
 | `vite-node.json` | Build scripts and Node tooling |
 | `next.json` | Next.js — adds `jsx: preserve` and the Next plugin |
 

@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/eslint-config",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Engineering-owned ESLint flat configuration presets.",
   "license": "UNLICENSED",
   "private": false,
@@ -17,11 +17,13 @@
     ".": "./base.js",
     "./base": "./base.js",
     "./svelte": "./svelte.js",
+    "./react": "./react.js",
     "./next": "./next.js"
   },
   "files": [
     "base.js",
     "svelte.js",
+    "react.js",
     "next.js",
     "ignores.js",
     "README.md"
@@ -38,10 +40,22 @@
   "peerDependencies": {
     "@next/eslint-plugin-next": "^15.0.0",
     "eslint": "^9.0.0",
+    "eslint-plugin-jsx-a11y": "^6.10.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^5.0.0 || ^6.0.0 || ^7.0.0",
     "eslint-plugin-svelte": "^2.46.0"
   },
   "peerDependenciesMeta": {
     "@next/eslint-plugin-next": {
+      "optional": true
+    },
+    "eslint-plugin-jsx-a11y": {
+      "optional": true
+    },
+    "eslint-plugin-react": {
+      "optional": true
+    },
+    "eslint-plugin-react-hooks": {
       "optional": true
     },
     "eslint-plugin-svelte": {

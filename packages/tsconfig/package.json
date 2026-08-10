@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/tsconfig",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Engineering-owned TypeScript compiler configurations.",
   "license": "UNLICENSED",
   "private": false,
@@ -16,6 +16,7 @@
     "base.json",
     "vite-app.json",
     "vite-node.json",
+    "vite-react.json",
     "next.json",
     "README.md"
   ],

@@ -11,6 +11,7 @@ authentication.
 | --- | --- | --- |
 | `@jrmoulckers/tsconfig/base.json` | Any TypeScript | — |
 | `@jrmoulckers/tsconfig/vite-app.json` | Browser application | DOM libs, `vite/client`, `checkJs` |
+| `@jrmoulckers/tsconfig/vite-react.json` | React browser application | `jsx: react-jsx`, `esModuleInterop` |
 | `@jrmoulckers/tsconfig/vite-node.json` | Build scripts, Node tooling | `node` types |
 | `@jrmoulckers/tsconfig/next.json` | Next.js | `jsx: preserve`, `incremental`, Next plugin |
 
