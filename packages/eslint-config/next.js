@@ -3,6 +3,50 @@ import next from '@next/eslint-plugin-next';
 import { base } from './base.js';
 
 /**
+ * Is this a flat config, rather than a legacy eslintrc object?
+ *
+ * The reliable discriminator is `plugins`: flat config requires an object,
+ * eslintrc used an array of strings. Key names are not a reliable signal —
+ * v16 publishes the flat config at `configs['core-web-vitals']`, which in v15
+ * was the eslintrc one.
+ *
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isFlatConfig(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const { plugins } = /** @type {{ plugins?: unknown }} */ (value);
+  return Boolean(plugins) && !Array.isArray(plugins);
+}
+
+/**
+ * Resolve Next's Core Web Vitals flat config across plugin majors.
+ *
+ * v15 exposed it at `flatConfig.coreWebVitals`. v16 empties `flatConfig`
+ * entirely and moves flat configs to `configs['core-web-vitals']`, leaving the
+ * eslintrc form at `configs['core-web-vitals-legacy']`. Reading the v15 key
+ * under v16 yields `undefined`, which ESLint reports as a malformed config
+ * naming no plugin.
+ *
+ * @returns {import('eslint').Linter.Config}
+ */
+function resolveCoreWebVitals() {
+  const candidates = [
+    next.flatConfig?.coreWebVitals,
+    next.configs?.['core-web-vitals'],
+    next.configs?.coreWebVitals,
+  ];
+
+  const config = candidates.find(isFlatConfig);
+  if (config) return /** @type {import('eslint').Linter.Config} */ (config);
+
+  throw new TypeError(
+    '@jrmoulckers/eslint-config: @next/eslint-plugin-next exposes no usable flat ' +
+      'Core Web Vitals config. Its export shape has changed; the preset needs updating.',
+  );
+}
+
+/**
  * Next.js / React preset. Layers Next's Core Web Vitals rules on top of the
  * base TypeScript preset.
  *
@@ -23,7 +67,7 @@ export function nextConfig(options = {}) {
     env: 'both',
     ignores: ['**/.next/**', '**/playwright-report/**', '**/test-results/**', ...ignores],
     extend: [
-      next.flatConfig.coreWebVitals,
+      resolveCoreWebVitals(),
       {
         rules: {
           // A type-only import that survives into the emitted module changes
