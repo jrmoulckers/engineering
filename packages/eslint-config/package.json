@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/eslint-config",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Engineering-owned ESLint flat configuration presets.",
   "license": "UNLICENSED",
   "private": false,
@@ -39,7 +39,7 @@
   },
   "peerDependencies": {
     "@next/eslint-plugin-next": "^15.0.0 || ^16.0.0",
-    "eslint": "^9.0.0",
+    "eslint": "^9.0.0 || ^10.0.0",
     "eslint-plugin-jsx-a11y": "^6.10.0",
     "eslint-plugin-react": "^7.37.0",
     "eslint-plugin-react-hooks": "^5.0.0 || ^6.0.0 || ^7.0.0",
