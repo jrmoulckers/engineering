@@ -152,3 +152,75 @@ describe('typescript peer range', () => {
     assert.equal(pkg.peerDependenciesMeta.typescript.optional, true);
   });
 });
+
+describe('base strictTypeChecked (ENG-TEST-008)', () => {
+  const STRICT_RULES = [
+    '@typescript-eslint/no-unsafe-assignment',
+    '@typescript-eslint/no-unsafe-member-access',
+    '@typescript-eslint/no-floating-promises',
+  ];
+
+  /** Resolve a rule and the project-service setting for one file path. */
+  function resolveFor(config, filePath) {
+    const matches = (glob) => {
+      const pattern = String(glob)
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*\*\//g, '(?:.*/)?')
+        .replace(/\*/g, '[^/]*');
+      return new RegExp(`^${pattern}$`).test(filePath);
+    };
+    const rules = {};
+    let projectService;
+    for (const entry of config) {
+      if (entry.files && !entry.files.some(matches)) continue;
+      Object.assign(rules, entry.rules ?? {});
+      const ps = entry.languageOptions?.parserOptions?.projectService;
+      if (ps !== undefined) projectService = ps;
+    }
+    return { rules, projectService };
+  }
+
+  const enabled = (r) => r !== undefined && r !== 'off' && r?.[0] !== 'off';
+
+  test('off by default, so the preset needs no TypeScript project', () => {
+    const { rules, projectService } = resolveFor(base(), 'src/a.ts');
+    assert.notEqual(projectService, true);
+    for (const rule of STRICT_RULES)
+      assert.ok(!enabled(rules[rule]), `${rule} leaked into default`);
+  });
+
+  test('enables the type-checked families on TypeScript when opted in', () => {
+    const { rules, projectService } = resolveFor(base({ strictTypeChecked: true }), 'src/a.ts');
+    assert.equal(projectService, true);
+    for (const rule of STRICT_RULES)
+      assert.ok(enabled(rules[rule]), `${rule} missing under strict`);
+  });
+
+  test('never leaves a type-aware rule on a file with no project service', () => {
+    // The failure mode is a hard abort of the whole run, not one failing rule.
+    // Plain .js sources are the exposed case: they are not TypeScript and not
+    // tooling, so only an explicit disable keeps them safe.
+    const config = base({ strictTypeChecked: true });
+    for (const p of [
+      'src/a.js',
+      'src/a.jsx',
+      'src/a.mjs',
+      'src/a.cjs',
+      'vite.config.mjs',
+      'scripts/build.mjs',
+      'src/a.test.ts',
+    ]) {
+      const { rules, projectService } = resolveFor(config, p);
+      for (const rule of STRICT_RULES) {
+        if (enabled(rules[rule])) {
+          assert.equal(projectService, true, `${p} enables ${rule} with no project service`);
+        }
+      }
+    }
+  });
+
+  test('strictTypeChecked implies type information without also passing typeAware', () => {
+    const { projectService } = resolveFor(base({ strictTypeChecked: true }), 'src/a.ts');
+    assert.equal(projectService, true);
+  });
+});

@@ -12,15 +12,35 @@ import { sharedIgnores, toolingFiles } from './ignores.js';
  * repositories. Formatting is delegated entirely to Prettier; this preset only
  * carries correctness and discipline rules.
  *
+ * **Type-aware linting is opt-in, and that is a deliberate trade.** The default
+ * uses `tseslint.configs.recommended`, which needs no TypeScript project. The
+ * type-checked rule sets — including the whole `no-unsafe-*` family and
+ * `no-floating-promises` — require every linted file to resolve to a project,
+ * so enabling them by default would break any consumer that lints config files
+ * or scripts sitting outside `tsconfig.json`. Opting in is cheap: one measured
+ * consumer went from 43 dropped rules to 13 mechanical violations.
+ *
  * @param {object} [options]
  * @param {string[]} [options.ignores] Extra ignore globs appended to the shared set.
  * @param {'browser'|'node'|'both'} [options.env] Which global sets to enable. Defaults to 'both'.
  * @param {Record<string, unknown>} [options.rules] Rule overrides applied last.
  * @param {import('eslint').Linter.Config[]} [options.extend] Extra flat-config entries appended last.
+ * @param {boolean} [options.typeAware] Supply type information so type-aware rules can run.
+ * @param {boolean} [options.strictTypeChecked] Layer the type-checked and stylistic-type-checked
+ *   rule sets. Implies `typeAware`.
  * @returns {import('eslint').Linter.Config[]}
  */
 export function base(options = {}) {
-  const { ignores = [], env = 'both', rules = {}, extend = [] } = options;
+  const {
+    ignores = [],
+    env = 'both',
+    rules = {},
+    extend = [],
+    typeAware = false,
+    strictTypeChecked = false,
+  } = options;
+
+  const wantsTypeInformation = typeAware || strictTypeChecked;
 
   const globalSets = {
     browser: { ...globals.browser },
@@ -31,7 +51,9 @@ export function base(options = {}) {
   return tseslint.config(
     { ignores: [...sharedIgnores, ...ignores] },
     js.configs.recommended,
-    ...tseslint.configs.recommended,
+    ...(strictTypeChecked
+      ? [...tseslint.configs.recommendedTypeChecked, ...tseslint.configs.stylisticTypeChecked]
+      : tseslint.configs.recommended),
     prettier,
     {
       languageOptions: {
@@ -49,8 +71,9 @@ export function base(options = {}) {
         'no-console': ['warn', { allow: ['warn', 'error'] }],
         eqeqeq: ['error', 'always', { null: 'ignore' }],
         // A swallowed rejection hides the failure it was supposed to surface.
+        // Type-aware, so it can only be enabled once a project is available.
         'no-return-await': 'off',
-        '@typescript-eslint/no-floating-promises': 'off',
+        ...(strictTypeChecked ? {} : { '@typescript-eslint/no-floating-promises': 'off' }),
         ...rules,
       },
     },
@@ -59,6 +82,33 @@ export function base(options = {}) {
       rules: { 'no-console': 'off' },
     },
     ...extend,
+    // Deliberately last, after `extend`. A type-aware rule on a file with no
+    // type information aborts the entire ESLint run rather than that one rule,
+    // so this must outrank anything a caller adds. Config files and scripts
+    // routinely sit outside tsconfig.json.
+    ...(wantsTypeInformation
+      ? [
+          {
+            files: ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts'],
+            languageOptions: { parserOptions: { projectService: true } },
+          },
+          // JavaScript is never covered by a TypeScript project, so every
+          // type-aware rule has to come back off for it. This matters most
+          // under `strictTypeChecked`, where the type-checked sets are applied
+          // unscoped and would otherwise reach ordinary .js sources — not just
+          // the config files and scripts the tooling globs cover.
+          {
+            files: ['**/*.js', '**/*.jsx', '**/*.mjs', '**/*.cjs'],
+            languageOptions: { parserOptions: { projectService: false } },
+            rules: tseslint.configs.disableTypeChecked.rules,
+          },
+          {
+            files: toolingFiles,
+            languageOptions: { parserOptions: { projectService: false } },
+            rules: tseslint.configs.disableTypeChecked.rules,
+          },
+        ]
+      : []),
   );
 }
 
