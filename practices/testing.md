@@ -164,6 +164,25 @@ reconciliation and conflict-resolution logic, and any assertion whose fixture wa
 copying the implementation's output. If a mutation survives, the test is decorative — the useful
 outcome, since a decorative test is worse than no test for reading as protection that isn't there.
 
+**The same doubt applies to lint rules, which are tests you did not write.** A clean run proves a
+rule found nothing; it does not prove the rule can see the thing you are relying on it to catch.
+A measured example: a codebase had seven hook wrappers evading React's rules-of-hooks contract,
+and `react-hooks/rules-of-hooks` flagged **two**. It matches the destructured form,
+
+```js
+const { goals } = useGoals(); // flagged
+```
+
+but not the inline one, which is the same violation:
+
+```js
+return { goals: useGoals().goals }; // not flagged
+```
+
+Nobody would have known from the run. Before treating a rule as a control, mutate a file to
+introduce the violation it supposedly catches and confirm it fires in _the shape your code
+actually takes_ — then rely on it only for that shape.
+
 ## Derive expected values independently (`ENG-TEST-009`)
 
 A fixture must never compute its expectation by calling the implementation under test; both then
