@@ -260,10 +260,18 @@ Follow [practices/go.md](../practices/go.md) and fetch
 [`configs/golangci.yml`](../configs/golangci.yml):
 
 ```bash
+# Pin to a release tag; the newest is listed at
+# https://github.com/jrmoulckers/engineering/releases
+ENGINEERING_REF=v0.2.3
+
 curl -fsSL --retry 3 \
-  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.2/configs/golangci.yml \
+  "https://raw.githubusercontent.com/jrmoulckers/engineering/${ENGINEERING_REF}/configs/golangci.yml" \
   -o .golangci.yml
 ```
+
+The tag shown is an example and will lag the current release, since writing a
+literal version into a document guarantees the document is stale one release
+later. Treat it as a knob to set, and pin to the newest tag when you adopt.
 
 Four details carry the weight here:
 
