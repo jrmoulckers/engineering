@@ -122,4 +122,17 @@ describe('package manifest', () => {
     assert.ok(pkg.name.startsWith('@jrmoulckers/'));
     assert.equal(pkg.publishConfig.registry, 'https://npm.pkg.github.com');
   });
+
+  // The presets were compiled clean against 5.9, 6.0.3 and 7.0.2 before this
+  // range was widened. A consumer on a supported TypeScript must not be turned
+  // away by ERESOLVE from a range that simply went stale.
+  test('accepts every TypeScript major the presets were verified against', async () => {
+    const { peerDependencies } = await readJson('package.json');
+    for (const major of ['^5.5.0', '^6.0.0', '^7.0.0']) {
+      assert.ok(
+        peerDependencies.typescript.includes(major),
+        `typescript peer range omits ${major}`,
+      );
+    }
+  });
 });

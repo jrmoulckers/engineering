@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { Linter } from 'eslint';
+import { readFile } from 'node:fs/promises';
 
 import { base } from '../base.js';
 import { svelteConfig } from '../svelte.js';
@@ -135,5 +136,19 @@ describe('shared ignores', () => {
     assert.ok(toolingFiles.some((g) => g.includes('.test.')));
     assert.ok(toolingFiles.some((g) => g.includes('.config.')));
     assert.ok(toolingFiles.some((g) => g.includes('scripts/')));
+  });
+});
+
+describe('typescript peer range', () => {
+  // Deliberately narrower than @jrmoulckers/tsconfig, which accepts TypeScript
+  // 5, 6 and 7. This package depends on typescript-eslint, whose own peer range
+  // is `>=4.8.4 <6.1.0` as of 8.67.0 -- so it cannot honestly claim 7 yet. The
+  // two packages must NOT be made to agree; declaring the real ceiling is what
+  // turns a confusing runtime failure into an install-time ERESOLVE.
+  test('declares the ceiling typescript-eslint actually supports', async () => {
+    const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    const range = pkg.peerDependencies.typescript;
+    assert.equal(range, '>=5.5.0 <6.1.0');
+    assert.equal(pkg.peerDependenciesMeta.typescript.optional, true);
   });
 });

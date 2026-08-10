@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/eslint-config",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Engineering-owned ESLint flat configuration presets.",
   "license": "UNLICENSED",
   "private": false,
@@ -43,7 +43,8 @@
     "eslint-plugin-jsx-a11y": "^6.10.0",
     "eslint-plugin-react": "^7.37.0",
     "eslint-plugin-react-hooks": "^5.0.0 || ^6.0.0 || ^7.0.0",
-    "eslint-plugin-svelte": "^2.46.0 || ^3.0.0"
+    "eslint-plugin-svelte": "^2.46.0 || ^3.0.0",
+    "typescript": ">=5.5.0 <6.1.0"
   },
   "peerDependenciesMeta": {
     "@next/eslint-plugin-next": {
@@ -59,6 +60,9 @@
       "optional": true
     },
     "eslint-plugin-svelte": {
+      "optional": true
+    },
+    "typescript": {
       "optional": true
     }
   }

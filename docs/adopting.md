@@ -233,9 +233,25 @@ silently installs a build in which `@jrmoulckers/eslint-config/react` and
 
 | Package                        | Minimum  | Why                                                     |
 | ------------------------------ | -------- | ------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `^0.2.0` | `./react`; ESLint v16 `flatConfig` handling in `./next` |
-| `@jrmoulckers/tsconfig`        | `^0.2.0` | `vite-react.json`                                       |
+| `@jrmoulckers/eslint-config`   | `^0.3.0` | `./react`; ESLint v16 `flatConfig` handling in `./next` |
+| `@jrmoulckers/tsconfig`        | `^0.3.0` | `vite-react.json`; TypeScript 6 and 7 support           |
 | `@jrmoulckers/prettier-config` | `^0.2.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown    |
+
+### The two packages support different TypeScript versions, on purpose
+
+| Package                      | `typescript` peer                | Verified against                              |
+| ---------------------------- | -------------------------------- | --------------------------------------------- |
+| `@jrmoulckers/tsconfig`      | `^5.5.0 \|\| ^6.0.0 \|\| ^7.0.0` | 5.9, 6.0.3, 7.0.2 — all presets compile clean |
+| `@jrmoulckers/eslint-config` | `>=5.5.0 <6.1.0` (optional)      | Ceiling set by `typescript-eslint@8.67.0`     |
+
+**Do not "fix" this by making them agree.** `@jrmoulckers/eslint-config` depends on
+`typescript-eslint`, whose own peer range is `>=4.8.4 <6.1.0`, so it cannot honestly claim
+TypeScript 7 until that ships. The peer is declared — and marked optional, so JavaScript-only
+consumers are unaffected — precisely so a TypeScript 7 repository gets an install-time `ERESOLVE`
+naming the conflict, instead of a confusing failure inside the type-aware lint rules later.
+
+If you are on TypeScript 7, adopt `@jrmoulckers/tsconfig` now and hold `@jrmoulckers/eslint-config`
+until `typescript-eslint` widens. That split is expected, not a misconfiguration.
 
 This bites hardest where a repository verified against the source tree — a `file:` or `link:`
 dependency onto a local checkout resolves to whatever is checked out, which is current, while
@@ -256,17 +272,33 @@ Prettier cannot parse.
 
 ### Exclude files that are sealed or generated
 
-Two kinds of file must go in `.prettierignore` for reasons stronger than taste:
+Three kinds of file must go in `.prettierignore` for reasons stronger than taste:
 
-| Kind      | Why                                 | Symptom if you skip it                                       |
-| --------- | ----------------------------------- | ------------------------------------------------------------ |
-| Generated | The generator owns the formatting   | Formatter and generator fight; a permanent drift loop        |
-| Sealed    | A checksum attests to exact content | Reformatting invalidates the attestation, not just the check |
+| Kind      | Why                                 | Symptom if you skip it                                         |
+| --------- | ----------------------------------- | -------------------------------------------------------------- |
+| Generated | The generator owns the formatting   | Formatter and generator fight; a permanent drift loop          |
+| Sealed    | A checksum attests to exact content | Reformatting invalidates the attestation, not just the check   |
+| Synced    | Another repository owns the content | False drift; the sync engine reports a conflict you never made |
 
 This repository is its own example: `principles/` and `docs/ratification/` are pinned by
 semantic content hashes, so reflowing them would break the evidence that the ratified text is
 the text the owner approved. A formatter is not an owner. See this repository's
 [`.prettierignore`](../.prettierignore).
+
+**Synced files are the category most consumers miss**, because nothing about the file says it is
+owned elsewhere. Anything distributed from `jrmoulckers/.github` qualifies — `.github/agents/`,
+`.github/skills/`, `.github/prompts/`, `.github/instructions/`, and any managed region inside
+`AGENTS.md`. Reformatting them changes content the sync engine tracks by hash, so the next sync
+reports drift against a change you did not author. Vendored third-party sources are the same
+shape. Exclude them **before** the first repo-wide `prettier --write`, not after:
+
+```
+.github/agents/
+.github/skills/
+.github/prompts/
+.github/instructions/
+vendor/
+```
 
 If you hold signed manifests, lockfiles with recorded integrity, golden or snapshot fixtures, or
 vendored third-party sources, apply the same reasoning before your first format pass — the first
@@ -623,7 +655,23 @@ assumed present at an index that the type system could not prove:
 
 Those are latent crashes, not style. The flag did not create them; it revealed them.
 
+A second repository reproduced the pattern at larger scale: **152 errors, every one from
+`noUncheckedIndexedAccess`** — 12 in production source, 140 in test files that index immediately
+after their own `toHaveLength` assertion. That distribution is the useful part to plan around:
+
+| Location   | Share | Fix                                                     |
+| ---------- | ----- | ------------------------------------------------------- |
+| Test files | ~92%  | Mechanical; a non-null assertion is acceptable **here** |
+| Production | ~8%   | Narrow properly — guard, destructure, or default        |
+
+Two repositories now agree that this is the single highest-friction setting in the base, and that
+the friction is concentrated where the risk is lowest. A test that has just asserted
+`toHaveLength(3)` genuinely knows index `0` exists, so `!` there is a statement of fact rather
+than a suppression. The same `!` in production code is the bug being re-hidden. Budget for the
+test churn separately so it does not disguise the small number of real fixes.
+
 So treat the burst as a one-time debt payment. Fix at the call site — add the guard, narrow the
-type, handle the absent case. Do **not** widen with `!` or `as`, and do not disable the flag in
-your `tsconfig.json`: both re-hide exactly the class of bug the flag exists to find. If a
-diagnostic is genuinely wrong rather than inconvenient, that is worth reporting here.
+type, handle the absent case. Do **not** widen with `!` or `as` in production code, and do not
+disable the flag in your `tsconfig.json`: both re-hide exactly the class of bug the flag exists
+to find. If a diagnostic is genuinely wrong rather than inconvenient, that is worth reporting
+here.
