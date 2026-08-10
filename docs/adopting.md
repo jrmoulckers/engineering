@@ -424,11 +424,29 @@ caches. A server-authoritative product does not fail that principle; it is not
 addressed by it. Citing it there would encode a false claim about the system,
 and so would recording it as a compliance gap.
 
-Being out of scope is not a free pass on the neighbours. Where a `platforms/`
-principle does not apply but a reader would reasonably assume it does, state
-the departure and the reason where the architecture is described, and check
-whether the parts of it that are platform-independent still bind — the
-exportability half of `ENG-LOCAL-001` holds regardless of who is authoritative.
+Being out of scope is not a free pass on the neighbours, and this is the part
+most likely to be got wrong.
+
+**Scope is per principle, not per file.** A repository that falls outside one
+`platforms/` principle usually still falls **inside** its siblings. docket is
+outside `ENG-LOCAL-001` because its server is authoritative, yet
+`ENG-LOCAL-002`, `ENG-LOCAL-003` and `ENG-LOCAL-004` — the sync seam, the
+conflict model, zero-config degradation — bind it in full. Concluding "we are
+not local-first, so `local-first.md` does not apply to us" would drop three
+principles that do.
+
+**Check whether the platform-independent half still binds.** The exportability
+requirement in `ENG-LOCAL-001` holds no matter who is authoritative, so a
+server-canonical product still owes it.
+
+**Say it where the architecture is described**, not in a compliance appendix —
+and word it as scope rather than as a departure, because a reader who finds it
+later will otherwise read it as an admission. docket's phrasing is the model:
+
+> This is **not a departure from `ENG-LOCAL-001`** — that principle governs
+> products whose device store is the system of record, and Docket answers that
+> question differently because the self-hosted server is the product. Out of
+> scope is not non-compliant.
 
 If a principle genuinely does not apply, say so plainly rather than citing it,
 and tell Engineering. Only the repository owner may ratify a change to
