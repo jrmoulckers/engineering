@@ -127,3 +127,30 @@ describe('option passthrough', () => {
     assert.equal(config.at(-1), marker);
   });
 });
+
+describe('React version resolution (ESLint 10 compatibility)', () => {
+  const versions = () =>
+    reactConfig()
+      .map((entry) => entry?.settings?.react?.version)
+      .filter((value) => value !== undefined);
+
+  test("never delegates to the plugin's own detection", () => {
+    // 'detect' makes eslint-plugin-react call context.getFilename(), which
+    // ESLint 10 removed. Every rule in the plugin then fails to load with
+    // "contextOrFilename.getFilename is not a function" -- which reads like a
+    // broken plugin rather than a removed API. Resolving the version at
+    // config-construction time keeps the plugin usable on ESLint 9 and 10.
+    assert.ok(!versions().includes('detect'));
+  });
+
+  test('emits either a concrete version or no setting at all', () => {
+    // This repository has no React dependency, so the unresolvable branch is
+    // what runs here: the setting is omitted and the plugin falls back to its
+    // own default, which still loads. When React *is* resolvable the value is
+    // a concrete version string. Both are acceptable; 'detect' is not.
+    for (const version of versions()) {
+      assert.match(version, /^\d+\.\d+\.\d+/);
+    }
+    assert.ok(versions().length <= 1);
+  });
+});

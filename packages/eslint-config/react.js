@@ -2,10 +2,45 @@ import tseslint from 'typescript-eslint';
 import reactPlugin from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
 
 import { base } from './base.js';
 
 const JSX_FILES = ['**/*.jsx', '**/*.tsx'];
+
+/**
+ * Resolve the consumer's React version at config-construction time.
+ *
+ * `eslint-plugin-react` accepts `version: 'detect'`, but its detection calls
+ * `context.getFilename()`, which ESLint 10 removed. Every rule in the plugin
+ * then fails to load with `contextOrFilename.getFilename is not a function` —
+ * which reads like a broken plugin rather than a removed API, and is why this
+ * is worth resolving here instead.
+ *
+ * Reading the version ourselves keeps the plugin working on ESLint 9 and 10
+ * alike, because a concrete version never enters the detection path. When
+ * React cannot be resolved we return `undefined` and set nothing: the plugin
+ * warns and falls back to its own default, which still loads.
+ *
+ * @returns {string | undefined}
+ */
+function detectReactVersion() {
+  // Resolve from the consumer's root first. `import.meta.url` would resolve
+  // relative to this package, which under pnpm's non-hoisted layout is a
+  // different (or absent) React than the one being linted.
+  const candidates = [join(process.cwd(), 'noop.js'), import.meta.url];
+
+  for (const from of candidates) {
+    try {
+      const { version } = createRequire(from)('react/package.json');
+      if (typeof version === 'string' && version) return version;
+    } catch {
+      // Try the next resolution root.
+    }
+  }
+  return undefined;
+}
 
 /**
  * The two rules `eslint-plugin-react-hooks` has always shipped.
@@ -114,6 +149,7 @@ export function reactConfig(options = {}) {
   const { compiler = false, extend = [], ...rest } = options;
 
   const reactFlat = reactPlugin.configs?.flat ?? {};
+  const reactVersion = detectReactVersion();
 
   return base({
     ...rest,
@@ -138,7 +174,7 @@ export function reactConfig(options = {}) {
         },
       },
       {
-        settings: { react: { version: 'detect' } },
+        ...(reactVersion ? { settings: { react: { version: reactVersion } } } : {}),
         rules: {
           // TypeScript checks prop shapes; prop-types is redundant ceremony.
           'react/prop-types': 'off',
