@@ -23,7 +23,14 @@ export const config = {
   overrides: [
     {
       files: '*.md',
-      options: { proseWrap: 'always', printWidth: 96 },
+      // `proseWrap: 'preserve'`, not 'always'. Hard wrapping was the original
+      // choice because unbounded prose lines are unpleasant to review, but it
+      // collapses author line breaks — measured: four sentence-per-line lines
+      // become three filled ones. That makes semantic line breaks impossible
+      // to keep, and those are what actually deliver bounded lines, one-line
+      // diffs per edited sentence, and conflict-free concurrent edits.
+      // 'preserve' permits the better technique instead of overwriting it.
+      options: { proseWrap: 'preserve', printWidth: 96 },
     },
   ],
 };
