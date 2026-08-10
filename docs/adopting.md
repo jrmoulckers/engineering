@@ -154,15 +154,27 @@ steps:
 > no `permissions:` block at all inherit the repository default and are
 > unaffected.
 
-If a package is ever made private again, each consuming repository must be
-added under the package's **Manage Actions access** settings with **Read**.
-Prefer that over storing a PAT in a secret.
+While a package is private, `GITHUB_TOKEN` is not enough on its own: each
+consuming repository must also be added under the package's **Manage Actions
+access** settings with **Read**. That is one grant per repository per package,
+so seven repositories across three packages is twenty-one grants to create and
+maintain.
+
+Making the package public collapses all of that to nothing, because any
+authenticated token may then read it. Note that public does **not** mean
+anonymous — the registry still rejects an unauthenticated read with a 401, so
+`packages: read` and the token remain required either way. What changes is
+authorization, not authentication.
+
+Prefer either of those over storing a PAT in a secret.
 
 #### If your CI delegates to the reusable workflows in `jrmoulckers/.github`
 
 The `setup-node` step above lives inside the reusable workflow, not in your
 caller, so you cannot add `registry-url` yourself. Those workflows accept
-`registry-url` and `registry-scope` inputs and a `NODE_AUTH_TOKEN` secret:
+`registry-url` and `registry-scope` inputs, and **authentication is
+zero-config** — `NODE_AUTH_TOKEN` falls back to the job's `GITHUB_TOKEN`, so
+you pass no secret at all:
 
 ```yaml
 permissions:
@@ -171,14 +183,21 @@ permissions:
 
 jobs:
   web:
-    uses: jrmoulckers/.github/.github/workflows/reusable-ci-web.yml@3b2d5cbb2cd619aca8e7cb1ac794086976033ace
+    uses: jrmoulckers/.github/.github/workflows/reusable-ci-web.yml@f1457271427fcde18a62b07c53a1ea75e14cd644
     with:
       package-manager: pnpm
       registry-url: https://npm.pkg.github.com
       registry-scope: "@jrmoulckers"
-    secrets:
-      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+Pass a `secrets: NODE_AUTH_TOKEN:` block only for a registry the job's own
+token cannot reach. If you staged one for GitHub Packages, delete it.
+
+The token is resolved as
+`inputs.registry-url != '' && (secrets.NODE_AUTH_TOKEN || github.token) || ''`,
+so it is only present on runs that opted into a registry. Callers passing no
+registry inputs get an unchanged environment rather than a live token exposed
+to dependency `postinstall` scripts.
 
 Pin to a reviewed SHA per `GH-ACT-003`. Workflows that install dependencies:
 `reusable-ci-lint`, `reusable-ci-web`, `reusable-deploy-pages`,
@@ -186,15 +205,25 @@ Pin to a reviewed SHA per `GH-ACT-003`. Workflows that install dependencies:
 Passing none of the new inputs leaves behaviour unchanged — `setup-node` skips
 its auth setup entirely when `registry-url` is empty.
 
-Set `registry-url` **without** `registry-scope` and you replace the *default*
-registry for every package, not just the scoped one. Always pass both.
+**Route by scope. Never replace the default registry.** Setting
+`registry=https://npm.pkg.github.com/` wholesale, rather than scoping it,
+breaks `npm audit` / `pnpm audit` with `ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS` —
+GitHub Packages implements no audit endpoint. That failure is not an auth
+problem and no token will fix it. Always pass `registry-scope` alongside
+`registry-url`.
 
-`reusable-security-ci` needs **no** registry configuration. It runs
-`npm audit` / `pnpm audit` without installing anything, and audit resolves
-advisory data from the default registry rather than the scoped one. Verified
-against a repository whose lockfile already contained `@jrmoulckers`
-dependencies: the audit job passed in the same run where the install jobs were
-still failing to reach the registry.
+`reusable-security-ci` needs **no** registry configuration. Audit never
+contacts the scoped registry: `@npmcli/arborist` resolves the advisory
+endpoint as `options.auditRegistry || options.registry`, which is the default
+registry. Verified against a lockfile holding a private `@jrmoulckers` package
+and a vulnerable `minimist`, with no credentials — the advisory was reported
+and no auth error occurred, in both npm and pnpm.
+
+> **Audit sends your private package names to `registry.npmjs.org`.** The bulk
+> advisory request contains the name and version of every dependency,
+> `@jrmoulckers/*` included. This is inherent `npm audit` behaviour rather than
+> anything this toolchain adds, but it is worth knowing before pointing audit
+> at a repository whose dependency names are themselves sensitive.
 
 ### Install
 
