@@ -60,6 +60,25 @@ describe('variants', () => {
     assert.ok(o.types.includes('vite/client'));
   });
 
+  test('vite-app deliberately omits sourceMap', async () => {
+    // `@tsconfig/svelte` sets `sourceMap: true`, explaining it is needed "to
+    // have warnings/errors of the Svelte compiler at the correct position".
+    // That rationale predates Svelte 5. Measured on svelte-check 4.7.5 with
+    // svelte 5, positions are identical with and without it — for TS
+    // diagnostics inside `<script>` (including a script block offset below
+    // markup and styles) and for Svelte compiler warnings (a11y, unused CSS)
+    // alike.
+    //
+    // It could not have worked anyway: `base.json` sets `noEmit`, so tsc
+    // writes no output and therefore no source maps. Carrying the flag would
+    // imply a behaviour it does not provide, so a consumer migrating off
+    // `@tsconfig/svelte` should drop it rather than port it.
+    const base = (await readJson('base.json')).compilerOptions;
+    const o = (await readJson('vite-app.json')).compilerOptions;
+    assert.equal(base.noEmit, true);
+    assert.equal(o.sourceMap, undefined);
+  });
+
   test('vite-node targets node without DOM', async () => {
     const o = (await readJson('vite-node.json')).compilerOptions;
     assert.ok(!o.lib.includes('DOM'));
