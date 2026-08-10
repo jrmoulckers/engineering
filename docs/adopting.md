@@ -317,6 +317,17 @@ mass rewrite.
 | `vite-node.json`  | Build scripts and Node tooling                       |
 | `next.json`       | Next.js — adds `jsx: preserve` and the Next plugin   |
 
+**Svelte repositories replacing `@tsconfig/svelte`:** use `vite-app.json` and
+drop `sourceMap`. `@tsconfig/svelte` sets it, explaining it is needed "to have
+warnings/errors of the Svelte compiler at the correct position" — a rationale
+that predates Svelte 5. Measured on svelte-check 4.7.5 with svelte 5,
+diagnostic positions are identical with and without it, both for TS errors
+inside `<script>` and for compiler warnings such as a11y and unused CSS. It
+could not have worked regardless: `base.json` sets `noEmit`, so tsc writes no
+output and therefore no source maps. Porting the flag would imply a behaviour
+it does not provide. Vite build sourcemaps are a separate setting
+(`build.sourcemap` in `vite.config.ts`) and are unaffected.
+
 ### Scripts
 
 ```json
