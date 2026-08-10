@@ -10,7 +10,7 @@ async function readJson(name) {
   return JSON.parse(await readFile(join(pkgDir, name), 'utf8'));
 }
 
-const VARIANTS = ['vite-app.json', 'vite-node.json', 'next.json'];
+const VARIANTS = ['vite-app.json', 'vite-node.json', 'vite-react.json', 'next.json'];
 
 describe('base tsconfig', () => {
   test('enables the checks that strict alone does not cover', async () => {
@@ -39,9 +39,18 @@ describe('base tsconfig', () => {
 
 describe('variants', () => {
   for (const variant of VARIANTS) {
-    test(`${variant} extends the base`, async () => {
-      const config = await readJson(variant);
-      assert.equal(config.extends, './base.json');
+    test(`${variant} chains back to the base`, async () => {
+      // Variants may extend another variant rather than the base directly, so
+      // walk the chain instead of asserting a single hop.
+      const seen = [];
+      let current = variant;
+      while (current && current !== './base.json') {
+        assert.ok(!seen.includes(current), `circular extends chain: ${seen.join(' -> ')}`);
+        seen.push(current);
+        const config = await readJson(current);
+        current = config.extends;
+      }
+      assert.equal(current, './base.json', `${variant} never reaches base.json`);
     });
   }
 
@@ -61,6 +70,17 @@ describe('variants', () => {
     const o = (await readJson('next.json')).compilerOptions;
     assert.equal(o.jsx, 'preserve');
     assert.ok(o.plugins.some((p) => p.name === 'next'));
+  });
+
+  test('vite-react adds the automatic JSX runtime on top of vite-app', async () => {
+    // vite-app alone cannot compile a React app at all: it sets no `jsx`.
+    const app = await readJson('vite-app.json');
+    assert.equal(app.compilerOptions.jsx, undefined);
+
+    const react = await readJson('vite-react.json');
+    assert.equal(react.extends, './vite-app.json');
+    assert.equal(react.compilerOptions.jsx, 'react-jsx');
+    assert.equal(react.compilerOptions.esModuleInterop, true);
   });
 });
 

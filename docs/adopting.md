@@ -43,39 +43,79 @@ curl -s https://raw.githubusercontent.com/jrmoulckers/engineering/main/principle
 ## 2. Install the shared configuration
 
 The packages are published to **GitHub Packages**, which requires the
-`@jrmoulckers` scope and authentication even for reads.
+`@jrmoulckers` scope and authentication even for reads, because this
+repository is private.
+
+> **GitHub Packages only supports classic personal access tokens.**
+> Fine-grained PATs are rejected by the npm registry. A fine-grained token
+> fails with a 401 that is indistinguishable from having no token at all, so
+> this is worth getting right the first time.
 
 ### `.npmrc` — commit this
 
 ```ini
 @jrmoulckers:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 ```
+
+Route the scope, and nothing else. Do **not** commit an `_authToken` line,
+even one that interpolates an environment variable: it makes every local
+command fail confusingly when the variable is unset, and it puts a
+credential-shaped string in version control.
 
 ### Local development
 
-Export a classic personal access token with the `read:packages` scope:
+Put the token in your **user-level** `~/.npmrc`, where it is shared across
+every repository and never committed:
 
-```bash
-export NODE_AUTH_TOKEN=ghp_...
+```ini
+//npm.pkg.github.com/:_authToken=ghp_...
 ```
+
+Use a classic PAT with only the `read:packages` scope.
 
 ### CI
 
-`GITHUB_TOKEN` is sufficient **only** if this repository has granted the
-consuming repository read access to the package. Otherwise use a
-`read:packages` PAT stored as a secret.
+Prefer granting the consuming repository access to the package over storing a
+token. In each package's settings, under **Manage Actions access**, add the
+consuming repository with **Read**. `GITHUB_TOKEN` then works with no stored
+secret, and GitHub recommends this over a PAT.
+
+The job must request the permission explicitly:
 
 ```yaml
-- uses: actions/setup-node@v4
-  with:
-    node-version: 20
-    registry-url: https://npm.pkg.github.com
-    scope: '@jrmoulckers'
-- run: npm ci
-  env:
-    NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
+permissions:
+  contents: read
+  packages: read
+
+steps:
+  - uses: actions/setup-node@v4
+    with:
+      node-version: 20
+      registry-url: https://npm.pkg.github.com
+      scope: '@jrmoulckers'
+  - run: npm ci
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+Fall back to a `read:packages` classic PAT in a secret only where an access
+grant is not possible.
+
+#### If your CI delegates to the reusable workflows in `jrmoulckers/.github`
+
+The `setup-node` step above lives inside the reusable workflow, not in your
+caller, so you cannot add `registry-url` yourself. Those workflows accept
+`registry-url` and `registry-scope` inputs and a `NODE_AUTH_TOKEN` secret —
+pass them from your caller and pin to a reviewed SHA per `GH-ACT-003`.
+Workflows that install dependencies: `reusable-ci-lint`, `reusable-ci-web`,
+`reusable-deploy-pages`, `reusable-deploy-preview`, `reusable-perf-budget`,
+and `reusable-smoke-test`.
+
+`reusable-security-ci` needs the same treatment for a different reason: it
+runs `npm audit` / `pnpm audit`, which resolves package metadata from
+whatever registry the scope is routed to. Once your `.npmrc` points
+`@jrmoulckers` at GitHub Packages, the audit can fail on a private scoped
+package even though nothing is being installed.
 
 ### Install
 
@@ -89,6 +129,7 @@ Peer dependencies are not bundled — install the ones your stack needs:
 | --- | --- |
 | Any | `eslint prettier typescript` |
 | Svelte | `eslint-plugin-svelte prettier-plugin-svelte` |
+| React | `eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y` |
 | Next.js | `@next/eslint-plugin-next` |
 
 ## 3. Wire it up
@@ -99,6 +140,10 @@ Peer dependencies are not bundled — install the ones your stack needs:
 // Svelte
 import { svelteConfig } from '@jrmoulckers/eslint-config/svelte';
 export default svelteConfig();
+
+// React (Vite, or any non-Next React app)
+import { reactConfig } from '@jrmoulckers/eslint-config/react';
+export default reactConfig();
 
 // Next.js
 import { nextConfig } from '@jrmoulckers/eslint-config/next';
@@ -141,6 +186,7 @@ export { default } from '@jrmoulckers/prettier-config/svelte'; // or '@jrmoulcke
 | --- | --- |
 | `base.json` | Any TypeScript |
 | `vite-app.json` | Browser app — adds DOM libs and `vite/client` |
+| `vite-react.json` | React browser app — `vite-app` plus `jsx: react-jsx` |
 | `vite-node.json` | Build scripts and Node tooling |
 | `next.json` | Next.js — adds `jsx: preserve` and the Next plugin |
 
