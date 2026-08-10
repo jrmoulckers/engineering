@@ -372,6 +372,42 @@ vendored third-party sources, apply the same reasoning before your first format 
 run is where the damage lands, and a reflowed snapshot fixture fails as a false test failure a
 long way from its cause.
 
+### A green test suite does not clear a formatter change
+
+This is the failure mode most likely to cost you real correctness, and it is invisible.
+
+Reformatting rewrites string literals — `singleQuote` applies to CSS as well as JS — and any
+test or script that **parses its own source text** silently changes what it matches. Such a
+check keeps passing while inspecting nothing.
+
+Measured in one repository adopting this config, with roughly 28 self-scanning checks, four
+degraded silently and none failed:
+
+| Check                      | Before   | After                                    |
+| -------------------------- | -------- | ---------------------------------------- |
+| `i18n` rich-tag scanner    | 22 sites | **0 sites** — still exited 0             |
+| creator-escalation test    | passing  | a `-1` anchor disabled a security filter |
+| elevation / contrast tests | passing  | skipped every theme                      |
+
+A suite that passes before and after tells you nothing here, because the degraded state is
+indistinguishable from the healthy one. Verify by **diffing each scanner's output count** across
+the reformat, not by re-running the suite:
+
+```bash
+# before the format pass
+node scripts/scan.mjs --count > /tmp/before.txt
+# after
+node scripts/scan.mjs --count | diff /tmp/before.txt -
+```
+
+Then make the guards quote-agnostic and give each one an explicit assertion that its match count
+is non-zero, so it fails loudly rather than inspecting an empty set. A check that cannot report
+finding nothing is not a check. This is `ENG-TEST-008` applied to tooling: a scanner nobody has
+proven can fail is not evidence.
+
+Grep for the shape before you start — `readFileSync(__filename`, `readFileSync(import.meta`, and
+any test reading files under `src/` and matching quoted substrings.
+
 ### Landing the first format pass
 
 Markdown formatting uses `proseWrap: 'preserve'`, so adopting this config **does not reflow your
