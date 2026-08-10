@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/tsconfig",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Engineering-owned TypeScript compiler configurations.",
   "license": "UNLICENSED",
   "private": false,
@@ -21,6 +21,6 @@
     "README.md"
   ],
   "peerDependencies": {
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0 || ^6.0.0 || ^7.0.0"
   }
 }
