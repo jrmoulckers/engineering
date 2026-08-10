@@ -416,3 +416,30 @@ Adoption should **remove** more than it adds:
 - Keep every product-specific rule, moved into `extend` or stated as such.
 
 If adoption only adds files, the duplication was not actually removed.
+
+### Expect a burst of type errors, and fix them at the source
+
+`@jrmoulckers/tsconfig/base.json` turns on `noUncheckedIndexedAccess` and
+`noImplicitOverride`, which most hand-rolled configs leave off. Adopting it in
+a codebase of any size can surface a large batch of diagnostics at once — one
+repository saw **109**.
+
+That number is alarming and the temptation is to turn the flag back off. Don't.
+In that repository the errors resolved to **19 genuine production gaps**, with
+the remainder mechanical test assertions and `override` modifiers. The real
+defects were all the same shape — a value assumed present at an index that the
+type system could not prove:
+
+- array elements read positionally without a guard,
+- a property dereferenced off an element found by lookup,
+- results zipped against `Promise.allSettled` by position,
+- `getAllKeys()` zipped against `getAll()` on an assumed-equal length.
+
+Those are latent crashes, not style. The flag did not create them; it revealed
+them.
+
+So treat the burst as a one-time debt payment. Fix at the call site — add the
+guard, narrow the type, handle the absent case. Do **not** widen with `!` or
+`as`, and do not disable the flag in your `tsconfig.json`: both re-hide exactly
+the class of bug the flag exists to find. If a diagnostic is genuinely wrong
+rather than inconvenient, that is worth reporting here.
