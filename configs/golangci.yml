@@ -1,7 +1,7 @@
 # Engineering-owned golangci-lint configuration.
 #
-# Consumed by Go repositories that have no npm path. Copy or reference from
-# jrmoulckers/engineering; see practices/go.md.
+# Consumed by Go repositories that have no npm path. Fetch this file at a
+# pinned tag rather than copying it; see practices/go.md.
 #
 # Enables the checks that `go vet` alone does not cover, without enabling
 # opinionated style linters that fight `gofmt`.
