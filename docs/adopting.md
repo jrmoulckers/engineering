@@ -261,11 +261,18 @@ Follow [practices/go.md](../practices/go.md) and fetch
 
 ```bash
 curl -fsSL --retry 3 \
-  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.0/configs/golangci.yml \
+  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.2/configs/golangci.yml \
   -o .golangci.yml
 ```
 
-Three details carry the weight here:
+Four details carry the weight here:
+
+**Write it to the repository root.** This is required, not cosmetic.
+golangci-lint's default `run.relative-path-mode: cfg` resolves reported paths
+relative to the config file's directory, so a config held outside the
+repository produces diagnostics with paths like `../../elsewhere/file.go`.
+Root placement also makes a bare `golangci-lint run` and editor integrations
+work with no flags.
 
 **Pin to a tag, never `main`.** An unpinned fetch means an unrelated commit
 here can turn a consumer's build red with no change on their side, which is
@@ -279,9 +286,10 @@ passes, which is worse than failing.
 transfer produces a valid, empty config, and an empty config lints nothing
 while reporting success.
 
-Do not vendor the file into the repository. A committed copy silently drifts
-from the shared config, and the drift is invisible precisely because nothing
-fails.
+Do not vendor the file into the repository. golangci-lint has no config
+inheritance — no `extends`, no include, no remote config — so the file must
+arrive on disk one way or another, and a committed copy silently drifts from
+the shared config. The drift is invisible precisely because nothing fails.
 
 ## Non-npm configuration generally
 
