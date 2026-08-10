@@ -27,6 +27,7 @@ Practices may change freely as tooling changes. Principles may not.
 | [Resilience](resilience.md)                   | `ENG-LOCAL-004`, `ENG-WEB-002`, `ENG-INT-001`–`ENG-INT-005`                                  |
 | [Observability](observability.md)             | `ENG-OBS-001`–`ENG-OBS-007`                                                                  |
 | [Security](security.md)                       | `ENG-SEC-002`–`ENG-SEC-008`                                                                  |
+| [Build and release](build-and-release.md)     | `ENG-BUILD-002`–`ENG-BUILD-008`                                                              |
 | [Frontend layering](frontend-layering.md)     | `ENG-ARCH-001`, `ENG-WEB-004`                                                                |
 | [Local-first sync](local-first-sync.md)       | `ENG-LOCAL-001`–`ENG-LOCAL-004`, `ENG-DATA-001`–`ENG-DATA-003`                               |
 | [Performance budgets](performance-budgets.md) | `ENG-WEB-003`, `ENG-PERF-001`, `ENG-PERF-002`, `ENG-PERF-005`–`ENG-PERF-008`, `ENG-TEST-004` |
