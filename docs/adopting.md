@@ -231,6 +231,25 @@ and no auth error occurred, in both npm and pnpm.
 npm i -D @jrmoulckers/eslint-config @jrmoulckers/prettier-config @jrmoulckers/tsconfig
 ```
 
+**Do not pin `^0.1.0`.** Early adoption briefs named that range, and on a `0.x`
+package a caret only permits patch updates — `^0.1.0` resolves to
+`>=0.1.0 <0.2.0` and can never reach `0.2.x`. The React presets and the ESLint
+v16 fix shipped in `0.2.0`, so a manifest pinned at `^0.1.0` silently installs
+a build in which `@jrmoulckers/eslint-config/react` and
+`@jrmoulckers/tsconfig/vite-react.json` **do not exist**. Current floors:
+
+| Package | Minimum | Why |
+| --- | --- | --- |
+| `@jrmoulckers/eslint-config` | `^0.2.0` | `./react`; ESLint v16 `flatConfig` handling in `./next` |
+| `@jrmoulckers/tsconfig` | `^0.2.0` | `vite-react.json` |
+| `@jrmoulckers/prettier-config` | `^0.1.0` | unchanged since `0.1.0` |
+
+This bites hardest where a repository verified against the source tree — a
+`file:` or `link:` dependency onto a local checkout resolves to whatever is
+checked out, which is current, while the committed manifest still says
+`^0.1.0`. The gates pass locally and then install something older in CI. If you
+verified that way, re-check the range you actually committed.
+
 Peer dependencies are not bundled — install the ones your stack needs:
 
 | Stack   | Also install                                                           |
@@ -239,6 +258,9 @@ Peer dependencies are not bundled — install the ones your stack needs:
 | Svelte  | `eslint-plugin-svelte prettier-plugin-svelte`                          |
 | React   | `eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y` |
 | Next.js | `@next/eslint-plugin-next`                                             |
+
+`.npmrc` has no Prettier parser. Add it to `.prettierignore`, or
+`format:check` fails on a file Prettier cannot parse.
 
 ## 3. Wire it up
 
