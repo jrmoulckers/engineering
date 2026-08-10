@@ -16,4 +16,25 @@ principles/index.json
 principles/
 docs/ratification/
 
+# Synced from jrmoulckers/.github by the studio canon sync.
+#
+# This repository is not their author and cannot be their formatter. Reflowing
+# them makes every file differ from its upstream source, which the sync engine
+# reads as drift — so the next sync either reverts the formatting or reports a
+# conflict that has no actual content behind it.
+#
+# The failure is delayed rather than immediate, which is what makes it worth an
+# ignore rule: `format:check` goes red on a branch that changed none of these
+# files, the moment a sync lands on main.
+.github/agents/
+.github/instructions/
+.github/prompts/
+.github/skills/
+
+# Same sync, and it says so in its own second line: "synced from
+# jrmoulckers/.github — canonical source; do not edit here". Reformatting is
+# editing. Only the `studio:base` region is managed, but Prettier cannot
+# reformat part of a file, so the whole file is excluded.
+.github/copilot-instructions.md
+
 node_modules/
