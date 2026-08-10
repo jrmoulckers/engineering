@@ -51,5 +51,7 @@ jobs:
         run: npm run format:check
       - name: Verify the principle index matches the principle files
         run: npm run principles:check
+      - name: Check that no principle silently loses its implementing guide
+        run: npm run coverage:check
       - name: Test shared configuration packages
         run: npm test

@@ -18,7 +18,9 @@
     "citations:check": "node scripts/check-citations.mjs . --index principles/index.json",
     "citations:review": "node scripts/check-citations.mjs . --index principles/index.json --review",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "coverage:check": "node scripts/check-coverage.mjs",
+    "coverage:list": "node scripts/check-coverage.mjs --list"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^16.3.0",
