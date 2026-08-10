@@ -522,6 +522,41 @@ and tell Engineering. Only the repository owner may ratify a change to
 principle text, so a real scope gap needs a decision record rather than an
 edit.
 
+## Recording decisions (ADRs)
+
+`ENG-ARCH-003` requires a decision record before a consequential tradeoff is
+treated as durable. The naming convention already exists — it is stated in
+[`docs/architecture/README.md`](../docs/architecture/README.md) and repeated
+here because that is not the file a consuming repository reads:
+
+**Name records `NNNN-short-title.md`.** Four digits, zero-padded, kebab-case
+title, no prefix. `0004-identity-and-mapping-strategy.md`, not
+`adr-0004-…` and not `4-…`.
+
+The convention governs the **filename**, not the directory. Both of these
+conform:
+
+| Layout | Use when |
+| --- | --- |
+| `docs/architecture/NNNN-*.md` | the directory holds decisions only |
+| `docs/architecture/decisions/NNNN-*.md` | the directory also holds architecture prose, and separating the two is clearer |
+
+`jrmoulckers/.github` uses the first. Neither is required of you, and a
+repository already using either is conformant and should not renumber or
+relocate anything.
+
+Two rules that do matter, because both have been violated in practice:
+
+- **Numbers are unique and never reused**, including across a rename or a
+  supersession. A superseded record keeps its number and gains
+  `Status: Superseded` plus a link to its replacement; the replacement takes a
+  new number. Two records sharing a number make every cross-reference to it
+  ambiguous, and cross-references are the entire point of numbering.
+- **Do not renumber a published record.** Anything already merged may be cited
+  from another repository, and this repository's own guidance tells consumers
+  to cite ADRs by number. Fix a collision by giving the *newer* record the next
+  free number.
+
 ## Expected diff
 
 Adoption should **remove** more than it adds:
