@@ -67,8 +67,30 @@ even one that interpolates an environment variable: it makes every local
 command fail confusingly when the variable is unset, and it puts a
 credential-shaped string in version control.
 
-**pnpm refuses to honour it regardless.** pnpm 11 ignores any credential in a
-project-level `.npmrc` and says why:
+**A committed `.npmrc` outranks the one CI writes for you.** `setup-node`
+writes its registry configuration to a **user**-level file and points
+`NPM_CONFIG_USERCONFIG` at it. Your committed `.npmrc` is **project**-level,
+and project beats user on every key it sets. npm says so out loud:
+
+```
+; "user" config from ...\user.npmrc
+; @jrmoulckers:registry = "https://npm.pkg.github.com/" ; overridden by project
+//npm.pkg.github.com/:_authToken = (protected)
+
+; "project" config from ...\.npmrc
+@jrmoulckers:registry = "https://project-wins.example.com/"
+```
+
+So the line above must route `@jrmoulckers` to the **same host** the workflow
+authenticates against. If it points anywhere else, the project file silently
+wins, and because the token is bound to `npm.pkg.github.com` it is simply not
+sent to the other host — you get a 401 that looks exactly like the workflow
+change never took effect. Trailing slashes are normalised, so that difference
+is harmless. Keys your project file does not set — the token line included —
+pass through untouched, so an `.npmrc` holding unrelated settings is fine.
+
+**pnpm refuses to honour a committed credential regardless.** pnpm 11 ignores
+any credential in a project-level `.npmrc` and says why:
 
 > environment variables are not expanded in registry credentials that come
 > from a project `.npmrc`, because that file is committed to the repository
@@ -123,6 +145,15 @@ steps:
       NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+> **`packages: read` is the one change that can break a working pipeline.**
+> A called workflow can never hold a permission its caller lacks. If your
+> workflow has an explicit `permissions:` block and you do not add
+> `packages: read`, the run fails at startup with **no readable log** — no
+> failing step to open, no error text, just `startup_failure`. It reads like
+> an outage rather than a missing scope, so check this first. Workflows with
+> no `permissions:` block at all inherit the repository default and are
+> unaffected.
+
 If a package is ever made private again, each consuming repository must be
 added under the package's **Manage Actions access** settings with **Read**.
 Prefer that over storing a PAT in a secret.
@@ -131,17 +162,39 @@ Prefer that over storing a PAT in a secret.
 
 The `setup-node` step above lives inside the reusable workflow, not in your
 caller, so you cannot add `registry-url` yourself. Those workflows accept
-`registry-url` and `registry-scope` inputs and a `NODE_AUTH_TOKEN` secret —
-pass them from your caller and pin to a reviewed SHA per `GH-ACT-003`.
-Workflows that install dependencies: `reusable-ci-lint`, `reusable-ci-web`,
-`reusable-deploy-pages`, `reusable-deploy-preview`, `reusable-perf-budget`,
-and `reusable-smoke-test`.
+`registry-url` and `registry-scope` inputs and a `NODE_AUTH_TOKEN` secret:
 
-`reusable-security-ci` needs the same treatment for a different reason: it
-runs `npm audit` / `pnpm audit`, which resolves package metadata from
-whatever registry the scope is routed to. Once your `.npmrc` points
-`@jrmoulckers` at GitHub Packages, the audit hits a registry that requires
-authentication even though nothing is being installed.
+```yaml
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  web:
+    uses: jrmoulckers/.github/.github/workflows/reusable-ci-web.yml@3b2d5cbb2cd619aca8e7cb1ac794086976033ace
+    with:
+      package-manager: pnpm
+      registry-url: https://npm.pkg.github.com
+      registry-scope: "@jrmoulckers"
+    secrets:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Pin to a reviewed SHA per `GH-ACT-003`. Workflows that install dependencies:
+`reusable-ci-lint`, `reusable-ci-web`, `reusable-deploy-pages`,
+`reusable-deploy-preview`, `reusable-perf-budget`, and `reusable-smoke-test`.
+Passing none of the new inputs leaves behaviour unchanged — `setup-node` skips
+its auth setup entirely when `registry-url` is empty.
+
+Set `registry-url` **without** `registry-scope` and you replace the *default*
+registry for every package, not just the scoped one. Always pass both.
+
+`reusable-security-ci` needs **no** registry configuration. It runs
+`npm audit` / `pnpm audit` without installing anything, and audit resolves
+advisory data from the default registry rather than the scoped one. Verified
+against a repository whose lockfile already contained `@jrmoulckers`
+dependencies: the audit job passed in the same run where the install jobs were
+still failing to reach the registry.
 
 ### Install
 
