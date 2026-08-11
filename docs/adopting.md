@@ -709,7 +709,18 @@ any checkout with no authentication, and CI verifies it against the live registr
 **And read `channel` while you are there.** `@jrmoulckers/tsconfig` and
 `@jrmoulckers/prettier-config` are `"channel": "vendored"` — never published, copied in, and
 therefore unaffected by registry access or package visibility. Only `@jrmoulckers/eslint-config` is
-`"channel": "registry"`. Two repositories independently reported being blocked on all three.
+`"channel": "registry"`. Three repositories independently reported being blocked on all three.
+
+That number is the point. This paragraph was already here each time, and it did not reach anyone —
+because **you are reading it at the ref you pinned, while `versions.json` is read from `main`.**
+Prose about a channel goes stale in your checkout; the value it explains does not. So the meaning
+now lives in the same file as the value: `versions.json` carries a top-level `channels` legend, and
+each channel answers `requiresRegistryAuth` as a boolean. A test fails if a package ever declares a
+channel the legend does not define, so the two cannot drift apart.
+
+**If you are blocked on package access, resolve your own answer from that legend rather than from
+here.** Everything in a channel with `"requiresRegistryAuth": false` is available to you today, at a
+tag, with no token and no visibility grant.
 
 **If that command fails for you, read [`versions.json`](../versions.json) at the repository
 root — not a git tag, and not `packages/<name>/package.json`.** A consumer without
