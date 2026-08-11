@@ -247,10 +247,26 @@ repository must also be added under the package's **Manage Actions access** sett
 **Read**. That is one grant per repository per package, so seven repositories across three
 packages is twenty-one grants to create and maintain.
 
+> **If "Manage Actions access" is not on the package settings page, this is why.** All three
+> packages were published _linked_ to `jrmoulckers/engineering`, and a linked package **inherits
+> the access permissions of its repository by default**. While it inherits, the granular settings
+> — including **Manage Actions access** — are not shown at all. You must first remove the
+> inherited permissions, after which the package's own access list becomes editable.
+>
+> The npm registry does support this. It is one of the registries with granular, user-scoped
+> permissions, alongside the Container, NuGet and RubyGems registries; only the Maven and Gradle
+> registries are repository-scoped and genuinely cannot do it. A consumer who looks for the
+> button, does not find it, and concludes npm lacks the capability has drawn a reasonable but
+> wrong conclusion from a real observation.
+
 Making the packages public collapses all of that to nothing, because any authenticated token may
 then read them. Note that public does **not** mean anonymous — the registry still rejects an
 unauthenticated read with a 401, so `packages: read` and the token remain required either way.
 What changes is authorization, not authentication.
+
+**Since ADR-0001 this section applies to `@jrmoulckers/eslint-config` only.** `tsconfig` and
+`prettier-config` are vendored at a pinned ref and need no registry, no token, and no grant, so
+the twenty-one grants above are really seven.
 
 Prefer either of those over storing a PAT in a secret.
 
@@ -532,6 +548,17 @@ enabled. Widened coverage is a real gain that a rules diff scores as zero:
 ```bash
 npx eslint --debug . 2>&1 | grep -c 'Linting '
 ```
+
+### Do not bulk-remove `svelte-ignore` comments
+
+`svelte/no-unused-svelte-ignore` is one of the few new violations that looks purely mechanical and
+is not. One repository had four `state_referenced_locally` ignores in a single file; the rule
+flagged exactly **one** as unused. Removing the other three — the obvious next step once you
+believe the category is noise — produced `svelte/valid-compile` errors, because they were
+load-bearing.
+
+Delete only what the rule actually names, one at a time, and re-run. The rule is precise; the
+generalisation from its output is what goes wrong.
 
 ### Landing the first format pass
 
@@ -1015,3 +1042,36 @@ type, handle the absent case. Do **not** widen with `!` or `as` in production co
 disable the flag in your `tsconfig.json`: both re-hide exactly the class of bug the flag exists
 to find. If a diagnostic is genuinely wrong rather than inconvenient, that is worth reporting
 here.
+
+**A third repository hit 368 across 91 files and turned the flag off**, with a comment and a
+tracking issue. That is the honest failure mode of the advice above, so it is worth stating what
+to do instead of repeating "don't".
+
+The scale is real: three data points are 109, 152 and 368, and the last is not a tail — it is
+what a large codebase with pervasive indexing looks like. Turning the flag off repo-wide is still
+the worst option, because it silently covers new code as well as old, and the tracking issue
+outlives the memory of what it was for.
+
+Stage it instead. `exclude` is the wrong lever, but a scoped override is not:
+
+```jsonc
+// tsconfig.json — flag stays on everywhere it currently passes
+{
+  "extends": "./config/engineering/tsconfig/vite-app.json",
+  "include": ["src"],
+}
+```
+
+```jsonc
+// tsconfig.legacy.json — the not-yet-clean subset, shrinking over time
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noUncheckedIndexedAccess": false },
+  "include": ["src/games/**"],
+}
+```
+
+Typecheck both. The difference from disabling it globally is that the excluded set is **named and
+finite**, new directories are covered by default, and progress is a shrinking `include` rather
+than a closed issue. If even that is too much at once, keep the flag off but record the error
+count in the tracking issue so the number is a ratchet rather than a memory.
