@@ -29,7 +29,14 @@ linters:
   settings:
     errcheck:
       check-type-assertions: true
-      check-blank: true
+      # check-blank stays false deliberately. errcheck only reports a blank
+      # assignment when the right-hand side is a call expression, so `_ = f()`
+      # is flagged while `err := f(); _ = err` is not — enabling it mandates a
+      # two-line spelling rather than preventing the discard. It also
+      # contradicts practices/go.md, which permits `_` when the reason is
+      # stated in a comment beside it. The comment requirement is carried by
+      # review; a tool that can be satisfied by renaming does not carry it.
+      check-blank: false
     staticcheck:
       checks:
         - all

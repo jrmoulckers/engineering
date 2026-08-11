@@ -594,16 +594,24 @@ Follow [practices/go.md](../practices/go.md) and fetch
 # https://github.com/jrmoulckers/engineering/releases
 ENGINEERING_REF=v0.2.3
 
+tmp=$(mktemp)
 curl -fsSL --retry 3 \
   "https://raw.githubusercontent.com/jrmoulckers/engineering/${ENGINEERING_REF}/configs/golangci.yml" \
-  -o .golangci.yml
+  -o "$tmp"
+
+# Validate before publishing to the destination.
+[ -s "$tmp" ] || { echo "empty config fetched" >&2; exit 1; }
+grep -q '^version:' "$tmp" || { echo "not a golangci config" >&2; exit 1; }
+grep -q '^linters:' "$tmp" || { echo "not a golangci config" >&2; exit 1; }
+
+mv "$tmp" .golangci.yml
 ```
 
 The tag shown is an example and will lag the current release, since writing a literal version
 into a document guarantees the document is stale one release later. Treat it as a knob to set,
 and pin to the newest tag when you adopt.
 
-Four details carry the weight here:
+Five details carry the weight here:
 
 **Write it to the repository root.** This is required, not cosmetic. golangci-lint's default
 `run.relative-path-mode: cfg` resolves reported paths relative to the config file's directory,
@@ -618,19 +626,37 @@ pins action SHAs to avoid.
 **`-f` is not optional.** Without it `curl` writes the error body to the output file and exits
 zero, so lint then runs against a config that is HTML. That passes, which is worse than failing.
 
-**Verify the file is non-empty before running the linter.** A truncated transfer produces a
-valid, empty config, and an empty config lints nothing while reporting success.
+**Check the shape, not just the size.** `-f` catches a non-200 and `-s` catches a truncated
+transfer, but neither catches a **200 carrying the wrong body** — a redirect landing somewhere
+unexpected, or a proxy's error page served with a success status. Asserting the payload has
+top-level `version:` and `linters:` keys is what separates "we received bytes" from "we received
+a golangci config".
+
+**Stage, validate, then move.** Fetching straight to `.golangci.yml` means a failed or partial
+run leaves a corrupt file exactly where the linter will read it, and the next run lints against
+it. Writing to a temporary file and moving only after every check passes makes a failed fetch
+leave the previous state untouched.
 
 Do not vendor the file into the repository. golangci-lint has no config inheritance — no
-`extends`, no include, no remote config — so the file must arrive on disk one way or another,
-and a committed copy silently drifts from the shared config. The drift is invisible precisely
-because nothing fails.
+`extends`, no include, no remote config (`extends:` is rejected outright as an unknown property)
+— so the file must arrive on disk one way or another, and a committed copy silently drifts from
+the shared config. The drift is invisible precisely because nothing fails.
+
+Add the fetched path to `.gitignore`. That is what makes the previous paragraph structural rather
+than advisory: a file that cannot be committed cannot fork.
+
+**Budget for the first run.** On a Go repository with no prior lint configuration, expect roughly
+**20 findings per 30 files**, overwhelmingly mechanical — unchecked errors, `%w`/`%v` misuse, and
+`staticcheck` simplifications. Fix them in the adopting change rather than suppressing them; a
+`//nolint` added during adoption is a permanent exemption bought to save an afternoon.
 
 ## Non-npm configuration generally
 
 The same reasoning applies to any config this repository publishes that has no package-manager
 channel — Go today, shell or Python later. Fetch by tag from `raw.githubusercontent.com`, fail
-loudly on a non-200, and check the result is non-empty before using it.
+loudly on a non-200, validate the payload's shape rather than only its size, write to a temporary
+file and move it into place only after every check passes, and add the destination to
+`.gitignore` so the fetched copy cannot be committed.
 
 ## Citing principles
 
