@@ -298,11 +298,11 @@ The React presets and the ESLint v16 fix shipped in `0.2.0`, so a manifest pinne
 silently installs a build in which `@jrmoulckers/eslint-config/react` and
 `@jrmoulckers/tsconfig/vite-react.json` **do not exist**. Current floors:
 
-| Package                        | Minimum  | Why                                                                         |
-| ------------------------------ | -------- | --------------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `^0.7.0` | Hooks linting in `./next`; type-aware crash fix; opt-in `strictTypeChecked` |
-| `@jrmoulckers/tsconfig`        | `^0.3.0` | `vite-react.json`; TypeScript 6 and 7 support                               |
-| `@jrmoulckers/prettier-config` | `^0.2.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                        |
+| Package                        | Minimum  | Why                                                                        |
+| ------------------------------ | -------- | -------------------------------------------------------------------------- |
+| `@jrmoulckers/eslint-config`   | `^0.8.0` | Shipped type declarations; hooks linting in `./next`; type-aware crash fix |
+| `@jrmoulckers/tsconfig`        | `^0.3.0` | `vite-react.json`; TypeScript 6 and 7 support                              |
+| `@jrmoulckers/prettier-config` | `^0.2.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                       |
 
 ### The two packages support different TypeScript versions, on purpose
 
@@ -412,6 +412,43 @@ proven can fail is not evidence.
 Grep for the shape before you start — `readFileSync(__filename`, `readFileSync(import.meta`, and
 any test reading files under `src/` and matching quoted substrings.
 
+#### The same trap fires again on every rebase
+
+A large format pass conflicts with every concurrent branch, so expect to rebase repeatedly — one
+repository rebased five times. Resolving those conflicts by taking upstream's side is the obvious
+move and it **silently reintroduces the defect**: the upstream hunk carries pre-format text, so a
+source-shape guard goes back to matching against quotes and wrapping that no longer exist.
+
+Two guards in that repository re-broke exactly this way after being fixed once, asserting against
+the literal text of a config file and a Markdown doc. They failed loudly only because the earlier
+non-zero anchors were already in place. Without those, they would have rejoined the silent set.
+
+Fix it at the read, not at the assertion — normalise quotes and collapse whitespace as the file is
+loaded, so the guard is insensitive to formatting by construction rather than by being re-patched
+after each rebase:
+
+```js
+const source = readFileSync(target, 'utf8').replace(/["']/g, "'").replace(/\s+/g, ' ');
+const matches = source.match(pattern) ?? [];
+assert.ok(matches.length > 0, 'guard matched nothing — it is no longer inspecting anything');
+```
+
+Merge the format pass quickly or freeze the branch. Its cost grows with every day it stays open.
+
+### The preset lints more files than yours did
+
+A rule-by-rule diff of the old config against this one cannot see this, and it is easy to
+under-report as a result: the shared presets apply to paths many local configs never covered —
+`scripts/**/*.mjs` most commonly. One repository's first run surfaced a genuine `no-regex-spaces`
+violation in a script that had never been linted at all.
+
+So when comparing before and after, compare the **set of files linted**, not just the set of rules
+enabled. Widened coverage is a real gain that a rules diff scores as zero:
+
+```bash
+npx eslint --debug . 2>&1 | grep -c 'Linting '
+```
+
 ### Landing the first format pass
 
 Markdown formatting uses `proseWrap: 'preserve'`, so adopting this config **does not reflow your
@@ -480,6 +517,12 @@ export default nextConfig({
   ],
 });
 ```
+
+Type declarations ship with the package from `0.8.0`, so option names and types are checked even
+in a plain `eslint.config.js` if you lint it under `checkJs`. Do not hand-write ambient
+declarations. `extend` is deliberately typed `unknown[]`: config objects originating from a
+different copy of `@types/eslint` than yours are not mutually assignable, so a narrower type would
+reject correct configs.
 
 ### Prettier — `prettier.config.js`
 
