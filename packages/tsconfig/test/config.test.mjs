@@ -10,7 +10,7 @@ async function readJson(name) {
   return JSON.parse(await readFile(join(pkgDir, name), 'utf8'));
 }
 
-const VARIANTS = ['vite-app.json', 'vite-node.json', 'vite-react.json', 'next.json'];
+const VARIANTS = ['vite-app.json', 'vite-node.json', 'vite-react.json', 'next.json', 'node.json'];
 
 describe('base tsconfig', () => {
   test('enables the checks that strict alone does not cover', async () => {
@@ -34,6 +34,63 @@ describe('base tsconfig', () => {
   test('leaves exactOptionalPropertyTypes off pending per-repo adoption', async () => {
     const base = await readJson('base.json');
     assert.equal(base.compilerOptions.exactOptionalPropertyTypes, false);
+  });
+
+  test('does not set allowImportingTsExtensions, which would break emitting consumers', async () => {
+    // A consumer asked for this to be hoisted here, arguing it is inert unless
+    // a repo writes `.ts` import specifiers. Measured on tsc 5.9.3, it is not:
+    // a config that extends this base and sets `noEmit: false` fails outright.
+    //
+    //   TS5096: Option 'allowImportingTsExtensions' can only be used when
+    //           either 'noEmit' or 'emitDeclarationOnly' is set.
+    //
+    // Every package that emits declarations overrides `noEmit`, so hoisting it
+    // would turn a working build into a hard error for them. It lives in
+    // `node.json` instead, which is opt-in.
+    const base = await readJson('base.json');
+    assert.equal(base.compilerOptions.allowImportingTsExtensions, undefined);
+  });
+});
+
+describe('node variant', () => {
+  test('permits .ts import specifiers', async () => {
+    // Node executes TypeScript directly by stripping types, and its resolver
+    // does not remap `./x.ts` to `./x.js`. Without this the specifier Node
+    // requires is the one tsc rejects.
+    const o = (await readJson('node.json')).compilerOptions;
+    assert.equal(o.allowImportingTsExtensions, true);
+  });
+
+  test('inherits noEmit, which is what makes the flag legal', async () => {
+    // The flag is only accepted alongside `noEmit` or `emitDeclarationOnly`.
+    // This variant never sets its own `noEmit`, so it relies on the base — if
+    // the base ever stopped setting it, this preset would fail to load.
+    const base = await readJson('base.json');
+    const node = await readJson('node.json');
+    assert.equal(base.compilerOptions.noEmit, true);
+    assert.equal(node.compilerOptions.noEmit, undefined);
+  });
+
+  test('avoids rewriteRelativeImportExtensions, which outruns the declared peer floor', async () => {
+    // That option would let a consumer keep `.ts` specifiers *and* emit, but it
+    // was added in TypeScript 5.7 and older releases reject an unknown option
+    // outright rather than ignoring it. Measured on 5.6.3:
+    //
+    //   TS5023: Unknown compiler option 'rewriteRelativeImportExtensions'.
+    //
+    // The package accepts `^5.5.0`, so shipping it here would break 5.5 and 5.6
+    // consumers. A consumer that needs both behaviours can set it locally along
+    // with its own TypeScript floor.
+    const pkg = await readJson('package.json');
+    const o = (await readJson('node.json')).compilerOptions;
+    assert.ok(pkg.peerDependencies.typescript.includes('^5.5.0'));
+    assert.equal(o.rewriteRelativeImportExtensions, undefined);
+  });
+
+  test('targets node without DOM', async () => {
+    const o = (await readJson('node.json')).compilerOptions;
+    assert.ok(!o.lib.includes('DOM'));
+    assert.ok(o.types.includes('node'));
   });
 });
 

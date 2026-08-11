@@ -13,6 +13,18 @@ See [docs/adopting.md](../../docs/adopting.md) for installation and authenticati
 | `@jrmoulckers/tsconfig/vite-react.json` | React browser application   | `jsx: react-jsx`, `esModuleInterop`         |
 | `@jrmoulckers/tsconfig/vite-node.json`  | Build scripts, Node tooling | `node` types                                |
 | `@jrmoulckers/tsconfig/next.json`       | Next.js                     | `jsx: preserve`, `incremental`, Next plugin |
+| `@jrmoulckers/tsconfig/node.json`       | Node runs your `.ts` files  | `node` types, `allowImportingTsExtensions`  |
+
+**`node.json` versus `vite-node.json`.** Use `vite-node.json` for build scripts and tooling that a
+bundler loads. Use `node.json` when Node executes the TypeScript itself — `--experimental-strip-types`,
+or Node 24 running TypeScript natively. Node's resolver does not remap `./x.ts` to `./x.js`, so the
+specifier Node requires is the one tsc rejects without `allowImportingTsExtensions`.
+
+That flag is not in `base.json` because it is not inert: TypeScript accepts it only alongside
+`noEmit` or `emitDeclarationOnly` (`TS5096`), so hoisting it would break every package that emits.
+If you need `.ts` specifiers **and** emit, set `rewriteRelativeImportExtensions: true` yourself — it
+is omitted here because it requires TypeScript 5.7, below which it is a hard `TS5023` error, and
+this package still supports `^5.5.0`.
 
 ```json
 {

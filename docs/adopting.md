@@ -40,7 +40,78 @@ curl -s https://raw.githubusercontent.com/jrmoulckers/engineering/main/principle
 
 ## 2. Install the shared configuration
 
-The packages are published to **GitHub Packages**, which requires the `@jrmoulckers` scope to be
+There are **two delivery channels**, and which one you use is decided per package, not per
+repository. Most repositories will use both.
+
+| Package                        | Channel            | Why                                                                    |
+| ------------------------------ | ------------------ | ---------------------------------------------------------------------- |
+| `@jrmoulckers/tsconfig`        | vendored at a ref  | pure JSON, no runtime dependencies                                     |
+| `@jrmoulckers/prettier-config` | vendored at a ref  | dependency-free ES modules                                             |
+| `@jrmoulckers/eslint-config`   | **registry (npm)** | depends on four packages at runtime that a consumer must not re-choose |
+
+The split exists because **GitHub Packages authenticates every read, including reads of a public
+package.** Putting the scope in the install path therefore requires every contributor — and, for a
+self-hosted product, every self-hoster — to mint a token before `install` succeeds. That is a real
+onboarding regression, and package visibility does not fix it: visibility changes authorization,
+not authentication.
+
+So the registry is used only where it earns its cost. `eslint-config` depends on `@eslint/js`,
+`typescript-eslint`, `eslint-config-prettier` and `globals` at runtime. Vendoring its source would
+hand those four version choices back to every repository, which is precisely the drift the shared
+layer exists to remove. `tsconfig` and `prettier-config` have no such dependencies and can simply
+be copied in.
+
+If your repository has no ESLint dependency at all — a Go service, a docs site — you need no
+registry access whatsoever.
+
+### Vendoring — no token required
+
+Fetch the script once, then run it with the tag you want to pin:
+
+```bash
+mkdir -p scripts
+curl -fsSL \
+  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.15.0/scripts/vendor-configs.mjs \
+  -o scripts/vendor-configs.mjs
+
+node scripts/vendor-configs.mjs v0.15.0
+```
+
+Commit the fetched files, `engineering-configs.lock.json`, and the script. Refreshing is the same
+command with a newer tag, which makes an upgrade a reviewable diff.
+
+Vendoring normally trades away the one thing a registry gives you — a version signal — so this
+deliberately keeps it. The lock file records the ref and the SHA-256 of every file, the fetched
+files are written **byte-identical** to source with no generated header, and a re-run at a
+different ref reports how many files actually changed:
+
+```
+Vendored 8 file(s) from jrmoulckers/engineering@v0.15.0 into config/engineering/
+Ref moved v0.14.0 -> v0.15.0; 2 file(s) changed content.
+```
+
+Because the files are byte-identical, `git diff` after a refresh shows upstream's change and
+nothing else, and local drift shows up as a diff against the recorded hash.
+
+Three failure modes are fatal, and **nothing is written until every file passes all three** — a
+partial write is worse than a failed one, because the tools would then run against a mix of refs
+and report success:
+
+1. a non-200 response, naming the ref so a bad tag is obvious;
+2. an empty body;
+3. a 200 carrying the wrong payload. This is the one that matters. An HTML error page or a
+   redirect landing page arrives with status 200, and a config file that parses as nothing lints
+   nothing while reporting success. JSON must parse _and_ carry `compilerOptions`; a module must
+   actually export something.
+
+Point it at a tag rather than a branch. A branch ref will resolve, but it re-points under you and
+the lock file then records a name rather than a state.
+
+### Registry — for `eslint-config` only
+
+The rest of this section applies **only** if you install `@jrmoulckers/eslint-config`.
+
+The package is published to **GitHub Packages**, which requires the `@jrmoulckers` scope to be
 routed explicitly, and requires authentication on every read. This holds whatever the package's
 visibility is: there is no anonymous access to the npm registry.
 
@@ -590,6 +661,27 @@ that failure is real and reproducible, and `eol=lf` is what prevents it.
 | `vite-react.json` | React browser app — `vite-app` plus `jsx: react-jsx` |
 | `vite-node.json`  | Build scripts and Node tooling                       |
 | `next.json`       | Next.js — adds `jsx: preserve` and the Next plugin   |
+| `node.json`       | TypeScript executed directly by Node                 |
+
+**`node.json` is the one to reach for when Node runs your `.ts` files itself** — a server started
+with `node --experimental-strip-types`, or Node 24 running TypeScript natively. Node's resolver
+does not remap `./x.ts` to `./x.js`, so the specifier Node requires is the one tsc rejects by
+default. This variant adds `allowImportingTsExtensions` so both agree.
+
+It is a separate variant rather than part of `base.json` on purpose. The flag is **not** inert:
+TypeScript accepts it only alongside `noEmit` or `emitDeclarationOnly`, so putting it in the base
+turns a working build into a hard failure for every package that emits.
+
+```
+TS5096: Option 'allowImportingTsExtensions' can only be used when
+        either 'noEmit' or 'emitDeclarationOnly' is set.
+```
+
+If you need `.ts` specifiers **and** emit, add `rewriteRelativeImportExtensions: true` locally —
+it rewrites `./a.ts` to `./a.js` on the way out. It is not shipped in the variant because it
+arrived in TypeScript 5.7, and 5.5 and 5.6 reject an unknown compiler option outright rather than
+ignoring it (`TS5023`), which would break consumers still inside the declared peer range. Setting
+it locally means you also own the TypeScript floor it implies.
 
 **Svelte repositories replacing `@tsconfig/svelte`:** use `vite-app.json` and drop `sourceMap`.
 `@tsconfig/svelte` sets it, explaining it is needed "to have warnings/errors of the Svelte
