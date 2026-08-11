@@ -49,7 +49,7 @@ const DEFAULT_INDEX =
 // copy is otherwise indistinguishable from a current one — a consumer reported
 // a missing check that had shipped several releases earlier, having run an old
 // copy that could not tell them so.
-const TOOL_VERSION = '5';
+const TOOL_VERSION = '6';
 const TEXT_EXT = new Set(['.md', '.mdx', '.markdown', '.txt', '.yml', '.yaml', '.json']);
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', '.svelte-kit', 'vendor']);
 
@@ -62,6 +62,9 @@ function parseArgs(argv) {
       i += 1;
     } else if (arg === '--review') {
       opts.review = true;
+    } else if (arg === '--by-id') {
+      opts.review = true;
+      opts.byId = true;
     } else if (arg === '--no-links') {
       opts.links = false;
     } else if (arg === '--json') {
@@ -89,6 +92,10 @@ Options:
   --review            Print every citation with the principle's real title,
                       so wrong-meaning citations are visible. Use this when
                       writing citations; existence alone proves little.
+  --by-id             Implies --review, but groups every use of an ID
+                      together instead of walking files in order. One ID
+                      standing for two different claims is invisible file
+                      by file and obvious when the uses are adjacent.
   --no-links          Skip link-path checking. On by default: a link whose
                       text names a real ID but whose path is wrong looks
                       authoritative and 404s, and the area prefix does not
@@ -279,32 +286,69 @@ async function main() {
         'observed shape: the correct nearby use makes the ID read as known-good\n' +
         'for the file, so the second use is never re-derived. Repetition is\n' +
         'normal and is not itself a defect — most IDs here are cited more than\n' +
-        'once — so this is a prompt to check, not a finding.',
+        'once — so this is a prompt to check, not a finding.' +
+        (opts.byId
+          ? '\n\nGrouped by ID. Read each group as one question: do ALL of these\n' +
+            'lines claim the same rule? One ID standing for two different claims\n' +
+            'is what file-ordered review misses.'
+          : ''),
     );
     const useCount = new Map();
     for (const c of citations) useCount.set(c.id, (useCount.get(c.id) ?? 0) + 1);
-    const seen = new Map();
-    let current = null;
-    for (const c of citations) {
-      if (c.file !== current) {
-        current = c.file;
-        console.log(`\n${c.file}`);
-      }
-      const principle = known.get(c.id);
-      const title = principle ? principle.title : '*** UNKNOWN ID ***';
-      const total = useCount.get(c.id);
-      const nth = (seen.get(c.id) ?? 0) + 1;
-      seen.set(c.id, nth);
-      const marker = total > 1 ? `  [use ${nth} of ${total}]` : '';
-      console.log(`  ${String(c.line).padStart(5)}  ${c.id.padEnd(14)} ${title}${marker}`);
+
+    const printBody = (c, principle) => {
       if (principle?.statement) {
         console.log(`         says: ${principle.statement}`);
       }
       for (const l of c.window ?? [{ n: c.line, text: c.context }]) {
         console.log(`      ${l.n === c.line ? '>' : ' '}  ${l.text.trim()}`);
       }
+    };
+
+    if (opts.byId) {
+      const byId = new Map();
+      for (const c of citations) {
+        if (!byId.has(c.id)) byId.set(c.id, []);
+        byId.get(c.id).push(c);
+      }
+      // Most-cited first: an ID used once cannot diverge from itself, so the
+      // groups that can hide a divergence are the ones worth reading first.
+      const ids = [...byId.keys()].sort(
+        (a, b) => byId.get(b).length - byId.get(a).length || a.localeCompare(b),
+      );
+      for (const id of ids) {
+        const principle = known.get(id);
+        const title = principle ? principle.title : '*** UNKNOWN ID ***';
+        const uses = byId.get(id);
+        console.log(`\n${id}  ${title}  (${uses.length} use${uses.length === 1 ? '' : 's'})`);
+        if (principle?.statement) console.log(`  says: ${principle.statement}`);
+        for (const c of uses) {
+          console.log(`  ${c.file}:${c.line}`);
+          for (const l of c.window ?? [{ n: c.line, text: c.context }]) {
+            console.log(`      ${l.n === c.line ? '>' : ' '}  ${l.text.trim()}`);
+          }
+        }
+      }
+      console.log('');
+    } else {
+      const seen = new Map();
+      let current = null;
+      for (const c of citations) {
+        if (c.file !== current) {
+          current = c.file;
+          console.log(`\n${c.file}`);
+        }
+        const principle = known.get(c.id);
+        const title = principle ? principle.title : '*** UNKNOWN ID ***';
+        const total = useCount.get(c.id);
+        const nth = (seen.get(c.id) ?? 0) + 1;
+        seen.set(c.id, nth);
+        const marker = total > 1 ? `  [use ${nth} of ${total}]` : '';
+        console.log(`  ${String(c.line).padStart(5)}  ${c.id.padEnd(14)} ${title}${marker}`);
+        printBody(c, principle);
+      }
+      console.log('');
     }
-    console.log('');
   }
 
   if (unknown.length > 0) {
