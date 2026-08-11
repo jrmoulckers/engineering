@@ -307,6 +307,24 @@ steps:
 > issue."_ The ceiling is enforced before any job is instantiated, so no preflight step or `if:`
 > guard can ever report it — anything you write lives inside a job that is never created. Diagnose
 > it by reading the caller's `permissions:` block against the callee's, not by looking for output.
+>
+> **The blast radius is the whole workflow file, not the one misconfigured job.** A second,
+> unrelated, perfectly valid job in the same file was added to that measurement and it did not run
+> either. Permission resolution happens before any job is instantiated, so one caller job missing
+> `packages: read` takes down every job that file would have produced — including the ones that
+> never touch a package. If a file mixes a shared-workflow call with your own build or test jobs,
+> you lose all of them at once, with the same absent log.
+>
+> Two consequences worth acting on. First, **a green history proves nothing about your next
+> re-pin**: the failure is latent until the day you move the ref to a version whose callees request
+> `packages: read`, and then it is total. At the time of writing, an org-wide scan found **13 caller
+> jobs across 4 repositories** in exactly that state — currently green, pinned before the auth
+> change, and one re-pin away from an opaque failure. Second, since no check can live inside the
+> affected file, **any static check must be a separate workflow file**, which is unaffected and
+> still runs.
+>
+> So treat "re-pin a shared workflow" as an instruction to re-read its `permissions:` blocks, not as
+> a version bump.
 
 **The packages are private today, so `GITHUB_TOKEN` is not enough on its own**: each consuming
 repository must also be added under the package's **Manage Actions access** settings with
