@@ -1,0 +1,46 @@
+{
+  "$comment": [
+    "Published package versions, verified against the registry by CI on every run.",
+    "",
+    "This file exists because consumers read the repository when they cannot query the",
+    "registry, and a repository tag is not a package version. Reading",
+    "packages/<name>/package.json at a tag reports the source tree at that moment, not what",
+    "is published; that has caused several repositories to report defects fixed releases",
+    "earlier. Rather than telling consumers not to read the repository, this file makes the",
+    "repository answer correctly, and scripts/check-published-versions.mjs fails CI if it",
+    "drifts from the registry.",
+    "",
+    "Safe to read at a tag: the check runs on main, so any commit you can check out had this",
+    "file matching the registry at that time. Newer versions may exist; none of the versions",
+    "named here will be wrong."
+  ],
+  "registry": "https://npm.pkg.github.com",
+  "packages": {
+    "@jrmoulckers/eslint-config": {
+      "version": "0.10.0",
+      "channel": "registry",
+      "range": ">=0.10.0 <1.0.0",
+      "peerDependencies": {
+        "eslint": "^9.0.0 || ^10.0.0",
+        "typescript": ">=5.5.0 <6.1.0"
+      }
+    },
+    "@jrmoulckers/tsconfig": {
+      "version": "0.4.0",
+      "channel": "vendored",
+      "range": ">=0.4.0 <1.0.0",
+      "peerDependencies": {
+        "typescript": "^5.5.0 || ^6.0.0 || ^7.0.0"
+      }
+    },
+    "@jrmoulckers/prettier-config": {
+      "version": "0.3.0",
+      "channel": "vendored",
+      "range": ">=0.3.0 <1.0.0",
+      "peerDependencies": {
+        "prettier": "^3.0.0",
+        "prettier-plugin-svelte": "^3.2.0 || ^4.0.0"
+      }
+    }
+  }
+}

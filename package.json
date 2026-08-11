@@ -20,6 +20,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "coverage:check": "node scripts/check-coverage.mjs",
+    "versions:check": "node scripts/check-published-versions.mjs",
     "coverage:list": "node scripts/check-coverage.mjs --list"
   },
   "devDependencies": {
