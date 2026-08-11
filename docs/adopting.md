@@ -1311,6 +1311,34 @@ prose**. There is no mechanical markdown commit to land and no large diff to rev
 The `.md` override narrows `printWidth` to 96, which affects only constructs Prettier does
 reformat — tables, lists, code fences. Paragraph line breaks are left exactly as authored.
 
+> **"Does not reflow your prose" is true at the moment you switch, and progressively less true
+> afterwards. Expect a mixed corpus, and do not "fix" it.** `preserve` does not merely permit
+> semantic breaks; it stops enforcing `printWidth` on prose entirely. A repository arriving from
+> `proseWrap: 'always'` therefore keeps its hard-wrapped files, but those files stop being
+> maintained at that width the moment anyone edits them. Measured, inserting one word into a
+> wrapped paragraph:
+>
+> | Config             | Resulting line                  |
+> | ------------------ | ------------------------------- |
+> | `always` (before)  | re-wrapped to 94 chars          |
+> | `preserve` (after) | **191 chars, left as authored** |
+>
+> **And no gate reports it.** A 191-character prose line passes `prettier --check` under
+> `preserve` with exit 0, because `preserve` treats any authored shape as correct. That is the
+> intended trade — you cannot have semantic breaks and enforced wrapping at the same time — but it
+> means the honest end state for an already-wrapped repository is a **mixed corpus**: old files
+> hard-wrapped and slowly fraying, new prose semantic.
+>
+> The trap is what happens next. Someone notices the ragged over-width lines, sees that they
+> genuinely exceed `printWidth`, and reflows the corpus to fix it — producing exactly the large
+> mechanical markdown commit that choosing `preserve` was meant to avoid, and destroying any
+> semantic breaks written since. **Ragged old files are the expected steady state. Leave them.**
+> Reformat a file's prose only when you are already editing it for other reasons.
+>
+> Raised by the repository whose `.prettierrc.json` was the original source of
+> `proseWrap: 'always'` — so this is the consequence of its own setting being reversed, reported
+> against itself.
+
 ### Write prose in semantic line breaks
 
 Since the formatter no longer decides where lines end, the convention does. Break lines at
