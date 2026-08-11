@@ -534,6 +534,41 @@ range to pin, and the peer ranges, and `npm run versions:check` fails CI if any 
 the registry. It is therefore safe to read at a tag: every commit on `main` had it matching the
 registry at that time. A newer version may exist, but nothing it states will be wrong.
 
+#### Telling "not authorized yet" apart from "not published"
+
+A `401` on its own answers nothing, and several repositories have read one as proof a package was
+private. GitHub Packages **authenticates every read, including of public packages**, so an
+anonymous request returns `401` whether the package is public, private, or absent. Visibility
+changes _authorization_, not _authentication_.
+
+Run it twice, and the pair is what settles it:
+
+```bash
+# 1. anonymous
+curl -so /dev/null -w '%{http_code}\n' \
+  https://npm.pkg.github.com/@jrmoulckers%2Ftsconfig
+
+# 2. authenticated
+curl -so /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  https://npm.pkg.github.com/@jrmoulckers%2Ftsconfig
+```
+
+| Anonymous | Authenticated | Meaning                                                        |
+| --------- | ------------- | -------------------------------------------------------------- |
+| `401`     | `200`         | Readable by you. Any install failure is elsewhere.             |
+| `401`     | `403`         | Authenticated fine, **not authorized** — access grant is owed. |
+| `401`     | `404`         | No such package or version.                                    |
+| `401`     | `401`         | Your token is wrong or lacks `read:packages`.                  |
+
+The `403` row is the one worth knowing, because it separates _your_ problem from _ours_: your
+token works, and what is missing is a grant only the package owner can make. Reported by a
+consumer who ran both probes rather than escalating on the `401` alone — which lets any
+repository answer "has the access landed yet" without asking.
+
+The `401`/`200`/`404`/`401` rows were confirmed from the owner side against this registry; the
+`403` row is the consumer's evidence, since an owner cannot reproduce it.
+
 That last distinction is the whole design. This table and the floor table are literals that age
 silently; `versions.json` is a literal that **cannot** age silently, because a check compares it
 to the registry rather than trusting it. Prefer it over any version number written in prose,
@@ -1360,6 +1395,59 @@ This is the same failure the `platforms/` rule above describes, one level up: th
 on the principle's subject rather than its file; here, on its Statement rather than its area
 name. If a repository got one wrong it will usually have got the other wrong too, so check both
 in the same pass.
+
+### Record what you evaluated and excluded, not only what binds
+
+Every adopter so far has cited the principles that bind and said nothing about the rest. That is
+the natural thing to do and it loses the more valuable half of the work, because **silence reads
+identically whether a principle was considered and excluded or never read at all** — and the
+second is much more common.
+
+The consequence is that no reviewer can distinguish them either. An area quietly absent from a
+repository's citations is exactly what a false exemption looks like from the outside, so the one
+case worth catching is invisible.
+
+So state your exclusions. A line each is enough, and the reason is the part that matters:
+
+```markdown
+Evaluated and out of scope:
+
+- ENG-LOCAL-002 (Optional sync seam) — no sync; re-evaluate if multi-device lands.
+- ENG-DATA-001 (Owned durable integrity) — no durable store beyond the browser cache.
+- ENG-INT-005 (Credential proxy isolation) — no server-side proxy by construction (ADR-0007).
+```
+
+Three properties make this worth the lines. It is **falsifiable** — a reader who knows the
+repository can object to a specific claim rather than to an absence. It is **re-checkable** when
+the repository changes, because "re-evaluate if X lands" names the trigger, and the false
+exemption's whole danger is to code that does not exist yet. And it distinguishes _considered_
+from _unread_ at the moment the distinction is cheap.
+
+Two failure modes to avoid. Do not write exclusions by area — `ENG-INT-*` as a block is the
+false exemption in its usual form, and one repository declared exactly that while four of the
+five bound and were already satisfied. And do not claim an exclusion you have not checked: an
+unverified exclusion is worse than silence, because it converts an open question into a settled
+one.
+
+### Watch the asymmetry: complying on paper is cheaper than disagreeing
+
+An adopter that found a principle contradicted its architecture observed that citing the
+principle anyway would have cost **one line and looked compliant to every reader**, while saying
+so cost several rounds of argument. That asymmetry is real, it runs the wrong way, and it is the
+reason to expect quiet citation rather than disagreement from repositories that never push back.
+
+Two things follow, and they are directed at different people.
+
+If you are adopting: **a citation you cannot defend is worse than a gap**, because a gap is
+visible and a false citation is not. The section above exists to make disagreement structurally
+cheap — an exclusion with a reason is a line of Markdown, not an argument.
+
+If you own the practices: treat a repository that never disagrees as **unverified rather than
+compliant**. Every substantive correction to this guide arrived from a repository whose
+architecture contradicted something and which said so instead of citing around it — the
+`ENG-LOCAL-001` scope rule, the false-exemption section above, the two-channel delivery split,
+and the triage guidance for `noUncheckedIndexedAccess` all originated that way. A guide that only
+hears agreement stops improving and cannot tell that it has.
 
 ## Recording decisions (ADRs)
 
