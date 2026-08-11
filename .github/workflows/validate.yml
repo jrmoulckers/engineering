@@ -73,18 +73,27 @@ jobs:
         with:
           node-version: 20
       - run: npm ci --ignore-scripts
-      - run: npm install --no-save eslint@${{ matrix.eslint }}
+      - run: npm install --no-save eslint@${{ matrix.eslint }} @eslint/js@${{ matrix.eslint }}
       - name: Confirm the requested major is the one actually installed
         shell: bash
         run: |
           # Without this the matrix can silently run the same major twice —
           # a peer conflict or a failed install would leave the pinned
           # version in place and both legs would pass while testing one.
-          actual="$(node -p "require('eslint/package.json').version")"
-          echo "eslint $actual"
-          case "$actual" in
-            ${{ matrix.eslint }}.*) ;;
-            *) echo "expected eslint ${{ matrix.eslint }}.x, got $actual" >&2; exit 1 ;;
-          esac
+          #
+          # @eslint/js is checked too, and installed above, because its major
+          # tracks eslint's: @eslint/js@10 peer-requires eslint@^10. It is our
+          # dependency rather than the consumer's, so before it was widened a
+          # consumer on eslint 10 silently received the eslint 9 recommended
+          # rule set. This leg passed the whole time, because CI reproduced
+          # that same wrong pairing.
+          for pkg in eslint @eslint/js; do
+            actual="$(node -p "require('$pkg/package.json').version")"
+            echo "$pkg $actual"
+            case "$actual" in
+              ${{ matrix.eslint }}.*) ;;
+              *) echo "expected $pkg ${{ matrix.eslint }}.x, got $actual" >&2; exit 1 ;;
+            esac
+          done
       - name: Load the presets into this ESLint major and lint real files
         run: node --test packages/eslint-config/test/smoke.test.mjs
