@@ -1375,6 +1375,14 @@ It is worth stating plainly because the argument against `'always'` does not nee
 and is damaged by it — the one-time cost carries the case on its own, and a reader who checks the
 inflated version and finds it false has reason to discount the rest.
 
+> **The one-time reflow is not actually the expensive part.** A single mechanical commit is
+> absorbed once and forgotten. The cost that matters is that `'always'` destroys semantic line
+> breaks **silently and repeatedly**: every subsequent `format:write` re-flattens breaks the author
+> just made, with no diagnostic and no failing check. The author reasonably concludes their editor
+> did it. A one-time cost gets paid; a recurring invisible one teaches people to stop using the
+> shape at all, which is the actual loss. This is why the value of catching it early is not
+> measured in the files a reflow would have touched.
+
 > **Independently reached, from the largest corpus of the seven.** A consumer measured `'always'`
 > against 590 markdown files and rejected it, arriving at the same mechanism from the other end:
 > the reflow makes a one-word edit a multi-line diff, so `'always'` "costs a mass reflow and buys a
@@ -1600,11 +1608,20 @@ whether it is.
 > They also named the general class, and it is the most useful thing to come out of this:
 > **wrong-but-inert statements survive precisely because nothing contradicts them.** There is no
 > failing test to motivate removal and no symptom to trace, so the only pressure on them is someone
-> deciding to check. Three instances so far, in three different artifact types — a config flag with
-> a false rationale, a false claim that a principle area did not apply, and a summary line naming a
-> version many releases stale. The argument for removing any of them is not that they break
-> something; it is that a false statement nothing refutes is a standing invitation to preserve it.
-> Treat "this is harmless" as a reason to check it sooner, not later.
+> deciding to check. Four instances so far, in four different artifact types — a config flag with
+> a false rationale, a false claim that a principle area did not apply, a summary line naming a
+> version many releases stale, and a measurement defending a setting by comparing it against
+> itself rather than against what it prevents. The argument for removing any of them is not that
+> they break something; it is that a false statement nothing refutes is a standing invitation to
+> preserve it. Treat "this is harmless" as a reason to check it sooner, not later.
+>
+> **The review heuristic that falls out of all four: when a config value carries a rationale
+> comment, the test is not "does it do what it says" but "what breaks if I remove it."** Every one
+> of these failures is consistent with the artifact it describes — the flag really does set what
+> the comment claims, the version string really is a version, the measurement really did run. The
+> artifact never contradicts you, because it is not the thing in question. Only an experiment
+> designed around what the setting _prevents_ can. Contributed by a consumer who applied it to
+> their own ported comment first.
 
 **Diff the old base against the preset before deleting it, option by option**, and treat any
 option the preset lacks as a finding rather than an oversight. The presets are deliberately not
