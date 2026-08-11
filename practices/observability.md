@@ -237,6 +237,31 @@ Be honest about what this is: **grep is a backstop, not a substitute for review.
 ``logger.info(`user ${password}`)`` and misses the same value renamed to `p` one line earlier.
 It lowers the floor; the allowlist is what actually satisfies the principle.
 
+### Do not put this gate in a path-filtered workflow
+
+The repository this design came from runs the blocking copy in an **always-on** workflow, and keeps
+the path-filtered lint workflow's copy as the convenience one. That ordering is deliberate and it is
+the detail most likely to be dropped when copying the script.
+
+A `paths:` filter is a statement about _which changes are worth linting_. A leak gate is a statement
+about _what must never merge_. Those are different questions, and the filter answers the wrong one:
+a pull request that adds `logger.info(token)` to a file outside the filtered set is exactly the
+change the gate exists for, and exactly the change the filter skips. The narrower the filter, the
+larger the hole, and the gate reports green throughout because it never ran.
+
+Put the blocking copy in a workflow with no `paths:` filter. If the same script also runs in a
+filtered lint workflow for fast feedback, that is fine — just do not let the filtered one be the
+only one.
+
+> **Unverified here, and worth confirming against your own branch protection before relying on
+> either reading.** The originating repository also described a required-status-check interaction:
+> a required check whose workflow is skipped by a path filter behaves differently from one that runs
+> and passes. This repository has no protected branch, so that behaviour could not be reproduced,
+> and the two plausible outcomes point opposite ways — the check never reports and the pull request
+> is blocked pending forever, or it is treated as satisfied and the gate is silently bypassed. The
+> recommendation above holds under either, which is why it is stated without depending on the
+> answer.
+
 **Also bound retention and audit content.** `ENG-OBS-005` requires retention follow a referenced
 obligation — cite the governing policy, do not invent a number here — and requires audit signals
 record **actor, action, target, and time without payload**. An audit entry that embeds the
