@@ -325,6 +325,24 @@ steps:
 >
 > So treat "re-pin a shared workflow" as an instruction to re-read its `permissions:` blocks, not as
 > a version bump.
+>
+> **Grant exactly what the callee declares. Do not reason from whether the job installs.** That
+> heuristic is intuitive, mechanical-sounding, and wrong in both directions — it produced two
+> incorrect answers here, one of each kind. Verified against the pinned callees:
+>
+> | Callee                     | Installs? | Declares `packages: read`? |
+> | -------------------------- | --------- | -------------------------- |
+> | `reusable-perf-budget.yml` | no        | **yes**                    |
+> | `reusable-security-ci.yml` | no\*      | **no**                     |
+> | `reusable-ci-lint.yml`     | yes       | yes                        |
+>
+> \*audits a manifest full of scoped packages, which is exactly why "it must need the scope" feels
+> obvious and is false: advisory metadata resolves from the default registry.
+>
+> A consumer arrived at the right answer by reading each callee's own `permissions:` block at the
+> pinned SHA and copying it, without knowing anything about how audit resolves endpoints. That is
+> the rule: the callee has already declared its requirement, so read the declaration rather than
+> re-deriving it from behaviour. A derivation can be reasoned wrong; a declaration cannot.
 
 **The packages are private today, so `GITHUB_TOKEN` is not enough on its own**: each consuming
 repository must also be added under the package's **Manage Actions access** settings with
@@ -489,6 +507,14 @@ not merely wasted effort: it teaches a recipient that messages from the shared r
 apply to them, which is precisely the habit that makes the next real advisory get skimmed. A
 broadcast is cheap to send and expensive to receive, and the cost lands on whoever has to work out
 that it was irrelevant.
+
+**Before telling anyone to delete a line, confirm they have it.** Another repository was told to
+drop a `sourceMap` setting it had never written: the flag was inherited from a third-party base
+config, so `git grep` found nothing to remove. Their reply is the right instruction back —
+_worth checking before you tell them to delete something they also don't have._ An instruction to
+remove something is uniquely bad when misdirected, because the recipient cannot comply and cannot
+tell whether they have misread you or you have misread them. Name the file and line you expect it
+in, so a recipient who lacks it knows immediately that the message is not about them.
 
 **Route by scope. Never replace the default registry.** Setting
 `registry=https://npm.pkg.github.com/` wholesale, rather than scoping it, breaks `npm audit` /
@@ -1115,7 +1141,17 @@ they are documented in different sections — so read both before opening the PR
    directly and whose web app emits needs `node.json` for the former and `base.json` for the
    latter. That is the normal shape, not a workaround.
 
-**Diff the old base against the preset before deleting it, option by option**, and treat any
+**Do not add a flag to cancel a flag.** When a setting you dislike arrives by inheritance from the
+config you are replacing, the fix is the replacement, not a neutralizing override. A consumer asked
+whether to set `sourceMap: false` to counter a `true` inherited from a third-party base, and
+answered it correctly themselves: the line disappears when `extends` moves to the preset, so adding
+an override today means deleting it again later, and in the meantime the file states an opinion the
+repository does not hold. Where the inherited setting is already inert — theirs was, because the
+package sets `noEmit` on its own line — there is nothing to fix at all. **Confirm the flag is
+actually doing something before you act on it**; provenance makes a setting look load-bearing
+(a third-party base that sets it deliberately, with a rationale) when only measurement can say
+whether it is.
+
 option the preset lacks as a finding rather than an oversight. The presets are deliberately not
 supersets. A concrete case: a repository fixing a Node 24 `ERR_MODULE_NOT_FOUND` had added
 `allowImportingTsExtensions` to its own base; `base.json` does not set it, so a straight
