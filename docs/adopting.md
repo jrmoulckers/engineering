@@ -688,7 +688,7 @@ every minor until the first stable major:
 
 | Package                        | Range             | Floor is set by                                                        |
 | ------------------------------ | ----------------- | ---------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `>=0.11.0 <1.0.0` | Runtime deps track the ESLint major, so ESLint 10 gets ESLint 10 rules |
+| `@jrmoulckers/eslint-config`   | `>=0.12.0 <1.0.0` | Runtime deps track the ESLint major, so ESLint 10 gets ESLint 10 rules |
 | `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`      |
 | `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0`  | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                   |
 
@@ -697,14 +697,28 @@ The ranges keep you current without editing the manifest. Confirm what is actual
 rather than trusting this table, which is a literal and therefore ages:
 
 ```bash
-git show origin/main:versions.json
+curl -s https://raw.githubusercontent.com/jrmoulckers/engineering/main/versions.json
 ```
 
-**Use that, not `npm view`.** This table went stale within one release of being written, and the
-verification command previously recommended here was `npm view`, which requires registry access —
-the one thing the repositories most likely to be stale do not have. A check that only works for
-readers who are already fine is not a check. `versions.json` is committed, so `git show` works from
-any checkout with no authentication, and CI verifies it against the live registry on every run.
+**Use that, not `npm view`, and not `git show`.** This table went stale within one release of being
+written — twice — and the verification command previously recommended here was `npm view`, which
+requires registry access, the one thing the repositories most likely to be stale do not have. A
+check that only works for readers who are already fine is not a check.
+
+The `git show origin/main:versions.json` form recommended here before was better, but it has a
+failure this one does not: **`origin/main` is a local cache.** Without a preceding `git fetch` it
+returns whatever you last downloaded, silently and with no error. A consumer read this repository at
+a tag sixteen releases behind and reported four facts as current — the published versions, a missing
+`projectService`, absent hooks rules, and absent type declarations. All four were true at their ref.
+All four were false on `main`. Nothing in their method could have revealed that, because a stale
+read looks exactly like a fresh one.
+
+`curl` against `raw.githubusercontent.com` cannot be stale: no clone, no fetch, no local ref, and no
+authentication, since this repository is public. If you prefer `git`, run `git fetch origin` first
+and treat the fetch as part of the command rather than as something you did earlier.
+
+A test asserts that every version range printed in this document matches `versions.json`, so the
+table above cannot drift again without failing CI.
 
 **And read `channel` while you are there.** `@jrmoulckers/tsconfig` and
 `@jrmoulckers/prettier-config` are `"channel": "vendored"` — never published, copied in, and

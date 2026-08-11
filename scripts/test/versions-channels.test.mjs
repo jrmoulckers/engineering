@@ -94,3 +94,55 @@ describe('recorded ranges are safe to copy literally', () => {
     }
   });
 });
+
+// docs/adopting.md printed a range literal that disagreed with versions.json
+// twice, and each time the surrounding prose warned the reader that the table
+// ages. A warning is not a check. This is the check.
+describe('documented ranges match versions.json', () => {
+  const doc = readFileSync(
+    fileURLToPath(new URL('../../docs/adopting.md', import.meta.url)),
+    'utf8',
+  );
+
+  test('every documented range for a package matches the recorded one', () => {
+    for (const [name, entry] of Object.entries(manifest.packages)) {
+      // A line naming the package may legitimately also carry a peer range
+      // (TypeScript's, for instance). Only ranges that are not a recorded peer
+      // range are claims about this package's own version.
+      const peerRanges = new Set(Object.values(entry.peerDependencies ?? {}));
+
+      const stale = doc
+        .split('\n')
+        .filter((line) => line.includes(name))
+        .flatMap((line) => [...line.matchAll(/>=\s*\d+\.\d+\.\d+\s*<\s*\d+\.\d+\.\d+/g)])
+        .map((m) => m[0].replace(/\s+/g, ' ').trim())
+        .filter((found) => !peerRanges.has(found))
+        .filter((found) => found !== entry.range);
+
+      assert.deepEqual(
+        stale,
+        [],
+        `docs/adopting.md prints ${JSON.stringify(stale)} for ${name}, but versions.json ` +
+          `records "${entry.range}". A consumer copying the document gets an old floor.`,
+      );
+    }
+  });
+
+  test('the verification command cannot read a stale local ref', () => {
+    // `git show origin/main:...` returns the last fetched copy with no error,
+    // which is how a consumer reported four facts from a ref sixteen releases
+    // behind. The recommended command has to be one that cannot be stale.
+    const bare = /`git show origin\/main:versions\.json`/.test(doc);
+    const fenced = /^git show origin\/main:versions\.json\s*$/m.test(doc);
+    assert.ok(
+      !fenced,
+      'adopting.md recommends `git show origin/main:versions.json` in a command block — ' +
+        'that reads a local cache and is silently stale without a prior fetch',
+    );
+    assert.ok(
+      doc.includes('raw.githubusercontent.com/jrmoulckers/engineering/main/versions.json'),
+      'adopting.md must recommend a fetch-free read of versions.json',
+    );
+    void bare;
+  });
+});
