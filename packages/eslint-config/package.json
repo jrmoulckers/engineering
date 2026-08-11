@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/eslint-config",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Engineering-owned ESLint flat configuration presets.",
   "license": "UNLICENSED",
   "private": false,
@@ -60,32 +60,19 @@
     "typescript-eslint": "^8.13.0"
   },
   "peerDependencies": {
-    "@next/eslint-plugin-next": "^15.0.0 || ^16.0.0",
     "eslint": "^9.0.0 || ^10.0.0",
-    "eslint-plugin-jsx-a11y": "^6.10.0",
-    "eslint-plugin-react": "^7.37.0",
-    "eslint-plugin-react-hooks": "^5.0.0 || ^6.0.0 || ^7.0.0",
-    "eslint-plugin-svelte": "^2.46.0 || ^3.0.0",
     "typescript": ">=5.5.0 <6.1.0"
   },
   "peerDependenciesMeta": {
-    "@next/eslint-plugin-next": {
-      "optional": true
-    },
-    "eslint-plugin-jsx-a11y": {
-      "optional": true
-    },
-    "eslint-plugin-react": {
-      "optional": true
-    },
-    "eslint-plugin-react-hooks": {
-      "optional": true
-    },
-    "eslint-plugin-svelte": {
-      "optional": true
-    },
     "typescript": {
       "optional": true
     }
+  },
+  "frameworkPlugins": {
+    "@next/eslint-plugin-next": "^15.0.0 || ^16.0.0",
+    "eslint-plugin-jsx-a11y": "^6.10.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^5.0.0 || ^6.0.0 || ^7.0.0",
+    "eslint-plugin-svelte": "^2.46.0 || ^3.0.0"
   }
 }
