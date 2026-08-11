@@ -586,6 +586,24 @@ explanation was not, and a plausible explanation for a real number is the easies
 ship. When you report a size or count, include the dependency path (`npm ls <pkg>`, `pnpm why
 <pkg>`); when you receive one, ask for it before designing against a mechanism.
 
+That request is not a formality, and the same report recurred after the correction shipped —
+same repository, same count, same attribution to optional peers. So it was measured a third time,
+as the exact upgrade being performed rather than as an isolated install. A Svelte-only tree
+(`eslint`, `eslint-plugin-svelte`, `typescript`), npm 11.16.0, real tarballs packed from the tags:
+
+| Step          | `node_modules` dirs | lockfile lines |
+| ------------- | ------------------- | -------------- |
+| at `0.1.0`    | 102                 | 1884           |
+| after `0.2.1` | 102                 | 1896           |
+| **delta**     | **0**               | **+12**        |
+
+Zero React, hooks, a11y or Next plugins present at either version, though `0.2.1` declares all four
+as optional peers and `0.1.0` declares none of them. The reported 37 packages are real and the
+dependency path producing them is somewhere in the consuming tree; nothing in this package can
+account for it. **If a shared config appears to add packages, run `npm why <plugin>` before
+reporting the config as the cause** — that single command distinguishes the two explanations, and
+it is the step whose absence cost this migration its most expensive defect.
+
 Second, and worse: **a wrong belief with a green check on it stops looking like a belief.** The
 regression test encoded the false invariant, passed on every run, and would have blocked the
 correct fix had it not been read closely. A test is an assertion about the world and inherits every
