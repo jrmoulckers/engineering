@@ -87,8 +87,11 @@ the fleet ends up mixed.
 - Repositories with no ESLint dependency — Go services, docs sites — need no registry access at
   all. This is a strict improvement for them.
 - Repositories using all three still need a token, but only for one package.
-- A vendored file can be edited locally. The lock file makes that visible as a hash mismatch, but
-  nothing forces a check; consumers that care should compare hashes in CI.
+- A vendored file can be edited locally. The lock file makes that visible as a hash mismatch.
+  Originally nothing forced a check; `scripts/vendor-configs.mjs --check` now does, and consumers
+  should run it in CI. It fails on drift and only warns on staleness — a tag pushed here must
+  never redden a consumer's unrelated PR, because that turns pinning from a decision into a
+  default.
 - Upgrades are no longer a version-range bump. Someone must re-run the script with a newer tag,
   which is more deliberate and more visible, but will not happen automatically.
 - The repository now owns a fetch script as a supported interface, and its failure modes matter as

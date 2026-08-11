@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const script = fileURLToPath(new URL('../vendor-configs.mjs', import.meta.url));
 
@@ -186,6 +187,113 @@ describe('vendor-configs success path', { skip: OFFLINE }, () => {
 
       const lock = JSON.parse(readFileSync(join(dir, 'engineering-configs.lock.json'), 'utf8'));
       assert.equal(lock.ref, 'v0.14.0');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('vendor-configs --check', () => {
+  test('rejects a ref, because the lock file is the source of the ref', () => {
+    const dir = workspace();
+    try {
+      const { code, out } = run(['v1.0.0', '--check'], dir);
+      assert.equal(code, 1);
+      assert.match(out, /--check takes no ref/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('fails with a usable hint when no lock file exists', () => {
+    const dir = workspace();
+    try {
+      const { code, out } = run(['--check'], dir);
+      assert.equal(code, 1);
+      assert.match(out, /no engineering-configs\.lock\.json found/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('rejects a lock file that records no files', () => {
+    const dir = workspace();
+    try {
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({ ref: 'v1.0.0', files: {} }),
+        'utf8',
+      );
+      const { code, out } = run(['--check'], dir);
+      assert.equal(code, 1);
+      assert.match(out, /records no files/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Drift is detected from the lock alone, so these need no network: the lock
+  // names a file and a hash, and the check reads what is on disk.
+  test('detects an edited file', () => {
+    const dir = workspace();
+    try {
+      writeFileSync(join(dir, 'vendored.json'), '{"a":1}', 'utf8');
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v1.0.0',
+          files: { 'vendored.json': { source: 'x', sha256: 'deadbeef' } },
+        }),
+        'utf8',
+      );
+      const { code, out } = run(['--check'], dir);
+      assert.equal(code, 1);
+      assert.match(out, /content differs from the lock/);
+      // The hint must name the pinned ref, not a placeholder.
+      assert.match(out, /vendor-configs\.mjs v1\.0\.0/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('detects a deleted file', () => {
+    const dir = workspace();
+    try {
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v1.0.0',
+          files: { 'gone.json': { source: 'x', sha256: 'deadbeef' } },
+        }),
+        'utf8',
+      );
+      const { code, out } = run(['--check'], dir);
+      assert.equal(code, 1);
+      assert.match(out, /gone\.json: missing/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('passes when disk matches the lock, and never fails on staleness', () => {
+    const dir = workspace();
+    try {
+      const body = '{"a":1}';
+      const hash = createHash('sha256').update(body, 'utf8').digest('hex');
+      writeFileSync(join(dir, 'vendored.json'), body, 'utf8');
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        // A ref that will never be newest, so if staleness were fatal this
+        // would fail. It must not: an upstream tag cannot redden a consumer.
+        JSON.stringify({
+          ref: 'v0.0.1',
+          files: { 'vendored.json': { source: 'x', sha256: hash } },
+        }),
+        'utf8',
+      );
+      const { code, out } = run(['--check'], dir);
+      assert.equal(code, 0);
+      assert.match(out, /1 vendored file\(s\) match/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

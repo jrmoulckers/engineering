@@ -18,18 +18,20 @@ Fetch it. A committed copy drifts from the shared config, and the drift is invis
 because nothing fails.
 
 ```bash
-# Pin to a release tag; the newest is listed at
-# https://github.com/jrmoulckers/engineering/releases
-ENGINEERING_REF=v0.2.3
+# <latest-tag> is a placeholder, not a version. Pin the newest release:
+#   gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name
+ENGINEERING_REF=<latest-tag>
 
 curl -fsSL --retry 3 \
   "https://raw.githubusercontent.com/jrmoulckers/engineering/${ENGINEERING_REF}/configs/golangci.yml" \
   -o .golangci.yml
 ```
 
-The tag above is an example, not a recommendation. It ages the moment this repository cuts a
-release, so read it as a knob to set rather than a value to copy, and pick the newest tag when
-you adopt.
+The ref is a placeholder that fails visibly rather than a version that lags quietly. A literal
+version copied out of a document is stale one release later — and worse, it can be _wrong_:
+`v0.2.3` of this file told consumers to copy it, which a later release reversed.
+Pinning stays a deliberate edit in your history; never resolve the newest tag at fetch
+time, or a tag pushed here changes your lint rules with no commit on your side.
 
 Run that before the lint job, gitignore the result, and write a generated header naming the
 source and ref so nobody edits it by hand.
