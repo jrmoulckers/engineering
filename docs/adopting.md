@@ -1511,6 +1511,13 @@ makes it feel already-verified.
 the link. It is a one-line authoring convention that makes any line-oriented review of your file
 sound, and it costs nothing.
 
+Do not assume you were unaffected because a review of your file read correctly. One consumer
+checked their two link-bearing citations specifically and found both had put the ID on the claim
+line — then reported the right conclusion: they **got lucky rather than being immune**. Whether a
+line-oriented reader sees your claim depends on where your wrap width happened to fall, which is
+not a property you control or notice. Adopt the convention deliberately rather than inheriting it
+by accident.
+
 The statement-over-title case survives all of this, on better evidence: judging by title alone, one
 consumer would have wrongly convicted `ENG-SEC-007` "Secure failure" for guarding a short API token
 (the statement — "reject unsafe configuration before service" — clears it), while missing a real
@@ -1674,6 +1681,20 @@ Two shapes that stay honest when nothing covers the subject:
 - **Record it as a decision.** A constraint with no principle behind it is an ADR, and
   `ENG-ARCH-003` is what requires you to write one before treating it as durable. Cite
   `ENG-ARCH-003` for the _recording_, not for the constraint.
+
+**Cite `ENG-ARCH-003` once, on the index — not on each ADR.** This is the natural misreading of the
+construction and it produces wrong citations at roughly eleven times the rate of getting it right
+once. A consumer with eleven ADRs put the citation on the index and stated the direction outright:
+
+> Recording these discharges `ENG-ARCH-003` … The principle covers the recording, not the content:
+> every decision below is Docket's own, and no `ENG-*` rule mandates any particular one of them.
+
+Attaching it to individual ADRs would assert that a ratified principle backs each decision's
+**content** — the database choice, the auth model, the log design — when the principle governs only
+that the decision was written down. That is the same meaning mismatch as citing a principle whose
+statement does not govern your claim, arrived at from the opposite direction: not a wrong ID, but a
+correct ID pointed at the wrong half of the sentence. **Ask what the principle obliges, then check
+that the thing you attached it to is that thing.**
 
 **Cite `ENG-ARCH-003` only if you actually keep ADRs.** It is the construction most likely to be
 misused, precisely because it is available to any repository that writes anything down. A consumer
