@@ -503,11 +503,11 @@ The trap is that this repeats at every minor. `^0.3.0` locks you out of `0.4.0` 
 again one release later and has no signal. Pin with an explicit upper bound instead, which tracks
 every minor until the first stable major:
 
-| Package                        | Range            | Floor is set by                                                              |
-| ------------------------------ | ---------------- | ---------------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `>=0.9.0 <1.0.0` | Framework plugins are no longer peers, so an install carries only your stack |
-| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0` | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`            |
-| `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                         |
+| Package                        | Range             | Floor is set by                                                        |
+| ------------------------------ | ----------------- | ---------------------------------------------------------------------- |
+| `@jrmoulckers/eslint-config`   | `>=0.10.0 <1.0.0` | Runtime deps track the ESLint major, so ESLint 10 gets ESLint 10 rules |
+| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`      |
+| `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0`  | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                   |
 
 The floors say what each version _added_, so they only rise when something is genuinely required.
 The ranges keep you current without editing the manifest. Confirm what is actually published
