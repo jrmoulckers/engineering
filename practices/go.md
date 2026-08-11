@@ -94,9 +94,53 @@ if err := store.Write(ctx, rec); err != nil {
 }
 ```
 
-`%w` preserves the chain for `errors.Is` and `errors.As`. Never discard an error with `_` unless
-the reason is stated in a comment beside it. Reserve `panic` for genuinely unrecoverable
-programmer error, never for expected failure.
+`%w` preserves the chain for `errors.Is` and `errors.As`. Reserve `panic` for genuinely
+unrecoverable programmer error, never for expected failure.
+
+### Discarding an error is a decision, not an omission
+
+Never discard an error with `_` unless the reason is stated in a comment beside it. The comment
+states what the program does instead — a discard whose comment only says "ignore error" has
+recorded nothing a reviewer can evaluate:
+
+```go
+// Best-effort: an unreadable library contributes no manifests to the fingerprint,
+// which is treated the same as a library with none.
+_ = os.Chmod(tmp, 0o600)
+```
+
+This is enforced by review rather than by `errcheck`. Its `check-blank` option is deliberately off
+in [`configs/golangci.yml`](../configs/golangci.yml), because it only reports a blank assignment
+whose right-hand side is a **call** — rewriting `_ = f()` as `err := f(); _ = err` silences it
+while discarding exactly as much. A check that a rename satisfies cannot be the thing holding this
+rule up. `check-type-assertions` stays on: a failed assertion panics, and no comment makes that
+recoverable.
+
+### Sanitizing wrapped errors without defeating `errorlint`
+
+`errorlint` flags `fmt.Errorf("%w: %v", ErrSentinel, err)`, and the flag is usually right — the
+cause becomes unreachable to `errors.Is` and `errors.As`. But that unreachability is occasionally
+the **point**: when the inner error carries something that must not escape, such as a filesystem
+path or a query fragment, wrapping the sentinel while flattening the cause is a real sanitization
+technique, not a mistake.
+
+Both readings are indistinguishable at the call site, so decide it explicitly:
+
+- **If the cause is not sensitive**, use `%w: %w` (Go 1.20+) and let both be matchable. This is the
+  common case, and the flag is doing its job.
+- **If the cause is sensitive**, do not flatten it inline — that hides the intent from every
+  reader and from the linter equally. Sanitize at the boundary that knows the value is sensitive,
+  and wrap the sanitized error normally, so the chain stays intact and nothing is smuggled:
+
+  ```go
+  // The path is the sensitive part; drop it here rather than at every caller.
+  return fmt.Errorf("%w: %w", ErrMediaUnsafe, sanitizePath(err))
+  ```
+
+Before converting an existing `%w: %v` to `%w: %w`, confirm the change is inert: the message text
+is unchanged, no caller matches on the newly-reachable error, and no client-facing response
+interpolates it. Within one package that is readable; where the error crosses a package boundary
+it is not, and the sanitize-at-the-boundary form above is the one that survives review.
 
 ## Tests (`ENG-TEST-001`, `ENG-TEST-007`)
 
