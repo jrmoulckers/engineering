@@ -64,6 +64,24 @@ be copied in.
 If your repository has no ESLint dependency at all — a Go service, a docs site — you need no
 registry access whatsoever.
 
+#### Self-hosted products: the production install needs no token
+
+The table above leaves one gap, and a self-hosted product is where it shows. `eslint-config` is a
+`devDependency`, so it is absent from a production install tree — but a self-hoster who runs a bare
+`npm ci` still resolves it and still gets a `401`. Document the production install explicitly:
+
+```bash
+npm ci --omit=dev
+```
+
+With `--omit=dev`, nothing scoped is requested, so **a person deploying your product never mints a
+token.** Only contributors do, and only for lint. This is the same mechanism that makes a
+production-scoped `npm audit` succeed while an install fails in the same run.
+
+Combined with vendoring `tsconfig` and `prettier-config`, the result is that a clone builds and runs
+with no credential anywhere: the two configs a build needs are committed files, and the one package
+that requires the registry is never reached outside a contributor's machine.
+
 ### Vendoring — no token required
 
 Fetch the script once, then run it with the tag you want to pin:
