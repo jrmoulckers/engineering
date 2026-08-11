@@ -55,3 +55,36 @@ jobs:
         run: npm run coverage:check
       - name: Test shared configuration packages
         run: npm test
+
+  # The eslint-config peer range claims `eslint: ^9.0.0 || ^10.0.0`, but the
+  # repository's own devDependency pins one major, so half that claim was
+  # asserted and never exercised. A consumer running ESLint 10 found this
+  # before CI did. The matrix runs the smoke suite — the only tests that load
+  # the presets into a real ESLint — against both supported majors.
+  eslint-majors:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        eslint: ['9', '10']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+      - run: npm ci --ignore-scripts
+      - run: npm install --no-save eslint@${{ matrix.eslint }}
+      - name: Confirm the requested major is the one actually installed
+        shell: bash
+        run: |
+          # Without this the matrix can silently run the same major twice —
+          # a peer conflict or a failed install would leave the pinned
+          # version in place and both legs would pass while testing one.
+          actual="$(node -p "require('eslint/package.json').version")"
+          echo "eslint $actual"
+          case "$actual" in
+            ${{ matrix.eslint }}.*) ;;
+            *) echo "expected eslint ${{ matrix.eslint }}.x, got $actual" >&2; exit 1 ;;
+          esac
+      - name: Load the presets into this ESLint major and lint real files
+        run: node --test packages/eslint-config/test/smoke.test.mjs

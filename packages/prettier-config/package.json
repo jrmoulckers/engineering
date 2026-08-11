@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/prettier-config",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Engineering-owned Prettier configuration.",
   "license": "UNLICENSED",
   "private": false,
@@ -27,7 +27,7 @@
   },
   "peerDependencies": {
     "prettier": "^3.0.0",
-    "prettier-plugin-svelte": "^3.2.0"
+    "prettier-plugin-svelte": "^3.2.0 || ^4.0.0"
   },
   "peerDependenciesMeta": {
     "prettier-plugin-svelte": {
