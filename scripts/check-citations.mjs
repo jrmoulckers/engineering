@@ -22,14 +22,18 @@
 // here rather than left to a recipe each repository has to copy.
 //
 // The statement is printed because a three-word title pattern-matches too
-// easily. But it is not strictly safer, and the difference matters: a statement
-// naming a concern in passing reads as confirmation. ENG-PERF-009 "Assurance
-// precedence" is "Reject performance changes that weaken correctness,
-// ACCESSIBILITY, privacy, or security" — so the one principle most often
-// miscited for accessibility is the one whose statement contains the word.
-// Reading for a keyword is what produced the miscitation; the statement gives
-// that habit more to match on. Hence the banner: ask whether the principle
-// governs the claim, not whether it mentions the topic.
+// easily. But it is not automatically safer: a statement naming a concern in
+// passing reads as confirmation. ENG-PERF-009 "Assurance precedence" is
+// "Reject performance changes that weaken correctness, ACCESSIBILITY, privacy,
+// or security" — so it appears to confirm any citation placed near an
+// accessibility claim, whether or not it governs one. Hence the banner: ask
+// whether the principle governs the claim, not whether it mentions the topic.
+//
+// The context window matters as much as either. Judging a citation from its
+// own line alone produced three false convictions of a repository whose
+// citations were correctly scoped one line below — and a long URL is the most
+// likely thing to get a line of its own, so line-only review is least reliable
+// exactly where citations are most carefully written.
 
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -49,7 +53,7 @@ const DEFAULT_INDEX =
 // copy is otherwise indistinguishable from a current one — a consumer reported
 // a missing check that had shipped several releases earlier, having run an old
 // copy that could not tell them so.
-const TOOL_VERSION = '6';
+const TOOL_VERSION = '7';
 const TEXT_EXT = new Set(['.md', '.mdx', '.markdown', '.txt', '.yml', '.yaml', '.json']);
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', '.svelte-kit', 'vendor']);
 
@@ -280,6 +284,11 @@ async function main() {
         'merely mention the topic? A statement can name a concern in passing —\n' +
         'ENG-PERF-009 mentions accessibility while governing performance changes\n' +
         'only — and a keyword match reads as confirmation when it is not one.\n' +
+        '\n' +
+        'Read the context lines, not the cited line alone. A wrapped link leaves\n' +
+        'the citing line a bare URL with the qualifying clause below it, and\n' +
+        'judging from that line alone has produced more false convictions here\n' +
+        'than the miscitations it was looking for.\n' +
         '\n' +
         'Where a citation is marked "use k of n", judge it on its own. A repo\n' +
         'that cites an ID correctly in one place and wrongly in another is the\n' +
