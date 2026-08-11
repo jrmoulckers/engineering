@@ -17,9 +17,9 @@
   "registry": "https://npm.pkg.github.com",
   "packages": {
     "@jrmoulckers/eslint-config": {
-      "version": "0.10.0",
+      "version": "0.11.0",
       "channel": "registry",
-      "range": ">=0.10.0 <1.0.0",
+      "range": ">=0.11.0 <1.0.0",
       "peerDependencies": {
         "eslint": "^9.0.0 || ^10.0.0",
         "typescript": ">=5.5.0 <6.1.0"

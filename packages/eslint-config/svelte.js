@@ -28,6 +28,31 @@ function flatConfigs(name) {
 }
 
 /**
+ * The rules half of `typescript-eslint`'s `eslint-recommended` layer.
+ *
+ * Exposed as a bare config object on some majors and as a single-element array
+ * on others; both carry the same `rules`. Resolved once at module load so a
+ * shape change fails loudly here rather than silently applying no rules.
+ *
+ * @returns {Record<string, unknown>}
+ */
+function resolveEslintRecommendedRules() {
+  const candidate = tseslint.configs.eslintRecommended;
+  const entry = Array.isArray(candidate) ? candidate.find((c) => c?.rules) : candidate;
+
+  if (!entry?.rules || Object.keys(entry.rules).length === 0) {
+    throw new TypeError(
+      '@jrmoulckers/eslint-config: typescript-eslint exposes no rules on `configs.eslintRecommended`. ' +
+        `Received: ${Object.prototype.toString.call(candidate)}.`,
+    );
+  }
+
+  return entry.rules;
+}
+
+const eslintRecommendedRules = resolveEslintRecommendedRules();
+
+/**
  * Svelte preset. Layers the Svelte plugin's recommended rules and its Prettier
  * reconciliation on top of the base TypeScript preset, then teaches the Svelte
  * parser to delegate `<script lang="ts">` blocks to the TypeScript parser.
@@ -53,6 +78,26 @@ export function svelteConfig(options = {}) {
             projectService: false,
           },
         },
+      },
+      // `typescript-eslint`'s `eslint-recommended` layer is scoped to
+      // `**/*.ts` and friends, so it never reaches `.svelte`. That single
+      // omission causes an asymmetry in both directions: 18 core rules the
+      // TypeScript compiler already enforces stay on for `.svelte` files, and
+      // four rules the same layer *enables* stay off for them.
+      //
+      // `no-undef` is the one that draws blood. Ambient and namespaced types
+      // are values it cannot see, so `NodeJS.Timeout` and SvelteKit's own
+      // `App.*` namespace are reported as undefined in `<script lang="ts">`
+      // while identical code in a `.ts` file is clean.
+      //
+      // The trade: a `.svelte` file with a plain `<script>` gives up `no-undef`
+      // too. That is deliberate. Svelte projects type-check components with
+      // `svelte-check`, so the compiler-already-checks-this rationale holds for
+      // the whole file type, and a false positive that cannot be fixed in the
+      // source is worse than a missed one that another tool reports.
+      {
+        files: ['**/*.svelte'],
+        rules: eslintRecommendedRules,
       },
       ...extend,
     ],
