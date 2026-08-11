@@ -413,23 +413,59 @@ install-then-audit sequence — because those do contact the scoped registry and
 a token. If you override `reusable-security-ci`'s `audit-command` input with anything of that
 shape, you are back to needing registry configuration.
 
+`--omit=dev` makes the point moot regardless. All three presets are `devDependencies`, so an audit
+scoped to production dependencies never queries them and passes even while `npm ci` fails in the
+lint and build jobs. A repository auditing dev dependencies too is the case that needs the
+registry wiring — confirmed in practice by a consumer whose `Package audit` job stayed green
+through every run in which the install jobs failed.
+
+#### Reading the failure: 401 and 403 are different problems
+
+Both surface at install and are easy to conflate, but they point at opposite causes:
+
+| Symptom                               | Meaning                             | Fix                                                     |
+| ------------------------------------- | ----------------------------------- | ------------------------------------------------------- |
+| `401 unauthenticated`                 | No token, wrong host, or wrong type | Check `NODE_AUTH_TOKEN`, `registry-url`, token class    |
+| `403 permission_denied: read_package` | Authenticated, not authorized       | Package visibility or an explicit grant — not the token |
+
+The tell for a 403 is that **metadata resolves and only the tarball download fails**: the request
+was authenticated successfully and rejected on authorization. No amount of token work fixes it.
+Diagnostic contributed by a consumer who chased the wrong one first.
+
 ### Install
 
 ```bash
 npm i -D @jrmoulckers/eslint-config @jrmoulckers/prettier-config @jrmoulckers/tsconfig
 ```
 
-**Do not pin `^0.1.0`.** Early adoption briefs named that range, and on a `0.x` package a caret
-only permits patch updates — `^0.1.0` resolves to `>=0.1.0 <0.2.0` and can never reach `0.2.x`.
-The React presets and the ESLint v16 fix shipped in `0.2.0`, so a manifest pinned at `^0.1.0`
-silently installs a build in which `@jrmoulckers/eslint-config/react` and
-`@jrmoulckers/tsconfig/vite-react.json` **do not exist**. Current floors:
+**Do not use a caret at all while these packages are `0.x`.** On a `0.x` package a caret only
+permits _patch_ updates — `^0.1.0` resolves to `>=0.1.0 <0.2.0` and can never reach `0.2.x`. Early
+adoption briefs named `^0.1.0`, and a manifest still carrying it silently installs a build in
+which `@jrmoulckers/eslint-config/react` and `@jrmoulckers/tsconfig/vite-react.json` **do not
+exist**.
 
-| Package                        | Minimum  | Why                                                                        |
-| ------------------------------ | -------- | -------------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `^0.8.0` | Shipped type declarations; hooks linting in `./next`; type-aware crash fix |
-| `@jrmoulckers/tsconfig`        | `^0.3.0` | `vite-react.json`; TypeScript 6 and 7 support                              |
-| `@jrmoulckers/prettier-config` | `^0.2.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                       |
+The trap is that this repeats at every minor. `^0.3.0` locks you out of `0.4.0` exactly as
+`^0.1.0` locks you out of `0.2.0`, so a consumer who follows a floor table using carets is stale
+again one release later and has no signal. Pin with an explicit upper bound instead, which tracks
+every minor until the first stable major:
+
+| Package                        | Range            | Floor is set by                                                            |
+| ------------------------------ | ---------------- | -------------------------------------------------------------------------- |
+| `@jrmoulckers/eslint-config`   | `>=0.8.0 <1.0.0` | Shipped type declarations; hooks linting in `./next`; type-aware crash fix |
+| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0` | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`          |
+| `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                       |
+
+The floors say what each version _added_, so they only rise when something is genuinely required.
+The ranges keep you current without editing the manifest. Confirm what is actually published
+rather than trusting this table, which is a literal and therefore ages:
+
+```bash
+npm view @jrmoulckers/tsconfig version --registry=https://npm.pkg.github.com
+```
+
+If you are reporting a defect in a preset, **state the version you resolved, not the range you
+pinned.** Several reports have described behaviour fixed many releases earlier, because a `^0.1.0`
+range held the install at `0.1.x` while the report was written against current documentation.
 
 ### The two packages support different TypeScript versions, on purpose
 
