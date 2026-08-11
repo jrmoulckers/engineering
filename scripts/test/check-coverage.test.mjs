@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import { coverage, stripClaim } from '../check-coverage.mjs';
+import { coverage, implementedIds } from '../check-coverage.mjs';
 
 test('every principle is classified exactly once', async () => {
   const { covered, uncovered, total } = await coverage();
@@ -42,13 +42,37 @@ test('a guide header cannot cover a principle its body never implements', () => 
     'Body text.',
   ].join('\n');
 
-  const body = stripClaim(guide);
-  assert.ok(body.includes('ENG-BUILD-001'), 'a genuine body citation still counts');
-  assert.ok(!body.includes('ENG-BUILD-008'), 'a claimed-but-unimplemented endpoint does not');
-  assert.ok(body.includes('# Builds') && body.includes('Body text.'), 'only the claim is removed');
+  const ids = implementedIds(guide);
+  assert.ok(ids.has('ENG-BUILD-001'), 'a heading citation counts');
+  assert.ok(!ids.has('ENG-BUILD-008'), 'a claimed-but-unimplemented endpoint does not');
 });
 
-test('a guide with no Implements line is left intact', () => {
-  const guide = '# Notes\n\nSee `ENG-OBS-001`.';
-  assert.equal(stripClaim(guide), guide);
+test('a passing prose mention is not an implementation', () => {
+  // Both shapes were live in practices/. A cross-reference points elsewhere,
+  // and a not-yet-implemented note says the opposite of what a substring
+  // match concludes — yet each contains the ID.
+  const guide = [
+    '# Resilience',
+    '',
+    '`ENG-INT-005` is implemented in [API services](api-services.md).',
+    '',
+    '## Degrade, do not throw (`ENG-INT-001`)',
+    '',
+    '`ENG-PERF-009` is ratified but not yet implemented by any technique guide.',
+  ].join('\n');
+
+  const ids = implementedIds(guide);
+  assert.deepEqual([...ids], ['ENG-INT-001']);
+});
+
+test('every heading level can declare an implementation', () => {
+  // security.md nests technique under `###`; counting only `##` would drop it.
+  const ids = implementedIds('### Pin actions (`ENG-SEC-002`)\n#### Detail (`ENG-SEC-003`)');
+  assert.deepEqual([...ids].sort(), ['ENG-SEC-002', 'ENG-SEC-003']);
+});
+
+test('a title is not a declaration', () => {
+  // `#` is the document title. Letting it count would restore the header
+  // claim this model exists to reject, one line higher up.
+  assert.deepEqual([...implementedIds('# Security (`ENG-SEC-002`)')], []);
 });
