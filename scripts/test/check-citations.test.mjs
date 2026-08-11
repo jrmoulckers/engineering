@@ -51,6 +51,72 @@ describe('check-citations', () => {
     }
   });
 
+  describe('link paths', () => {
+    // Three consuming repositories independently wrote a correct ID with a
+    // wrong path. The cause is that the area prefix does not follow the
+    // directory layout: of eleven prefixes, only ARCH lives under a directory
+    // named after it. A wrong path is worse than a wrong ID because it looks
+    // authoritative and then 404s.
+
+    test('rejects a real ID pointing at a path derived from its prefix', () => {
+      const dir = fixture(
+        '[ENG-INT-001](https://github.com/jrmoulckers/engineering/blob/v0.13.0/' +
+          'principles/architecture/integration.md)\n',
+      );
+      try {
+        const { code, out } = run(dir);
+        assert.equal(code, 1);
+        assert.match(out, /principles\/platforms\/integration-boundaries\.md/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    for (const [label, link] of [
+      [
+        'absolute pinned link',
+        '[ENG-INT-001](https://github.com/jrmoulckers/engineering/blob/v0.13.0/' +
+          'principles/platforms/integration-boundaries.md)',
+      ],
+      [
+        'gloss and anchor',
+        '[ENG-INT-001 (Thin typed adapters)](https://github.com/jrmoulckers/engineering/' +
+          'blob/main/principles/platforms/integration-boundaries.md#thin-typed-adapters)',
+      ],
+      ['relative link', '[ENG-SEC-001](../principles/assurance/security-and-privacy.md)'],
+      [
+        'link title attribute',
+        '[ENG-SEC-001](../principles/assurance/security-and-privacy.md "Secrets")',
+      ],
+      // Citing the technique, not the principle. Correct as written.
+      [
+        'link to a practice guide',
+        '[ENG-INT-001](https://github.com/jrmoulckers/engineering/blob/main/practices/x.md)',
+      ],
+      ['bare ID with no link', 'Follows ENG-INT-001 closely.'],
+    ]) {
+      test(`accepts a ${label}`, () => {
+        const dir = fixture(`${link}\n`);
+        try {
+          const { code, out } = run(dir);
+          assert.equal(code, 0, out);
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      });
+    }
+
+    test('--no-links disables the check', () => {
+      const dir = fixture('[ENG-INT-001](../principles/architecture/integration.md)\n');
+      try {
+        assert.equal(run(dir).code, 1);
+        assert.equal(run(dir, ['--no-links']).code, 0);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   test('--review prints the real title beside a wrong-meaning citation', () => {
     // The defect this tool exists for: every miscitation seen during the
     // migration used a valid ID that meant something else, so the exit code
