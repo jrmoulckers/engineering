@@ -42,3 +42,50 @@ jobs:
             echo "publishing ${name}@${version}"
             npm publish --workspace "${name}"
           done
+
+  # Every tag gets a GitHub Release, so `releases/latest` resolves. This is
+  # not cosmetic: docs/adopting.md sends consumers to find the newest ref, and
+  # a Releases page that is empty — or worse, stale because only some tags got
+  # one — is how a consumer ends up pinned many versions behind without any
+  # signal. A confidently wrong "latest" is worse than none, so this is
+  # automated rather than left to whoever cuts the tag.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: publish
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Create or update the release for this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "Shared configuration and practice for jrmoulckers repositories."
+            echo
+            echo "Package versions at this tag:"
+            echo
+            for dir in packages/*/; do
+              node -p "const p=require('./${dir}package.json'); '- \`' + p.name + '@' + p.version + '\`'"
+            done
+            echo
+            echo "Go consumers fetch \`configs/golangci.yml\` at this tag."
+            echo
+            echo "Resolve the newest tag deterministically — a lexical sort puts \`v0.9.0\` above \`v0.11.0\`:"
+            echo
+            echo '```bash'
+            echo "git ls-remote --tags --refs https://github.com/${GITHUB_REPOSITORY}.git \\"
+            echo "  | sed 's:.*refs/tags/::' | grep '^v' | sort -V | tail -1"
+            echo '```'
+          } > notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file notes.md --latest
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file notes.md --latest
+          fi
