@@ -33,6 +33,7 @@ Practices may change freely as tooling changes. Principles may not.
 | [Local-first sync](local-first-sync.md)       | `ENG-LOCAL-001`–`ENG-LOCAL-004`, `ENG-DATA-001`                                                               |
 | [Event and data contracts](data-contracts.md) | `ENG-DATA-002`, `ENG-DATA-003`                                                                                |
 | [Performance budgets](performance-budgets.md) | `ENG-WEB-003`, `ENG-PERF-001`, `ENG-PERF-002`, `ENG-PERF-005`, `ENG-PERF-007`, `ENG-PERF-008`, `ENG-TEST-004` |
+| [Native profiling](native-profiling.md)       | `ENG-PERF-007`, and the native halves of `ENG-PERF-001`, `ENG-PERF-002`, `ENG-PERF-008`, `ENG-OBS-004`        |
 | [Go services and tools](go.md)                | `ENG-ARCH-001/002/004`, `ENG-API-001`, `ENG-TEST-001/004/007/010`, `ENG-BUILD-001`                            |
 
 ## Coverage is measured, not asserted

@@ -69,6 +69,13 @@ Profile a **release-shaped** build. Debug builds and development servers carry i
 disabled optimization, and unminified code, so their hot paths are frequently not the shipped
 ones.
 
+**On native platforms, this section is not enough on its own.** The table above names the
+instrument, but a profiler cannot fail a build and a CI benchmark cannot explain a regression —
+they are separate tools with separate outputs, which is invisible on the web because one command
+supplies both. See [Native profiling](native-profiling.md) for the profile-versus-benchmark split,
+the lab-versus-field channels that `ENG-PERF-008` depends on, and why a native budget has to name
+its baseline device.
+
 ## Route regressions before rebudgeting (`ENG-PERF-008`, `ENG-PERF-002`)
 
 When a budget goes red, the ordering is fixed: **reproduce, quantify, bisect, route** — and only
