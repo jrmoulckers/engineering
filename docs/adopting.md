@@ -482,6 +482,14 @@ ref before sending, and say what it contains rather than only quoting it. If you
 `ahead` before you move — a correct-looking SHA from a credible source is exactly the case this
 check exists for.
 
+**Check the recipient even applies before you send.** One repository was told to re-pin shared
+workflow refs three separate times while consuming none of them — 0 `uses:` references across all
+31 of its workflows, a fact the sender had themselves confirmed earlier in the same thread. That is
+not merely wasted effort: it teaches a recipient that messages from the shared repository need not
+apply to them, which is precisely the habit that makes the next real advisory get skimmed. A
+broadcast is cheap to send and expensive to receive, and the cost lands on whoever has to work out
+that it was irrelevant.
+
 **Route by scope. Never replace the default registry.** Setting
 `registry=https://npm.pkg.github.com/` wholesale, rather than scoping it, breaks `npm audit` /
 `pnpm audit` — GitHub Packages implements no advisory endpoint. Under npm the failure reads:
@@ -512,10 +520,18 @@ If audit contacted the scoped registry, this must fail with a DNS error. It did 
 A 401 requires reaching a host; an unroutable host cannot return one. Reproduced independently in
 both npm and pnpm.
 
-> **Audit sends your private package names to `registry.npmjs.org`.** The bulk advisory request
-> contains the name and version of every dependency, `@jrmoulckers/*` included. This is inherent
-> `npm audit` behaviour rather than anything this toolchain adds, but it is worth knowing before
-> pointing audit at a repository whose dependency names are themselves sensitive.
+> **Audit sends dependency names — including `@jrmoulckers/*` — to `registry.npmjs.org`.** The bulk
+> advisory request contains the name and version of every dependency, whichever registry resolved
+> it. Scoping a dependency to a private registry does **not** keep it out of that payload.
+>
+> Be precise about what this does _not_ mean, because the loose version invites a mitigation that
+> does nothing. A consumer intercepted and gunzipped the actual
+> `POST /-/npm/v1/security/advisories/bulk` body rather than reasoning about it: 745 public
+> name/version pairs went out, an isolated probe sent `{"@jrmoulckers/eslint-config":["0.2.1"]}`,
+> and **zero of their own five `private: true` workspace packages appeared**. npm excludes private
+> workspace roots. So "your private package names leak" is false for internals, and renaming or
+> re-scoping them buys nothing. The real exposure is your **dependency** names; the real mitigations
+> are `--offline`, or accepting it.
 
 The no-auth conclusion holds for a plain `npm audit` / `pnpm audit`, which only reads advisory
 data. It does **not** hold for a command that resolves or installs — `npm audit fix`, or any
@@ -2051,6 +2067,16 @@ diagnostic in production found no active crash. Left as a bare number, that repo
 twenty-five times more alarming than the one with nineteen real bugs. Someone comparing the two
 would reasonably conclude the flag is unusable and switch it off, which is the outcome this whole
 section exists to prevent.
+
+**What separates the two is the shape of the read, not the number of them.** The same repository
+supplied the discriminator after sampling its own worst cases: an index read is dangerous when it
+is indexed by something other than the collection's own bounds check — a cross-collection zip,
+a key from one map used to index another, an offset carried in from a caller. Those are the
+`getAllKeys()`/`getAll()` shape, where two sequences are assumed to correspond and nothing enforces
+it. What is almost always safe is `arr[i]` inside a loop bounded by that same array's `length`, a
+regex group behind a successful-match guard, or `split()` of a key the code itself constructed.
+Sort the list by that question before reading it, and a four-figure count usually collapses to a
+handful of sites worth arguing about.
 
 ### The discriminator: what is the index derived from?
 
