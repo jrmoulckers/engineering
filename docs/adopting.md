@@ -516,6 +516,20 @@ remove something is uniquely bad when misdirected, because the recipient cannot 
 tell whether they have misread you or you have misread them. Name the file and line you expect it
 in, so a recipient who lacks it knows immediately that the message is not about them.
 
+**The sharper version of that: confirm the line exists in _their tree_, not in your notes about
+them.** It happened again, and worse. A repository was told to remove a note recording an ADR
+naming convention as "pending" — a repo-wide grep found nothing. The note had never been in their
+tree at all. It existed only in **their earlier report to me**, where they had flagged the
+convention as unresolved in conversation and then, correctly, declined to write speculation into
+the repository. I read my own record of the conversation as a record of their files.
+
+That is a distinct failure from the `sourceMap` case and it is easier to commit, because the
+sender genuinely did see the text — just not where they think. **The check is not "do I remember
+this?" but "does `git grep` find it on their default branch?"** A recipient who diligently follows
+such an instruction will search, find nothing, and be left unable to distinguish a phantom
+instruction from their own oversight. Both of this migration's instances were caught only because
+the recipient reported the absence instead of assuming they had misread.
+
 **Route by scope. Never replace the default registry.** Setting
 `registry=https://npm.pkg.github.com/` wholesale, rather than scoping it, breaks `npm audit` /
 `pnpm audit` — GitHub Packages implements no advisory endpoint. Under npm the failure reads:
@@ -611,7 +625,7 @@ every minor until the first stable major:
 
 | Package                        | Range             | Floor is set by                                                        |
 | ------------------------------ | ----------------- | ---------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `>=0.10.0 <1.0.0` | Runtime deps track the ESLint major, so ESLint 10 gets ESLint 10 rules |
+| `@jrmoulckers/eslint-config`   | `>=0.11.0 <1.0.0` | Runtime deps track the ESLint major, so ESLint 10 gets ESLint 10 rules |
 | `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`      |
 | `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0`  | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                   |
 
@@ -620,8 +634,19 @@ The ranges keep you current without editing the manifest. Confirm what is actual
 rather than trusting this table, which is a literal and therefore ages:
 
 ```bash
-npm view @jrmoulckers/tsconfig version --registry=https://npm.pkg.github.com
+git show origin/main:versions.json
 ```
+
+**Use that, not `npm view`.** This table went stale within one release of being written, and the
+verification command previously recommended here was `npm view`, which requires registry access —
+the one thing the repositories most likely to be stale do not have. A check that only works for
+readers who are already fine is not a check. `versions.json` is committed, so `git show` works from
+any checkout with no authentication, and CI verifies it against the live registry on every run.
+
+**And read `channel` while you are there.** `@jrmoulckers/tsconfig` and
+`@jrmoulckers/prettier-config` are `"channel": "vendored"` — never published, copied in, and
+therefore unaffected by registry access or package visibility. Only `@jrmoulckers/eslint-config` is
+`"channel": "registry"`. Two repositories independently reported being blocked on all three.
 
 **If that command fails for you, read [`versions.json`](../versions.json) at the repository
 root — not a git tag, and not `packages/<name>/package.json`.** A consumer without

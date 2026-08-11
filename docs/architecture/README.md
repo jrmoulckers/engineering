@@ -7,8 +7,17 @@ hypothetical systems, routine implementation details, or decisions owned by Prod
 Name records `NNNN-short-title.md`. Keep them concise and use this structure:
 
 ```markdown
-# NNNN: Decision title
+# ADR-NNNN: Decision title
+```
 
+**The `NNNN-` form governs filenames only. Keep `ADR-NNNN` in headings and prose.** A consumer
+asked for an explicit ruling rather than restyling eleven records on an inference, which was the
+right call — the template previously showed a bare `# NNNN:` heading and so implied the opposite.
+The reasoning is theirs and it is correct: a bare number is ambiguous in running text, where "see
+0009" reads as a quantity, while a filename has directory context and needs no prefix. The label is
+doing real work in prose and none in the path.
+
+```markdown
 - Status: Proposed | Accepted | Superseded
 - Date: YYYY-MM-DD
 - Owner: repository owner
@@ -49,3 +58,36 @@ repository is expected to follow.
 file and a large number of dead links otherwise — one repository counted 49 inbound occurrences
 across 9 files, most of them in a single architecture overview. Grep for the old form before
 committing, not after.
+
+**Count the records before scoping the rename.** A second repository was told to rename six and
+had eleven. A script scoped to the count someone else is holding leaves the remainder
+non-conforming _and_ its links broken, and that state lints clean, typechecks, tests and builds.
+Derive the count from `ls docs/architecture/`, never from an instruction.
+
+**Assert that every link target resolves on disk — no standard gate does this.** The same
+repository ran lint, `format:check`, typecheck, tests and build green, then separately checked
+that all 48 rewritten `NNNN-*.md` targets resolved relative to their referring file. A rename that
+silently drops a link passes all five gates without complaint. If you ask a repository to do this
+work, ask for the link check explicitly, because "gates green" does not cover it.
+
+Two details from that pass worth carrying:
+
+- **Source comments cite records too.** Three `file:line` citations lived in application source,
+  not in docs, and used the old stem. A doc-scoped pass would not have touched them and nothing
+  would have failed.
+- **`git mv`, then verify the rename was detected.** `git diff -M` reporting renames rather than
+  rewrites is what preserves history; confirm the content diff is zero bytes.
+
+### Duplicate numbers are an allocation race, not a discipline problem
+
+When two records claim the same number, the useful framing is not "numbers must be unique" — the
+author of the second `0003` believed theirs was unique. Both authors read the index in parallel,
+both saw `0002` as the highest, and both were correct at the moment they looked.
+
+**Claim the number in the index in a separate commit before writing the record.** The collision
+then surfaces as a merge conflict, which is loud, rather than as two valid-looking files that both
+pass review. Restating the uniqueness rule does not prevent the race; sequencing the claim does.
+
+When a duplicate has already landed, keep the earlier record at its number with a forward pointer,
+give the later one a fresh number, and cross-link both. Renumbering the earlier record breaks every
+inbound citation to it, including any in source comments.
