@@ -467,6 +467,18 @@ If you are reporting a defect in a preset, **state the version you resolved, not
 pinned.** Several reports have described behaviour fixed many releases earlier, because a `^0.1.0`
 range held the install at `0.1.x` while the report was written against current documentation.
 
+**Check the registry, not a git tag.** A repository tag and a package version are different
+numbers and move independently: this repository was at `v0.2.5` while `@jrmoulckers/tsconfig` was
+at `0.2.0`, and is at `v0.15.x` while that package is at `0.4.0`. Reading
+`packages/tsconfig/package.json` at some tag tells you what the source tree contained then, not
+what is published now — a consumer checked exactly that and concluded a peer range had never been
+widened, four releases after it was. The registry is authoritative:
+
+```bash
+npm view @jrmoulckers/tsconfig version peerDependencies \
+  --registry=https://npm.pkg.github.com
+```
+
 ### The two packages support different TypeScript versions, on purpose
 
 | Package                      | `typescript` peer                | Verified against                              |
