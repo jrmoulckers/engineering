@@ -95,10 +95,67 @@ golangci-lint run --config .golangci.yml ./...
 ```
 
 Use that form everywhere the linter is invoked — CI, scripts, and the command you put in your
-README. Prefer wiring the fetch and the run into a single `make lint` (or equivalent) target, so
-the config cannot be absent when the linter runs; the explicit `--config` is then the backstop for
-anyone who bypasses the target. Documentation alone is the weakest of the three, because the
-contributor who most needs the warning is the one who has not read the file yet.
+README. Documentation alone is the weakest of the three, because the contributor who most needs the
+warning is the one who has not read the file yet.
+
+### The blessed `make lint` target
+
+A consumer asked for this rather than inventing one, on the grounds that six repositories would then
+diverge from each other — which is the problem the shared config exists to prevent. That was the
+right instinct, and the gap was mine: this document recommended wiring the fetch and the run into a
+single target without ever giving the form. Copy this one.
+
+```make
+ENGINEERING_REF ?= <latest-tag>
+GOLANGCI_CONFIG := .golangci.yml
+# The ref is in the stamp's *filename*, not its contents. See the note below.
+GOLANGCI_STAMP  := .golangci.$(ENGINEERING_REF).ref
+
+$(GOLANGCI_CONFIG): $(GOLANGCI_STAMP)
+	curl -fsSL --retry 3 \
+	  "https://raw.githubusercontent.com/jrmoulckers/engineering/$(ENGINEERING_REF)/configs/golangci.yml" \
+	  -o $@
+
+$(GOLANGCI_STAMP):
+	rm -f $(GOLANGCI_CONFIG) .golangci.*.ref
+	touch $@
+
+.PHONY: lint
+lint: $(GOLANGCI_CONFIG)
+	golangci-lint run --config $(GOLANGCI_CONFIG) ./...
+```
+
+Gitignore `.golangci.yml` and `.golangci.*.ref`.
+
+Four properties, each earning its line:
+
+- **The config is a prerequisite of `lint`, not a step inside it.** A contributor cannot run the
+  linter without it existing, which is the whole point — the failure being closed is a _silent
+  pass_, and a step they can skip does not close it.
+- **`--config` is still passed explicitly**, as the backstop for anyone who runs `golangci-lint`
+  directly instead of through the target.
+- **The ref is encoded in the stamp filename.** This is the part to copy exactly.
+- **`ENGINEERING_REF ?=` allows CI to override** without editing the file, while keeping the pin in
+  your history as a deliberate commit.
+
+> **The obvious version of this target is broken, and it fails in the stale direction.** Writing the
+> ref into the stamp's _contents_ — `echo $(ENGINEERING_REF) > .golangci.ref` — reads correctly and
+> does not work: **make compares timestamps, not contents.** Once the stamp exists, it is up to date
+> no matter what the ref says, so bumping `ENGINEERING_REF` refetches nothing and you lint against
+> the old config while your Makefile claims the new pin.
+>
+> Verified with `make -n` across three states — clean tree, unchanged ref, bumped ref. The
+> contents-based form emits no fetch on the bump; the filename-based form above emits all three
+> steps. Putting the ref in the filename makes a new ref a _missing prerequisite_, which is the
+> condition make actually acts on. The `rm -f .golangci.*.ref` glob then clears the previous
+> stamp so the directory does not accumulate one file per ref ever used.
+
+**Frame the fetch as a prerequisite of linting, not as a CI step.** A consumer reported that reading
+it as CI-only is exactly what produces the silent pass, and they are right: a contributor who
+believes the fetch belongs to CI has no reason to run it locally, gets a clean run against
+golangci-lint's defaults, and ships. Concretely, in the rebase that prompted this, two of the five
+issues found were `nilerr` and `unused`. **`unused` is on by default; `nilerr` is not.** A
+contributor without the config would have shipped the `nilerr` believing they had linted.
 
 ## Static signals (`ENG-TEST-004`)
 
