@@ -821,6 +821,42 @@ older in CI. If you verified that way, re-check the range you actually committed
 > packed version satisfy my range?" can pass while both sides are stale together. Self-consistency
 > is not currency. Compare against `versions.json` on `main`, not against the tree you packed from.
 
+**"Did you install a tarball, or link a checkout?" is the diagnostic question.** A second consumer
+proposed it after using `npm pack` deliberately — not as a shortcut, but because a workspace link
+resolves differently from a registry install and they wanted the failure modes a real install has.
+That reasoning is right, and it separates two things the paragraph above ran together:
+
+| Method                 | Resolves to        | Exercises your declared range? | Exercises packaging? |
+| ---------------------- | ------------------ | ------------------------------ | -------------------- |
+| `link:` / `file:`      | live working tree  | no                             | no — `files` ignored |
+| `npm pack` + install   | the packed tarball | no                             | **yes**              |
+| lockfile from registry | the published tar  | **yes**                        | yes                  |
+
+So `npm pack` is materially better than a link: it honours `files`, `exports` and `main`, so a
+missing entry point or an unpublished directory fails the way it would in CI. The hazard is
+narrower than "packing is a trap" — it is that the packed tree can be stale, and that **neither**
+local method consults your declared range.
+
+**Byte-identical source across versions still does not license carrying a result forward.** This is
+the part worth internalising, and it comes from that consumer being unusually precise about scope.
+They noted their verification covered only the files their repository actually imports, diffed
+those files between the version they had verified and the version they were bumping to, and found
+them identical — a sound reason to carry the rule-level result forward. Reproduced here: across
+`v0.1.0` and `v0.2.14`, `eslint-config/svelte.js`, `eslint-config/base.js`,
+`prettier-config/svelte.js` and `tsconfig/vite-app.json` are all byte-identical.
+
+And the bump still mattered, because the delta was not in any of those files:
+
+```
+v0.1.0   eslint-plugin-svelte: ^2.46.0
+v0.2.1   eslint-plugin-svelte: ^2.46.0 || ^3.0.0
+```
+
+**`peerDependencies` live in the manifest, not in the modules you import.** A repository on
+`eslint-plugin-svelte` v3 would install cleanly at one version and hit an unmet peer at the other,
+with every consumed file identical between them. So the correct scope statement is narrower than
+"the code I use didn't change": diff the `package.json` too, and say which of the two you checked.
+
 Peer dependencies are not bundled — install the ones your stack needs:
 
 | Stack   | Also install                                                           |
