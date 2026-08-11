@@ -12,14 +12,21 @@
     "",
     "Safe to read at a tag: the check runs on main, so any commit you can check out had this",
     "file matching the registry at that time. Newer versions may exist; none of the versions",
-    "named here will be wrong."
+    "named here will be wrong.",
+    "",
+    "MAINTAINERS: this file records what is PUBLISHED, so it cannot lead a publish. Do not",
+    "bump it in the same pull request that bumps packages/<name>/package.json -- the registry",
+    "check will fail the PR, correctly, because the version named here would not yet exist.",
+    "The order is: merge the code with this file untouched, push the tag so publish.yml runs,",
+    "then open a follow-up that updates this file to match. Between those two steps this file",
+    "is behind, which is the safe direction: every version named here still resolves."
   ],
   "registry": "https://npm.pkg.github.com",
   "packages": {
     "@jrmoulckers/eslint-config": {
-      "version": "0.11.0",
+      "version": "0.10.0",
       "channel": "registry",
-      "range": ">=0.11.0 <1.0.0",
+      "range": ">=0.10.0 <1.0.0",
       "peerDependencies": {
         "eslint": "^9.0.0 || ^10.0.0",
         "typescript": ">=5.5.0 <6.1.0"
