@@ -517,6 +517,33 @@ Peer dependencies are not bundled — install the ones your stack needs:
 | React   | `eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y` |
 | Next.js | `@next/eslint-plugin-next eslint-plugin-react-hooks`                   |
 
+**From `0.9.0` these are genuinely not installed for you, and that is the point.** Framework
+plugins were previously declared as optional `peerDependencies`. That does not do what it appears
+to: `peerDependenciesMeta.optional` suppresses the _error_ when a peer is missing, but npm 7+ still
+installs an optional peer whenever it can resolve one. A Svelte-only repository was measured
+receiving `eslint-plugin-react`, `@next/eslint-plugin-next`, `eslint-plugin-react-hooks` and
+`react-is`; removing them took a clean install from **75 MB to 36.6 MB**.
+
+They are now recorded under a `frameworkPlugins` field, which npm ignores, so the supported ranges
+stay published without npm acting on them:
+
+| Plugin                      | Supported range        |
+| --------------------------- | ---------------------- |
+| `eslint-plugin-svelte`      | `^2.46.0 \|\| ^3.0.0`  |
+| `eslint-plugin-react`       | `^7.37.0`              |
+| `eslint-plugin-react-hooks` | `^5 \|\| ^6 \|\| ^7`   |
+| `eslint-plugin-jsx-a11y`    | `^6.10.0`              |
+| `@next/eslint-plugin-next`  | `^15.0.0 \|\| ^16.0.0` |
+
+Each preset is reached only through its own subpath export and imports its plugin directly, so a
+missing one fails immediately at config load with the package named — you will not get a silent
+half-configured lint run. The cost of this change is that npm no longer checks the _version_ for
+you, so the table above is the contract; a plugin outside its range will fail at lint time rather
+than install time.
+
+If you adopted before `0.9.0` and relied on the plugins arriving implicitly, add the row for your
+stack to your own `devDependencies` when you upgrade.
+
 The Next row includes `eslint-plugin-react-hooks` because Next.js is React and the preset lints
 hooks. Earlier revisions of this table omitted it, which is worth knowing if you adopted from a
 copy: the preset then fails to load rather than silently skipping the rules.
