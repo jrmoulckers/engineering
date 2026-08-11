@@ -243,11 +243,9 @@ describe('react preset lints real files', () => {
     // the version itself and passes a concrete string, so the detection path
     // is never entered.
     //
-    // This is asserted on the config rather than by linting because the fault
-    // only appears on ESLint 10, and the repository's own devDependency pins
-    // one major — under ESLint 9 a regression here lints perfectly. The
-    // eslint-majors CI matrix covers the load-time half; this covers the half
-    // that is invisible on the pinned version.
+    // Asserted on the config because it is cheap and names the fault directly.
+    // It is NOT sufficient on its own — see the behavioural test below, which
+    // is what actually proves the plugin runs.
     const versions = reactConfig()
       .map((entry) => entry.settings?.react?.version)
       .filter((v) => v !== undefined);
@@ -259,6 +257,41 @@ describe('react preset lints real files', () => {
     for (const v of versions) {
       assert.match(v, /^\d+\./, `expected a concrete React version, got ${JSON.stringify(v)}`);
     }
+  });
+
+  test('an eslint-plugin-react rule actually fires, not just react-hooks', async () => {
+    // The gap this closes: every other test in this describe block asserts on
+    // `react-hooks/*` or on the config object. Neither executes a single rule
+    // from eslint-plugin-react — so the plugin could fail to load entirely and
+    // this suite stayed green. The version-detection fault is exactly that
+    // shape: it throws at rule-load time, which under `lintFiles` surfaces as
+    // an exception, and an exception in a rule nobody triggers is invisible.
+    //
+    // Measured on ESLint 10.8.1 with eslint-plugin-react@7.37.5, same tree,
+    // only `settings.react.version` differing:
+    //
+    //   as shipped        -> resolves a concrete version, react/jsx-key fires
+    //   version: 'detect' -> throws "contextOrFilename.getFilename is not a
+    //                        function" while loading rule react/display-name
+    //
+    // `react/jsx-key` is chosen because it is in the plugin's recommended set
+    // and belongs to eslint-plugin-react rather than react-hooks, so it cannot
+    // pass for the wrong reason. Running under the eslint-majors matrix makes
+    // this a real ESLint 10 assertion rather than an ESLint 9 one.
+    const found = await lint('react-plugin-rule', reactConfig(), {
+      'src/List.tsx': [
+        'export function List({ items }: { items: string[] }) {',
+        '  return <ul>{items.map((i) => <li>{i}</li>)}</ul>;',
+        '}',
+        '',
+      ].join('\n'),
+    });
+
+    const fired = [...ruleIds(found)];
+    assert.ok(
+      fired.includes('react/jsx-key'),
+      `expected react/jsx-key from eslint-plugin-react, got: ${fired.join(', ') || '(none)'}`,
+    );
   });
 });
 

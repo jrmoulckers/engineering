@@ -1132,6 +1132,20 @@ vendored third-party sources, apply the same reasoning before your first format 
 run is where the damage lands, and a reflowed snapshot fixture fails as a false test failure a
 long way from its cause.
 
+**But do not exclude a fixture merely for being one — read how it is compared first.** The hazard
+is not that golden fixtures exist, it is that they are **compared as bytes**. A fixture that is
+parsed before it is asserted on — `JSON.parse`, `json.decodeFromString`, then a comparison on the
+resulting object — is immune to reformatting by construction, and excluding it buys nothing.
+
+This matters because the exclusion is not free and not temporary: every path you add is a file
+Prettier stops checking forever. Told only to "check for fixtures," a repository audits six golden
+files, finds all six deserialise before comparing, and still adds six permanent holes to fix a
+problem it did not have.
+
+So the rule is: **find the fixtures, read their consumers, and exclude only the byte-compared
+ones.** `toMatchSnapshot`, `toMatchFileSnapshot`, `.snap` files, and any assertion against a raw
+`readFile` result are byte comparisons. A `parse`-then-`assertEquals` is not.
+
 ### A green test suite does not clear a formatter change
 
 This is the failure mode most likely to cost you real correctness, and it is invisible.
@@ -1960,6 +1974,26 @@ different areas are left alone, since a dash between areas is prose rather than 
 
 **Prefer an enumerated, glossed list over a range** where the members matter. A range is compact for
 the author and lossy for the reader, who cannot tell whether you checked the interior or assumed it.
+
+**The same shape appears outside citations, and there the answer is different.** A consumer read the
+catalog span `ENG-PERF-001` through `ENG-PERF-009` as asserting nine implemented principles, and
+reported that it concealed three with no implementing guide. The three are real —
+`ENG-PERF-003`, `ENG-PERF-004`, `ENG-PERF-009` — but they are **not** concealed: they are enumerated
+in [`practices/uncovered.json`](../practices/uncovered.json), `check-coverage` fails if that ledger
+and reality disagree, and `practices/performance-budgets.md` names them in prose as ratified but not
+yet implemented.
+
+That contrast is the useful part, so state the rule by what separates the two cases rather than by
+the syntax:
+
+> A span is safe exactly when something machine-checked enumerates its exceptions. A citation range
+> asserted meaning for interior members with nothing tracking them, so it had to be expanded. A
+> catalog range asserts membership, and a separate ledger records which members are unimplemented —
+> so the span stays, and the ledger is what you read.
+
+If you inherit a span with no ledger behind it, expand it. If you are writing one, write the ledger
+first — a span backed by nothing is a claim about members nobody verified, which is the failure both
+instances share.
 
 **Wrap so a citation never sits alone on a line.** Keep the qualifying clause on the same line as
 the link. It is a one-line authoring convention that makes any line-oriented review of your file
