@@ -1,7 +1,12 @@
 # Resilience
 
-Implements `ENG-LOCAL-004`, `ENG-WEB-002`, and `ENG-INT-001`–`ENG-INT-005`. This guide adds no
-rules.
+Implements `ENG-LOCAL-004`, `ENG-WEB-002`, `ENG-INT-001`, `ENG-INT-002`, and `ENG-INT-003`. This
+guide adds no rules.
+
+`ENG-INT-005` (credential proxy isolation) is implemented in
+[API and backend services](api-services.md#the-proxy-that-must-not-become-a-backend-eng-int-005).
+`ENG-INT-004` has no implementing section yet and is recorded in
+[`uncovered.json`](uncovered.json).
 
 ## Degrade, do not throw (`ENG-LOCAL-004`, `ENG-INT-001`)
 

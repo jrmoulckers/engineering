@@ -1,12 +1,12 @@
 # Performance budgets
 
-Implements `ENG-WEB-003`, `ENG-PERF-001`, `ENG-PERF-002`, `ENG-PERF-005`– `ENG-PERF-008`, and
-`ENG-TEST-004`. This guide adds no rules.
+Implements `ENG-WEB-003`, `ENG-PERF-001`, `ENG-PERF-002`, `ENG-PERF-005`, `ENG-PERF-007`,
+`ENG-PERF-008`, and `ENG-TEST-004`. This guide adds no rules.
 
-`ENG-PERF-003` (minimal package surface), `ENG-PERF-004` (correctness-preserving caches), and
-`ENG-PERF-009` (assurance precedence) are **ratified but not yet implemented by any technique
-guide**. They are obligations without a recipe; until one exists, satisfy them by recorded
-judgment rather than by citing this file.
+`ENG-PERF-003` (minimal package surface), `ENG-PERF-004` (correctness-preserving caches),
+`ENG-PERF-006`, and `ENG-PERF-009` (assurance precedence) are **ratified but not yet implemented
+by any technique guide**. They are obligations without a recipe; until one exists, satisfy them by
+recorded judgment rather than by citing this file.
 
 ## Two budgets, not one (`ENG-WEB-003`)
 
@@ -32,7 +32,7 @@ aggregate total. Current baselines in use:
 These are **starting points, not targets to grow into**. Raising a budget is a decision that
 needs a recorded reason; a budget that only ever ratchets upward is a budget in name only.
 
-## Runtime budget
+## Runtime budget (`ENG-PERF-005`)
 
 Foreground interaction outranks background work (`ENG-PERF-005`, `ENG-WEB-003`). Background
 tasks — sync, indexing, prefetch — yield under foreground load rather than competing with it.
@@ -69,7 +69,7 @@ Profile a **release-shaped** build. Debug builds and development servers carry i
 disabled optimization, and unminified code, so their hot paths are frequently not the shipped
 ones.
 
-## Route regressions before rebudgeting (`ENG-PERF-008`)
+## Route regressions before rebudgeting (`ENG-PERF-008`, `ENG-PERF-002`)
 
 When a budget goes red, the ordering is fixed: **reproduce, quantify, bisect, route** — and only
 then discuss the budget. Raising the number first ends the alert while keeping the regression.

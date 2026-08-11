@@ -29,38 +29,47 @@ export async function coverage() {
     (name) => name.endsWith('.md') && name !== 'README.md',
   );
 
-  const text = (
-    await Promise.all(
-      guides.map(async (name) => stripClaim(await readFile(join(practicesDir, name), 'utf8'))),
-    )
-  ).join('\n');
+  const claimed = new Set();
+  for (const name of guides) {
+    for (const id of implementedIds(await readFile(join(practicesDir, name), 'utf8'))) {
+      claimed.add(id);
+    }
+  }
 
   const covered = [];
   const uncovered = [];
   for (const p of principles) {
-    (text.includes(p.id) ? covered : uncovered).push(p.id);
+    (claimed.has(p.id) ? covered : uncovered).push(p.id);
   }
 
   return { covered, uncovered, total: principles.length, guides };
 }
 
 /**
- * Remove a guide's leading "Implements ..." claim before counting.
+ * Collect the principle IDs a guide's section headings declare.
  *
- * The claim is what a guide asserts; the body is what it delivers. Counting the
- * claim lets a header cover a principle no section implements. Range notation
- * made that concrete: `ENG-BUILD-001`-`ENG-BUILD-008` marked both endpoints
- * covered while implementing only the first, and said nothing about the six in
- * between — so the ratchet reported coverage the repository did not have.
+ * Counting every occurrence of an ID anywhere in the file overstates coverage
+ * twice over, and both cases were live in this repository:
+ *
+ * 1. A leading "Implements ..." claim. Range notation made it concrete —
+ *    `ENG-BUILD-001`-`ENG-BUILD-008` marked both endpoints covered while
+ *    implementing only the first, and said nothing about the six between.
+ * 2. A passing prose mention. A cross-reference, or a sentence explicitly
+ *    stating that a principle is *not* implemented here, both contain the ID.
+ *    `performance-budgets.md` named three unimplemented principles in exactly
+ *    that shape and the ratchet scored all three as covered.
+ *
+ * A heading is where a guide declares what a section delivers, so that is what
+ * is counted. The cost is that implementing a principle now requires saying so
+ * in a heading, which is the same discipline the guides already follow.
  */
-export function stripClaim(source) {
-  const lines = source.split('\n');
-  const start = lines.findIndex((line) => line.startsWith('Implements '));
-  if (start === -1) return source;
-
-  let end = start;
-  while (end < lines.length && lines[end].trim() !== '') end += 1;
-  return [...lines.slice(0, start), ...lines.slice(end)].join('\n');
+export function implementedIds(source) {
+  const ids = new Set();
+  for (const line of source.split('\n')) {
+    if (!/^#{2,6}\s/.test(line)) continue;
+    for (const match of line.matchAll(/ENG-[A-Z]+-\d+/g)) ids.add(match[0]);
+  }
+  return ids;
 }
 
 function byArea(ids) {
