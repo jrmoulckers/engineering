@@ -298,11 +298,11 @@ The React presets and the ESLint v16 fix shipped in `0.2.0`, so a manifest pinne
 silently installs a build in which `@jrmoulckers/eslint-config/react` and
 `@jrmoulckers/tsconfig/vite-react.json` **do not exist**. Current floors:
 
-| Package                        | Minimum  | Why                                                                    |
-| ------------------------------ | -------- | ---------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `^0.6.0` | Type-aware crash fix; opt-in `strictTypeChecked`; ESLint 10; `./react` |
-| `@jrmoulckers/tsconfig`        | `^0.3.0` | `vite-react.json`; TypeScript 6 and 7 support                          |
-| `@jrmoulckers/prettier-config` | `^0.2.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                   |
+| Package                        | Minimum  | Why                                                                         |
+| ------------------------------ | -------- | --------------------------------------------------------------------------- |
+| `@jrmoulckers/eslint-config`   | `^0.7.0` | Hooks linting in `./next`; type-aware crash fix; opt-in `strictTypeChecked` |
+| `@jrmoulckers/tsconfig`        | `^0.3.0` | `vite-react.json`; TypeScript 6 and 7 support                               |
+| `@jrmoulckers/prettier-config` | `^0.2.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                        |
 
 ### The two packages support different TypeScript versions, on purpose
 
