@@ -1308,6 +1308,24 @@ node /tmp/check-citations.mjs . --review \
   --index "https://raw.githubusercontent.com/jrmoulckers/engineering/${REF}/principles/index.json"
 ```
 
+**Confirm which checks actually ran — the script is fetched, not installed, so a stale copy is
+invisible.** Every run now prints its own identity:
+
+```
+checker v3; checks run: IDs, stated names, link paths. Index: <url>
+```
+
+If that line is missing, or names fewer checks than you expected, you are running an old copy and
+your clean result covers less than you think. A consumer reported link-path validation as a missing
+feature after it had shipped several releases earlier, having fetched the script once and kept it —
+their output could not tell them so, and neither could the exit code. Re-fetch at the latest tag
+rather than reusing a downloaded copy, and treat `--no-links` as a claim you have to justify: it
+announces itself as `(link paths SKIPPED via --no-links)` for exactly that reason.
+
+This is the same failure family as the aborted type-check and the missing lint config: **a tool
+reporting success while doing less than you assume.** The general defence is to make the tool state
+what it did, rather than to remember what it should have done.
+
 **Read the `--review` output; do not just check the exit code.** The exit code only catches an
 ID that does not exist, and that is the rarer mistake. A real ID used for the wrong rule
 exits 0. `--review` prints each principle's real title, plus the neighbouring lines, against
