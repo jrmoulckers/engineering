@@ -457,11 +457,11 @@ The trap is that this repeats at every minor. `^0.3.0` locks you out of `0.4.0` 
 again one release later and has no signal. Pin with an explicit upper bound instead, which tracks
 every minor until the first stable major:
 
-| Package                        | Range            | Floor is set by                                                            |
-| ------------------------------ | ---------------- | -------------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `>=0.8.0 <1.0.0` | Shipped type declarations; hooks linting in `./next`; type-aware crash fix |
-| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0` | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`          |
-| `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                       |
+| Package                        | Range            | Floor is set by                                                              |
+| ------------------------------ | ---------------- | ---------------------------------------------------------------------------- |
+| `@jrmoulckers/eslint-config`   | `>=0.9.0 <1.0.0` | Framework plugins are no longer peers, so an install carries only your stack |
+| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0` | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`            |
+| `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0` | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                         |
 
 The floors say what each version _added_, so they only rise when something is genuinely required.
 The ranges keep you current without editing the manifest. Confirm what is actually published
@@ -486,6 +486,39 @@ widened, four releases after it was. The registry is authoritative:
 npm view @jrmoulckers/tsconfig version peerDependencies \
   --registry=https://npm.pkg.github.com
 ```
+
+**Never cite a repository tag as a version to install.** Release notes here are written against
+repository tags, and adoption briefs have repeated them — but `v0.16.0` is not something you can
+put in a `package.json`, and the three packages carry three different numbers that all differ from
+it. A consumer told to "adopt `v0.2.5`" will reasonably write `^0.2.5` and get a resolution error
+for all three. Resolve each package separately; that is what the command above is for.
+
+### A green install does not prove your peer ranges are satisfied
+
+Package managers disagree about what an unmet peer means, and the disagreement is silent:
+
+| Manager                              | Unmet peer                |
+| ------------------------------------ | ------------------------- |
+| pnpm (default)                       | warning; install succeeds |
+| pnpm with `strict-peer-dependencies` | error                     |
+| npm 7+                               | `ERESOLVE`; install fails |
+
+So a pnpm repository can run lint, format, and typecheck entirely green while three peer ranges are
+unmet, and learn nothing. This is not hypothetical: a consumer verified a full green toolchain and
+only found the unmet ranges by reading the manifests, having sailed past the wall an npm repository
+would have hit on the first install.
+
+The consequence worth acting on is that **a green run in one repository is not evidence for
+another.** If you are on pnpm, check unmet peers explicitly rather than inferring them from a
+passing build:
+
+```bash
+pnpm install --strict-peer-dependencies --lockfile-only
+```
+
+This is the same shape as two other traps in this guide — a clean `rules-of-hooks` run, and a
+lab-only performance channel. In each, a tool reports nothing and the absence is read as
+correctness when it only means the check was never made.
 
 ### The two packages support different TypeScript versions, on purpose
 
