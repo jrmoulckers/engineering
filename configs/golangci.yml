@@ -5,6 +5,14 @@
 #
 # Enables the checks that `go vet` alone does not cover, without enabling
 # opinionated style linters that fight `gofmt`.
+#
+# config-revision: 2
+#
+# Bumped whenever a rule's verdict changes, so a fetched copy can be compared
+# against the newest release without diffing the file. A pinned fetch carries
+# no other staleness signal: revision 1 set errcheck's check-blank to true,
+# which contradicted practices/go.md, and a consumer pinned below this line
+# rewrote ten call sites to satisfy a rule that had already been turned off.
 
 version: '2'
 

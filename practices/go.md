@@ -43,6 +43,11 @@ contradicting this very document. The work was caused by the pin, not by the cod
 compared their tag against the _next_ one and found no difference, which is the trap: adjacent
 tags are usually identical, so only a comparison against the newest release is informative.
 
+The file carries a `config-revision:` marker in its header, bumped whenever a rule's verdict
+changes. Comparing that against the newest release answers "has anything I care about moved?"
+without diffing the file — and a fetched copy with no marker at all is older than the marker,
+which is itself the answer.
+
 ```bash
 latest=$(gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name)
 [ "$latest" = "$ENGINEERING_REF" ] || echo "::notice::pinned $ENGINEERING_REF; newest is $latest"

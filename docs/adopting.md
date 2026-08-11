@@ -1302,6 +1302,43 @@ loudly on a non-200, validate the payload's shape rather than only its size, wri
 file and move it into place only after every check passes, and add the destination to
 `.gitignore` so the fetched copy cannot be committed.
 
+**Every pinned fetch needs a staleness notice, whatever the artifact.** A pin is a decision and
+should stay one — resolving the newest ref at fetch time means a commit here reddens your build
+with no change on your side. But a pin also has no expiry and no lockfile, so nothing tells you it
+has aged. This has now cost four repositories real work, in four different mechanisms and always in
+the same direction: they reported defects that had already been fixed, and in two cases did work to
+satisfy rules that had already been withdrawn.
+
+- A Go consumer pinned at `v0.2.3` rewrote ten call sites to satisfy `errcheck`'s `check-blank`,
+  which a later release had already turned off as contradicting `practices/go.md`.
+- Two consumers ran a citation checker fetched at `v0.2.11` and reported two features as missing
+  that had shipped in the twenty-plus releases since.
+- Four consumers read `packages/*/package.json` **at a repository tag** and reported peer ranges as
+  too narrow that had already been widened. A repository tag is not a package version; `versions.json`
+  is the CI-verified authority.
+- One consumer audited a stale `origin/main` and re-reported a deviation they had themselves fixed.
+
+The notice is four lines and belongs beside every fetch:
+
+```bash
+latest=$(gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name)
+[ "$latest" = "$ENGINEERING_REF" ] || echo "::notice::pinned $ENGINEERING_REF; newest is $latest"
+```
+
+`::notice::`, never a non-zero exit — a tag pushed here must not redden an unrelated PR, or pinning
+stops being a decision and becomes a default someone bumps to get green.
+
+**Compare against the newest release, not the next tag.** Adjacent tags are usually identical, so a
+diff against `N+1` almost always shows nothing and is read as "my pin is current". That is precisely
+the comparison that let the `check-blank` rewrite happen.
+
+**Self-identify what you can.** `check-citations.mjs` prints its version and the checks it ran;
+`configs/golangci.yml` carries a `config-revision` marker bumped whenever a rule's verdict changes.
+Both exist so a fetched artifact can answer "what am I?" without a diff. Note the limit, though: a
+copy old enough to predate the marker cannot report that the marker is missing, so **absence is
+itself the signal** — if the artifact you fetched says nothing about its own version, assume it is
+old.
+
 ## Citing principles
 
 Replace prose that restates a rule with a citation to its ID. Three things make a citation wrong
