@@ -9,6 +9,7 @@ import { ESLint } from 'eslint';
 import { base } from '../base.js';
 import { reactConfig } from '../react.js';
 import { nextConfig } from '../next.js';
+import { svelteConfig } from '../svelte.js';
 
 /**
  * Lint real files with a real ESLint, rather than inspecting the config object.
@@ -134,6 +135,81 @@ describe('base preset lints real files', () => {
       !found.some((m) => m.file.endsWith('tool.js')),
       'type-aware rules must not reach plain JavaScript',
     );
+  });
+});
+
+describe('svelte preset lints real files', () => {
+  test('ambient and namespaced types are not reported as undefined', async () => {
+    // `typescript-eslint`'s `eslint-recommended` layer is scoped to `**/*.ts`,
+    // so it never reached `.svelte`. `no-undef` therefore stayed on for
+    // components, where it cannot see ambient or namespaced types: SvelteKit's
+    // own `App.*` namespace and `NodeJS.Timeout` were reported as undefined in
+    // `<script lang="ts">` while identical code in a `.ts` file was clean.
+    //
+    // Found by a consumer diffing resolved rule sets across file classes. It
+    // was latent rather than live — their components happened to reference no
+    // ambient type — so nothing in the suite or their CI would have surfaced it.
+    const found = await lint('svelte-ambient', svelteConfig({ env: 'browser' }), {
+      'src/Ambient.svelte': [
+        '<script lang="ts">',
+        '  const timer: NodeJS.Timeout = setTimeout(() => {}, 1);',
+        '  export let user: App.User;',
+        '</script>',
+        '',
+        '<div>{timer}{user}</div>',
+        '',
+      ].join('\n'),
+    });
+
+    assert.deepEqual(
+      found.filter((m) => m.ruleId === 'no-undef'),
+      [],
+      'no-undef must not fire on ambient or namespaced types in a component',
+    );
+  });
+
+  test('the Svelte plugin keeps its own rules and its no-self-assign opt out', async () => {
+    // The fix appends `eslint-recommended` after the plugin's configs, so it
+    // could plausibly clobber them. `no-self-assign` is the one that matters:
+    // the plugin turns it off deliberately because `x = x` is Svelte's
+    // invalidation idiom, and re-enabling it would break every component that
+    // uses it.
+    const found = await lint('svelte-plugin', svelteConfig({ env: 'browser' }), {
+      'src/Debug.svelte': [
+        '<script lang="ts">',
+        '  let n = 1;',
+        '</script>',
+        '',
+        '{@debug n}',
+        '',
+      ].join('\n'),
+    });
+
+    const ids = ruleIds(found);
+    assert.ok(ids.has('svelte/no-at-debug-tags'), `plugin rules must still fire: ${[...ids]}`);
+    assert.ok(!ids.has('no-self-assign'), 'the plugin no-self-assign opt out must survive');
+  });
+
+  test('a component still reports the violations the base preset carries', async () => {
+    // The counterweight to the test above: turning `no-undef` off for `.svelte`
+    // must not turn the preset off for `.svelte`.
+    const found = await lint('svelte-violations', svelteConfig({ env: 'browser' }), {
+      'src/Bad.svelte': [
+        '<script lang="ts">',
+        '  const unused = 1;',
+        '  export let a: string;',
+        '  export let b: string;',
+        '  const same = a == b;',
+        '</script>',
+        '',
+        '<div>{same}</div>',
+        '',
+      ].join('\n'),
+    });
+
+    const ids = ruleIds(found);
+    assert.ok(ids.has('eqeqeq'), `missing eqeqeq: ${[...ids]}`);
+    assert.ok(ids.has('@typescript-eslint/no-unused-vars'), `missing unused-vars: ${[...ids]}`);
   });
 });
 

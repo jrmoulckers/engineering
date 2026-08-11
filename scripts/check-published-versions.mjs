@@ -32,6 +32,19 @@ import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+/** Compare two dotted numeric versions. Returns >0 if `a` is newer than `b`. */
+function compareVersions(a, b) {
+  const parse = (v) =>
+    String(v)
+      .split('.')
+      .map((n) => Number.parseInt(n, 10) || 0);
+  const [x, y] = [parse(a), parse(b)];
+  for (let i = 0; i < Math.max(x.length, y.length); i += 1) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+  }
+  return 0;
+}
+
 /** Compare peer ranges as recorded vs published, ignoring key order. */
 function diffPeers(recorded = {}, published = {}) {
   const keys = [...new Set([...Object.keys(recorded), ...Object.keys(published)])].sort();
@@ -126,9 +139,26 @@ for (const [name, entry] of Object.entries(recorded)) {
 
   const { version, peerDependencies } = result.data;
   if (version !== entry.version) {
+    // Name the direction. The two are not the same failure, and the generic
+    // "update versions.json" advice is actively wrong for one of them.
+    //
+    // Recorded ahead of the registry means this file names a version nobody can
+    // install. It is the dangerous direction, and it usually means a version
+    // bump was written here in the same change as the package bump — which this
+    // file cannot carry, because it records what is published.
+    //
+    // Recorded behind means a publish has landed and the follow-up has not.
+    // Every version named here still resolves, so consumers are merely stale.
+    const ahead = compareVersions(entry.version, version) > 0;
     problems.push(
-      `${name}: versions.json says ${entry.version}, registry publishes ${version}\n` +
-        `    Update versions.json — a consumer reading this file is told the wrong version.`,
+      ahead
+        ? `${name}: versions.json says ${entry.version}, registry publishes ${version}\n` +
+            `    versions.json is AHEAD of the registry, so it names a version that cannot be\n` +
+            `    installed. This file records published state and cannot lead a publish: revert\n` +
+            `    it here, merge, push the tag so publish.yml runs, then update it in a follow-up.`
+        : `${name}: versions.json says ${entry.version}, registry publishes ${version}\n` +
+            `    versions.json is BEHIND the registry — a publish landed and this file was not\n` +
+            `    updated. Set it to ${version}. Consumers are reading a stale version right now.`,
     );
   }
 

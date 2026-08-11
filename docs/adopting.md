@@ -1050,6 +1050,60 @@ declarations. `extend` is deliberately typed `unknown[]`: config objects origina
 different copy of `@types/eslint` than yours are not mutually assignable, so a narrower type would
 reject correct configs.
 
+#### Diff the _resolved_ rule set per file class, not the config source
+
+A consumer with no previous ESLint config had no before/after to compare, and said so rather than
+manufacturing one. They applied `eslint --print-config` to a representative file of each class —
+normal TypeScript, a scoped-exception file, a test, a config file, a normal component, an exception
+component — and diffed the **active** rules (severity `off`/`0` filtered, options serialized so an
+option-only change shows up). That is the strongest verification method any consumer has used here,
+and it found a real preset defect that reading the source would not.
+
+**`.svelte` and `.ts` resolved to materially different rule sets, in both directions.** The cause is
+one line of scoping: `typescript-eslint`'s `eslint-recommended` layer declares
+`files: ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts']`, so it never reached `.svelte`. Because
+that single layer both **disables** the core rules the compiler already enforces and **enables**
+four others, its absence moved 18 rules on and 4 off at once:
+
+- **18 active in `.svelte`, off in `.ts`** — the whole `eslint-recommended` disable set, including
+  `no-undef`, `no-redeclare`, `no-const-assign` and `getter-return`.
+- **5 active in `.ts`, off in `.svelte`** — `prefer-const`, `no-var`, `prefer-spread`,
+  `prefer-rest-params`, `no-self-assign`.
+
+**`no-undef` is the one that draws blood**, because it cannot see ambient or namespaced types.
+Verified on a fixture: `NodeJS.Timeout` and SvelteKit's own `App.User` were both reported
+`is not defined` inside `<script lang="ts">`, while byte-identical code in a `.ts` file reported
+nothing. That is unfixable in the source — the identifiers are correct — so every SvelteKit
+repository would hit it on the first component referencing `App.*`.
+
+Fixed in `@jrmoulckers/eslint-config` **0.11.0** by applying the same layer to `**/*.svelte`. The
+resolved sets now differ by exactly one rule, `no-self-assign`, which the Svelte plugin turns off
+deliberately because `x = x` is the invalidation idiom. Three smoke tests lint real components to
+hold it, and reverting the fix fails one of them.
+
+> **The consumer's reading of the second list was wrong, and the correction matters.** They took the
+> 5 rules off in `.svelte` as deliberate Svelte 5 accommodations — plausible, since `prefer-const`
+> genuinely does conflict with `$state` reassignment. Only `no-self-assign` is actually the plugin's
+> decision. The other four are off for the same reason the 18 are on: nothing scoped them to
+> `.svelte` either. **One cause, two opposite-looking symptoms** — which is why a diff that shows
+> both directions is worth more than one that shows only the alarming half. Had the fix been
+> designed around the stated explanation, it would have addressed a rationale that did not exist.
+>
+> The trade the fix accepts, stated plainly: a `.svelte` file with a plain `<script>` gives up
+> `no-undef` too. Svelte projects type-check components with `svelte-check`, so the
+> compiler-already-checks-this rationale holds for the file type, and a false positive with no
+> source-level fix is worse than a missed one another tool reports.
+
+**A latent finding is still a finding.** `no-undef` was not firing on the reporting repository —
+their components happened to reference no ambient type, and their lint was green. They reported it
+anyway, as a sharp edge rather than a break. Nothing in the shared repository's own CI would have
+caught it either. **Report what the diff shows, not what currently fails.**
+
+**Use the same method on your own exceptions.** That consumer's other result was a negative one and
+just as useful: their single scoped exception differed from the unscoped case by **exactly one
+rule**, with zero rules added and zero options changed, so the narrow claim in its comment was true.
+An exception block is the easiest place for scope to leak silently, and this measures it.
+
 ### Prettier — `prettier.config.js`
 
 ```js
