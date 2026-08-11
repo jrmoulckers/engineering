@@ -1153,7 +1153,7 @@ review, and `preserve` exists to permit it:
 
 | Shape           | One-word edit | Two edits, same paragraph | Bounded line length |
 | --------------- | ------------- | ------------------------- | ------------------- |
-| Hard-wrapped    | 3 lines       | merges                    | yes                 |
+| Hard-wrapped    | ~5 lines      | merges                    | yes                 |
 | One long line   | 1 line        | **conflicts**             | no                  |
 | Semantic breaks | 1 line        | merges                    | yes                 |
 
@@ -1161,6 +1161,18 @@ Hard wrapping rewraps every following line in the paragraph, so a one-word chang
 multi-line diff and the real edit has to be hunted for. A single unbroken line avoids that but
 collides on any concurrent edit, since every change touches the same line. Semantic breaks avoid
 both — and `proseWrap: 'always'` destroys them on write, which is why it is not the default.
+
+**The `~5 lines` figure is measured, and it is deliberately not larger.** The consumer who supplied
+it had earlier argued that `'always'` makes a one-word change produce an unbounded multi-line diff,
+then retracted their own claim after measuring it properly — inserting three words mid-paragraph and
+diffing wrapped-baseline against wrapped-after-edit, rather than against the unwrapped original,
+which was the confound in their first attempt. Reflow is bounded by **paragraph** length, not file
+length: 5 changed lines versus 1 for `preserve`.
+
+That is a ~5× ongoing review cost, not a catastrophic one, and the weaker number is the honest one.
+It is worth stating plainly because the argument against `'always'` does not need the exaggeration
+and is damaged by it — the one-time cost carries the case on its own, and a reader who checks the
+inflated version and finds it false has reason to discount the rest.
 
 > **Independently reached, from the largest corpus of the seven.** A consumer measured `'always'`
 > against 590 markdown files and rejected it, arriving at the same mechanism from the other end:
