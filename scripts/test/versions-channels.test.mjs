@@ -63,3 +63,34 @@ describe('versions.json channels are self-describing', () => {
     );
   });
 });
+
+// Every package here is below 1.0, where npm's caret pins the MINOR: ^0.2.0
+// means >=0.2.0 <0.3.0 and silently refuses 0.12.0. Two repositories have
+// adopted a caret-rewritten range and received an old package whose known bugs
+// they then reported as current. The recorded value has to stay safe to paste.
+describe('recorded ranges are safe to copy literally', () => {
+  test('no range uses a caret or tilde', () => {
+    for (const [name, entry] of Object.entries(manifest.packages)) {
+      assert.doesNotMatch(
+        entry.range,
+        /[\^~]/,
+        `${name} records range "${entry.range}" — caret/tilde on a 0.x version pins the ` +
+          `minor, so this would exclude later fixes. Write an explicit >= / < pair.`,
+      );
+    }
+  });
+
+  test('each range admits its own recorded version', () => {
+    // A range that excludes the version published beside it would send every
+    // consumer to something older than what this file claims is current.
+    for (const [name, entry] of Object.entries(manifest.packages)) {
+      const lower = entry.range.match(/>=\s*([\d.]+)/)?.[1];
+      assert.ok(lower, `${name}: range "${entry.range}" has no >= lower bound`);
+      assert.equal(
+        lower,
+        entry.version,
+        `${name}: range lower bound ${lower} does not match published version ${entry.version}`,
+      );
+    }
+  });
+});

@@ -26,7 +26,17 @@
     "of them is installed from the registry at all. That fact was documented in",
     "docs/adopting.md each time, but a consumer reads the docs at the ref they pinned, while",
     "this file is read from main -- so the meaning of \"channel\" lives here, next to the",
-    "value it explains, rather than only in prose that goes stale in the reader's checkout."
+    "value it explains, rather than only in prose that goes stale in the reader's checkout.",
+    "",
+    "Copy \"range\" literally. Do not rewrite it as a caret. Every package here is below 1.0,",
+    "and for a 0.x version npm reads ^0.2.0 as >=0.2.0 <0.3.0 -- it pins the MINOR, not the",
+    "major. So ^0.2.0 silently refuses 0.12.0 and every fix in between. This has now bitten",
+    "two separate repositories: one adopted ^0.1.0, and one planned ^0.2.0 while reporting a",
+    "React/ESLint 10 crash that had been fixed in 0.8.0. In both cases the range recorded",
+    "below was correct and was rewritten into a caret out of habit. The failure is silent --",
+    "the install succeeds, and you get an old package that behaves exactly as its bug reports",
+    "describe. A test rejects caret and tilde forms in this file so the recorded value stays",
+    "safe to paste."
   ],
   "channels": {
     "registry": {
