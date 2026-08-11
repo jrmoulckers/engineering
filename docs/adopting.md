@@ -828,6 +828,25 @@ lints normally, and the same config forced to `'detect'` throws the error above.
 migrating, the `'detect'` line is usually the only thing you need to delete; keeping your own
 `settings.react` block is what reintroduces the failure.
 
+> **Isolating _which_ component throws is not the same as finding the cause, and the difference
+> changed the recommendation.** A consumer on ESLint 10 hit this error, installed the three peers
+> and ran them separately, and produced a clean result: `jsx-a11y` works, `react-hooks` works,
+> `eslint-plugin-react` throws — "the sole fault". Every one of those observations is correct.
+> The conclusion drawn from them was that the plugin is incompatible with ESLint 10 and should be
+> **dropped or gated by ESLint major**.
+>
+> It is not incompatible. Reproduced on ESLint 10.8.1 with that exact plugin version: the preset's
+> full smoke suite passes, and reintroducing `settings.react.version: 'detect'` fails it with the
+> error above. The plugin works; **one setting** does not. Acting on the isolation result would
+> have removed a working plugin — including `react-hooks`, which is the part that found that
+> consumer two genuine stale-closure bugs — to avoid a line they could have deleted.
+>
+> Elimination answers "which one", and "which one" looks like a cause because it is specific and
+> was arrived at by measurement. It is worth one more step: **change the suspect component's
+> configuration before concluding the component is at fault.** The peer-range warning reinforced the
+> wrong reading here, because a declared `^9.7` cap makes "incompatible with 10" the obvious story
+> — but a peer range is an author's claim, not a test result.
+
 `.npmrc` has no Prettier parser. Add it to `.prettierignore`, or `format:check` fails on a file
 Prettier cannot parse.
 
@@ -1006,6 +1025,20 @@ Hard wrapping rewraps every following line in the paragraph, so a one-word chang
 multi-line diff and the real edit has to be hunted for. A single unbroken line avoids that but
 collides on any concurrent edit, since every change touches the same line. Semantic breaks avoid
 both — and `proseWrap: 'always'` destroys them on write, which is why it is not the default.
+
+> **Independently reached, from the largest corpus of the seven.** A consumer measured `'always'`
+> against 590 markdown files and rejected it, arriving at the same mechanism from the other end:
+> the reflow makes a one-word edit a multi-line diff, so `'always'` "costs a mass reflow and buys a
+> worse diff than doing nothing". They ranked `'never'` above `'always'` for review, which is
+> correct as far as it goes — the row this table adds is that **semantic breaks beat both**, and
+> `'preserve'` is what permits them. `'never'` gives one line per paragraph and therefore inherits
+> the concurrent-edit collision in row two.
+>
+> Their sharpest point is about the shape of the answer rather than the value: **do not make it
+> optional.** An inconsistent default is its own tax — every repository re-litigates it, and a
+> shared config that declines to decide has moved the cost rather than removed it. `'preserve'` is
+> also the only value that is safe to impose retroactively, because it is the one that changes
+> nothing already written.
 
 ## 3. Wire it up
 
