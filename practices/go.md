@@ -36,6 +36,21 @@ time, or a tag pushed here changes your lint rules with no commit on your side.
 Run that before the lint job, gitignore the result, and write a generated header naming the
 source and ref so nobody edits it by hand.
 
+**Add a non-fatal staleness notice.** There is no lockfile on this path, so a stale pin has no
+signal at all — and staleness here is not merely cosmetic. A consumer pinned at `v0.2.3` rewrote
+ten call sites to satisfy `errcheck`'s `check-blank`, which `v0.10.0` had already turned off as
+contradicting this very document. The work was caused by the pin, not by the code. They had
+compared their tag against the _next_ one and found no difference, which is the trap: adjacent
+tags are usually identical, so only a comparison against the newest release is informative.
+
+```bash
+latest=$(gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name)
+[ "$latest" = "$ENGINEERING_REF" ] || echo "::notice::pinned $ENGINEERING_REF; newest is $latest"
+```
+
+`::notice::`, never a non-zero exit. A tag pushed here must not redden an unrelated PR, or pinning
+stops being a decision and becomes a default someone bumps to get green.
+
 Three details are load-bearing:
 
 **Pin the ref.** An unpinned fetch means a commit here can redden your build with no change on
