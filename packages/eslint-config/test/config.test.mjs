@@ -224,3 +224,41 @@ describe('base strictTypeChecked (ENG-TEST-008)', () => {
     assert.equal(projectService, true);
   });
 });
+
+describe('published package contents', () => {
+  // A module reachable from an entrypoint but absent from `files` is missing
+  // only in the tarball, so every local gate passes and the failure appears at
+  // the consumer as an unresolvable import. Walk the real import graph rather
+  // than listing expected names, so a future module is covered automatically.
+  test('every module reachable from an entrypoint is published', async () => {
+    const dir = new URL('../', import.meta.url);
+    const pkg = JSON.parse(await readFile(new URL('package.json', dir), 'utf8'));
+    const published = new Set(pkg.files);
+
+    const entrypoints = [...new Set(Object.values(pkg.exports))].map((p) => p.replace('./', ''));
+    const seen = new Set();
+    const queue = [...entrypoints];
+
+    while (queue.length > 0) {
+      const name = queue.pop();
+      if (seen.has(name)) continue;
+      seen.add(name);
+
+      assert.ok(
+        published.has(name),
+        `${name} is reachable from an entrypoint but missing from package.json "files"`,
+      );
+
+      const source = await readFile(new URL(name, dir), 'utf8');
+      for (const match of source.matchAll(/from\s+'\.\/([^']+)'/g)) queue.push(match[1]);
+    }
+  });
+
+  test('every entrypoint is listed in files', async () => {
+    const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    const published = new Set(pkg.files);
+    for (const target of Object.values(pkg.exports)) {
+      assert.ok(published.has(target.replace('./', '')), `${target} is exported but not published`);
+    }
+  });
+});

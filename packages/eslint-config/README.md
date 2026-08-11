@@ -15,7 +15,7 @@ See [docs/adopting.md](../../docs/adopting.md) for installation and authenticati
 | `@jrmoulckers/eslint-config`        | Any TypeScript  | —                                                                            |
 | `@jrmoulckers/eslint-config/svelte` | Svelte 5 + Vite | `eslint-plugin-svelte`                                                       |
 | `@jrmoulckers/eslint-config/react`  | React + Vite    | `eslint-plugin-react`, `eslint-plugin-react-hooks`, `eslint-plugin-jsx-a11y` |
-| `@jrmoulckers/eslint-config/next`   | Next.js         | `@next/eslint-plugin-next`                                                   |
+| `@jrmoulckers/eslint-config/next`   | Next.js         | `@next/eslint-plugin-next`, `eslint-plugin-react-hooks`                      |
 
 ## Options
 
@@ -71,7 +71,7 @@ config files, scripts and tests, so files outside your project cannot abort the
 run. Use `typeAware: true` alone if you want type information available without
 the type-checked rule sets.
 
-The React preset takes one additional option:
+The React **and Next** presets take one additional option:
 
 | Option     | Type      | Default | Effect                                |
 | ---------- | --------- | ------- | ------------------------------------- |
@@ -98,6 +98,21 @@ So the two classic rules are always on, and the rest are enabled with
 
 The opt-out set is **derived** from whatever the installed plugin ships, not hardcoded, so a
 rule added in a future version is handled without a change here.
+
+### The Next preset lints hooks too
+
+Next.js is React, and `eslint-config-next` — what Next consumers migrate off — bundles
+`eslint-plugin-react-hooks`. A Next preset without it would silently drop `rules-of-hooks` and
+`exhaustive-deps`, the two rules most likely to catch a real bug, with nothing at the call site
+to say so.
+
+Both presets resolve hooks through the same module and a test asserts they stay identical, so
+the Next path cannot quietly drift from the React one again. `nextConfig({ compiler: true })`
+opts into the Compiler family on the same terms.
+
+The Next preset does **not** pull in `eslint-plugin-react` or `eslint-plugin-jsx-a11y`. Use
+`reactConfig` if you want those; the hooks rules are included because losing them is a
+correctness regression, not a stylistic preference.
 
 ## Base rules and why
 

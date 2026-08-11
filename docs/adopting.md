@@ -332,7 +332,11 @@ Peer dependencies are not bundled — install the ones your stack needs:
 | Any     | `eslint prettier typescript`                                           |
 | Svelte  | `eslint-plugin-svelte prettier-plugin-svelte`                          |
 | React   | `eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y` |
-| Next.js | `@next/eslint-plugin-next`                                             |
+| Next.js | `@next/eslint-plugin-next eslint-plugin-react-hooks`                   |
+
+The Next row includes `eslint-plugin-react-hooks` because Next.js is React and the preset lints
+hooks. Earlier revisions of this table omitted it, which is worth knowing if you adopted from a
+copy: the preset then fails to load rather than silently skipping the rules.
 
 `.npmrc` has no Prettier parser. Add it to `.prettierignore`, or `format:check` fails on a file
 Prettier cannot parse.

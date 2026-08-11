@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import next from '@next/eslint-plugin-next';
 
 import { nextConfig } from '../next.js';
+import { reactConfig } from '../react.js';
 
 /**
  * A flat config declares `plugins` as an object; eslintrc declares it as an
@@ -154,5 +155,61 @@ describe('next preset type-aware wiring (ENG-TEST-008)', () => {
       ignores.some((g) => String(g).includes('next-env.d.ts')),
       'Next regenerates next-env.d.ts on every build and it trips triple-slash-reference',
     );
+  });
+});
+
+describe('next preset hooks parity (ENG-TEST-008)', () => {
+  const CLASSIC = ['react-hooks/rules-of-hooks', 'react-hooks/exhaustive-deps'];
+
+  /** Merge every rules entry, as ESLint does for a file all entries match. */
+  function allRules(config) {
+    const rules = {};
+    for (const entry of config) Object.assign(rules, entry.rules ?? {});
+    return rules;
+  }
+
+  const severity = (v) => (Array.isArray(v) ? v[0] : v);
+  const isOff = (v) => severity(v) === 'off' || severity(v) === 0;
+
+  test('ships the classic hook rules', () => {
+    // Next.js is React, and eslint-config-next -- what consumers migrate off --
+    // bundles hooks linting. Dropping it here is a silent loss of the two rules
+    // most likely to catch a real bug.
+    const rules = allRules(nextConfig());
+    for (const rule of CLASSIC) {
+      assert.ok(rule in rules, `${rule} missing from the Next preset`);
+      assert.ok(!isOff(rules[rule]), `${rule} present but disabled`);
+    }
+  });
+
+  test('leaves the React Compiler family off by default', () => {
+    const rules = allRules(nextConfig());
+    const compilerRules = Object.keys(rules).filter(
+      (r) => r.startsWith('react-hooks/') && !CLASSIC.includes(r),
+    );
+    // v7 folded the Compiler rules into `recommended`. Enabling them wholesale
+    // produces enough findings on an existing codebase that repositories
+    // respond by disabling the plugin entirely.
+    for (const rule of compilerRules) assert.ok(isOff(rules[rule]), `${rule} should default off`);
+  });
+
+  test('compiler: true opts into the full family', () => {
+    const rules = allRules(nextConfig({ compiler: true }));
+    const enabled = Object.entries(rules).filter(
+      ([r, v]) => r.startsWith('react-hooks/') && !isOff(v),
+    );
+    assert.ok(enabled.length > CLASSIC.length, 'compiler: true enabled nothing extra');
+  });
+
+  test('matches the React preset, so the two cannot drift', () => {
+    const nextHooks = Object.entries(allRules(nextConfig()))
+      .filter(([r]) => r.startsWith('react-hooks/'))
+      .map(([r, v]) => `${r}:${severity(v)}`)
+      .sort();
+    const reactHooksRules = Object.entries(allRules(reactConfig()))
+      .filter(([r]) => r.startsWith('react-hooks/'))
+      .map(([r, v]) => `${r}:${severity(v)}`)
+      .sort();
+    assert.deepEqual(nextHooks, reactHooksRules);
   });
 });
