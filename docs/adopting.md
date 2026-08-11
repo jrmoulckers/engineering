@@ -683,6 +683,10 @@ arrived in TypeScript 5.7, and 5.5 and 5.6 reject an unknown compiler option out
 ignoring it (`TS5023`), which would break consumers still inside the declared peer range. Setting
 it locally means you also own the TypeScript floor it implies.
 
+`node.json` and `vite-node.json` both set `types: ["node"]`, so install `@types/node` alongside
+them. Without it the first run fails with `TS2688: Cannot find type definition file for 'node'`,
+which reads like a broken preset rather than a missing dev dependency.
+
 **Svelte repositories replacing `@tsconfig/svelte`:** use `vite-app.json` and drop `sourceMap`.
 `@tsconfig/svelte` sets it, explaining it is needed "to have warnings/errors of the Svelte
 compiler at the correct position" — a rationale that predates Svelte 5. Measured on svelte-check
