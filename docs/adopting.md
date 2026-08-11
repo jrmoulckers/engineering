@@ -31,6 +31,25 @@ no authority may copy another's normative text — a copy drifts and hides who o
 Keep whatever is genuinely product-specific. Delete only what restates a rule this repository
 already owns.
 
+**A citation replaces prose. If there is no prose, do not add one.** A principle can apply to your
+repository and still be the wrong thing to cite. One consumer found `ENG-WEB-003` (measured
+foreground performance) genuinely satisfied — `bundle-budgets.json`, a budget script, Lighthouse in
+CI — and deliberately did not cite it, because nothing in their docs restated the rule. It was
+enforced by configuration, not narrated. With no duplicated text to remove, the citation would have
+been decoration.
+
+That is the right instinct and it is the test to apply: **citations exist to delete a copy, not to
+demonstrate coverage.** Adding IDs to documents that never claimed the rule inflates apparent
+adoption while removing nothing, and it makes the citations that _are_ load-bearing harder to find.
+A repository that satisfies a principle in config and says nothing about it is already compliant.
+
+**Resolve every ID against `index.json` before citing it — including IDs handed to you.** The same
+consumer was sent a brief containing three incorrect ID-to-title pairings and hit none of them,
+because they looked each one up rather than trusting the label. Two other repositories took the
+labels at face value and cited the wrong principles. A wrong citation is worse than a missing one:
+it reads as deliberate and survives review, because reviewers check that the ID exists far more
+often than they check that it means what the sentence claims.
+
 `principles/index.json` resolves any ID to its title, statement, status, and source path:
 
 ```bash
@@ -237,6 +256,25 @@ It then fails the install with a 401. The warning scrolls past in a wall of inst
 the visible symptom is an unexplained 401 while a token is demonstrably set — worth recognising.
 This is deliberate hardening on pnpm's part and the same instinct as `ENG-SEC-001`, so the
 guidance above is what to follow under either package manager.
+
+> **The behaviour is pnpm 11+, and that makes it a delayed failure.** A repository pinned to pnpm
+> 10 via `packageManager` does not reproduce it, so a committed interpolated `_authToken` appears
+> to work indefinitely. It breaks at a routine `packageManager` bump, with nothing in that diff
+> pointing at the `.npmrc`. Reported by a consumer on pnpm 10.6.1 who correctly predicted they
+> would not reproduce it.
+>
+> Verified on both majors against a project-level `//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}`:
+>
+> | pnpm | Behaviour                                | Result                                           |
+> | ---- | ---------------------------------------- | ------------------------------------------------ |
+> | 10   | expands the variable and sends the token | `ERR_PNPM_FETCH_401` — a real registry rejection |
+> | 11   | warns, ignores the line entirely         | `401` — the token was never sent                 |
+>
+> **Both fail with 401, for opposite reasons**, which is the part that costs debugging time. Under
+> pnpm 10 a 401 means the token is wrong; under pnpm 11 it means your correct token was discarded
+> before the request. Chasing token validity is the natural response and it is the wrong thread on
+> pnpm 11. The `[WARN] Ignored project-level auth setting` line is the only thing distinguishing
+> them, and it appears far above the error. Remove the line and the ambiguity goes with it.
 
 ### Local development
 
@@ -1139,6 +1177,22 @@ const source = readFileSync(target, 'utf8').replace(/["']/g, "'").replace(/\s+/g
 const matches = source.match(pattern) ?? [];
 assert.ok(matches.length > 0, 'guard matched nothing — it is no longer inspecting anything');
 ```
+
+**The clearest evidence for the anchors is a single repository running both ways at once.** One
+adoption produced both outcomes from the same root cause in the same rebase. Fifteen tests across
+eight files broke on `singleQuote` and failed **loudly**, because the non-zero anchors had already
+been added — one of them `creator-escalation.test.ts`, a security guard confining co-creator write
+authority. In the same repository, `i18n-rich-tags.mjs` went from 22 matched call sites to **0 and
+still exited 0**, because it had no anchor.
+
+Same defect, same commit, opposite outcomes, and the only variable was whether the guard asserted
+it had found anything. A security guard silently inspecting an empty set is indistinguishable from
+a security guard passing — that is the whole cost of the missing line.
+
+So the pre-adoption sweep is not optional and is worth stating as a step rather than a caution:
+**grep for `readFileSync` in your tests and scripts before trusting a green suite.** A guard that
+reads source and counts matches passes vacuously the moment its pattern stops matching, and a
+formatting change is exactly what stops it.
 
 Merge the format pass quickly or freeze the branch. Its cost grows with every day it stays open.
 
