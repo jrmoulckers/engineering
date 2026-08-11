@@ -1378,6 +1378,34 @@ Two rules that do matter, because both have been violated in practice:
   repository, and this repository's own guidance tells consumers to cite ADRs by number. Fix a
   collision by giving the _newer_ record the next free number.
 
+### An ADR records a choice you made, not a fact you discovered
+
+`ENG-ARCH-003` is about consequential **tradeoffs**, so the test for whether something belongs in
+a decision record is whether you could have chosen otherwise.
+
+A consuming repository was asked to record third-party behaviour it had just characterised —
+that `npm audit` transmits dependency names to the default registry — and declined, on the
+grounds that an ADR records _its_ decision, while this is inherent behaviour of a tool it neither
+controls nor chose. Recording it locally would misattribute an external constraint as a local
+decision. That reasoning is right, and it generalises:
+
+| What you have                                                                     | Where it goes                                                |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| A tradeoff you chose, with alternatives you rejected                              | an ADR in your repository                                    |
+| Behaviour of a tool or platform you don't control                                 | this guide, or a practice note — not an ADR                  |
+| A choice **about** that behaviour (accept it, work around it, forbid the command) | an ADR — the decision is yours, the behaviour is its context |
+
+The failure this prevents is subtle and cumulative. An ADR corpus whose entries are mostly
+observed facts stops being a record of judgement, and its readers stop expecting the "why" that
+makes a record worth keeping. Worse, the fact goes stale — the tool changes, and a document
+framed as a decision now misstates the world while carrying the authority of a decision nobody
+revisits.
+
+**If the constraint affects every repository, it belongs here, once.** A repository noticing
+shared behaviour should report it rather than document it locally, so it lands in one place
+instead of seven divergent ones. Cite the shared guidance from your ADR when you make a decision
+under it.
+
 ## Expected diff
 
 Adoption should **remove** more than it adds:
