@@ -453,6 +453,35 @@ Pin to a reviewed SHA per `GH-ACT-003`. Workflows that install dependencies: `re
 and `reusable-smoke-test`. Passing none of the new inputs leaves behaviour unchanged —
 `setup-node` skips its auth setup entirely when `registry-url` is empty.
 
+**Never accept a pin without checking its direction first.** A SHA handed to you in a message,
+issue or review comment is meaningless on its own: what matters is how it relates to the ref
+_you_ are already on. Check before you move, and refuse if the answer is `behind`:
+
+```bash
+gh api repos/<owner>/<repo>/compare/<your-current-sha>...<proposed-sha> \
+  --jq '{status, ahead_by, behind_by}'
+# status "ahead"  -> the proposal contains your ref; safe to adopt
+# status "behind" -> the proposal is an ancestor; adopting it is a rollback
+```
+
+This is worth a hard rule because **a backwards re-pin is invisible**. Every other failure in this
+guide announces itself — a 401, a 403, a `startup_failure`. Silently reverting to an older set of
+shared workflows does not: CI stays green, because the older workflows were green too. You simply
+lose whatever they fixed, and you find out later from the symptom rather than the cause.
+
+The mechanism that produces these is worth naming, because it is systemic rather than careless.
+**A single SHA broadcast to several repositories is guaranteed to be wrong for some of them**, since
+each is at a different pin — the same message that advances one repository rolls another back. It
+also happens when the sender quotes the SHA of the branch or PR they are working on rather than the
+tip of the default branch. Four such instructions went out during this migration; the repository
+that checked every one of them and refused caught all four, and the repositories that complied would
+have had no signal at all.
+
+So the obligation runs both ways. If you publish a pin, compare it against each recipient's current
+ref before sending, and say what it contains rather than only quoting it. If you receive one, verify
+`ahead` before you move — a correct-looking SHA from a credible source is exactly the case this
+check exists for.
+
 **Route by scope. Never replace the default registry.** Setting
 `registry=https://npm.pkg.github.com/` wholesale, rather than scoping it, breaks `npm audit` /
 `pnpm audit` — GitHub Packages implements no advisory endpoint. Under npm the failure reads:
