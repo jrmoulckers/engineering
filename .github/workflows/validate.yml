@@ -73,7 +73,12 @@ jobs:
         with:
           node-version: 20
       - run: npm ci --ignore-scripts
-      - run: npm install --no-save eslint@${{ matrix.eslint }} @eslint/js@${{ matrix.eslint }}
+      # --legacy-peer-deps because this repository's dev tree carries
+      # eslint-plugin-react and eslint-plugin-jsx-a11y for the framework preset
+      # tests, and both cap their eslint peer at 9 — a dev-tree artifact, not
+      # anything a consumer sees. Skipping peer resolution is only safe because
+      # the assertion below verifies which versions actually landed.
+      - run: npm install --no-save --legacy-peer-deps eslint@${{ matrix.eslint }} @eslint/js@${{ matrix.eslint }}
       - name: Confirm the requested major is the one actually installed
         shell: bash
         run: |
