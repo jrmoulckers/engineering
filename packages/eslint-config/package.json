@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/eslint-config",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Engineering-owned ESLint flat configuration presets.",
   "license": "UNLICENSED",
   "private": false,
@@ -14,12 +14,28 @@
     "registry": "https://npm.pkg.github.com"
   },
   "exports": {
-    ".": "./base.js",
-    "./base": "./base.js",
-    "./svelte": "./svelte.js",
-    "./react": "./react.js",
-    "./next": "./next.js"
+    ".": {
+      "types": "./base.d.ts",
+      "default": "./base.js"
+    },
+    "./base": {
+      "types": "./base.d.ts",
+      "default": "./base.js"
+    },
+    "./svelte": {
+      "types": "./svelte.d.ts",
+      "default": "./svelte.js"
+    },
+    "./react": {
+      "types": "./react.d.ts",
+      "default": "./react.js"
+    },
+    "./next": {
+      "types": "./next.d.ts",
+      "default": "./next.js"
+    }
   },
+  "types": "./base.d.ts",
   "files": [
     "base.js",
     "svelte.js",
@@ -27,6 +43,11 @@
     "next.js",
     "hooks.js",
     "ignores.js",
+    "base.d.ts",
+    "svelte.d.ts",
+    "react.d.ts",
+    "next.d.ts",
+    "types.d.ts",
     "README.md"
   ],
   "engines": {
