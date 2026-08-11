@@ -1231,11 +1231,29 @@ citation is not.
 Two shapes that stay honest when nothing covers the subject:
 
 - **Name it as yours.** "Colocate tests … a libro convention; the obligation it serves is
-  `ENG-TEST-003` (regress at the narrowest authoritative boundary)." The convention is local,
-  the cited principle is the real obligation beneath it, and neither is misattributed.
+  `ENG-TEST-003` (Regression boundaries)." The convention is local, the cited principle is the
+  real obligation beneath it, and neither is misattributed.
 - **Record it as a decision.** A constraint with no principle behind it is an ADR, and
   `ENG-ARCH-003` is what requires you to write one before treating it as durable. Cite
   `ENG-ARCH-003` for the _recording_, not for the constraint.
+
+**State a boundary by file kind, not by directory, and grep before you assert it.** Framework
+isolation is the case where this bites. `ENG-INT-001` requires framework behaviour to sit behind
+adapters, and the natural way to write that down — "nothing under `lib/` imports the framework" —
+is **false for any repository that colocates components with the logic they serve**. A repository
+that wrote exactly that sentence disproved it with one grep: two `.svelte` files under `lib/`
+import `svelte`, while every `.ts` module under the same directory is framework-free.
+
+The accurate claim was by file kind, and it is both true and checkable:
+
+```bash
+# every .ts module under lib/ is framework-free; .svelte files are the edge
+rg -l "from 'svelte'" src/lib --glob '*.ts' | wc -l   # expect 0
+```
+
+A directory-shaped claim also fails silently the first time someone colocates a component, with
+no test to catch it. Whatever boundary you state, write down the command that proves it and put
+that command in CI — an invariant nothing checks is a comment.
 
 **Do not cite a principle your repository does not follow.** Some principles are conditional on
 an architecture, and the directory says which:
@@ -1292,6 +1310,43 @@ an admission. docket's phrasing is the model:
 If a principle genuinely does not apply, say so plainly rather than citing it, and tell
 Engineering. Only the repository owner may ratify a change to principle text, so a real scope
 gap needs a decision record rather than an edit.
+
+### The false exemption, and why it survives review
+
+The dangerous direction is not citing a principle you do not follow — that gets caught. It is
+**declaring a whole area inapplicable when it binds**, because nothing then contradicts it.
+
+The mechanism is always the same: **an area name reads like an architectural precondition, so a
+repository infers exemption from the name rather than from any principle's Statement.**
+
+A pure-client repository declared all five `ENG-INT-*` principles vacuous — "we have no
+integration boundary to govern" — on the strength of the words _integration boundaries_. Reading
+the Statements, four of the five bind it: `ENG-INT-001` is scoped by **external input and
+framework**, not by owning a service, and that repository parses EPUB containers, OPF metadata
+and OPDS feeds. Only `ENG-INT-005`, about credential proxies, was genuinely out of scope.
+
+**It survived because the repository already complied.** Every one of the four was satisfied by
+existing code, so no review, lint or test could contradict the exemption. That is the property
+that makes this class dangerous, and it inverts the usual risk:
+
+> A false exemption costs nothing for code that exists and everything for code that does not.
+
+The compliant components were never at risk. The exemption's real effect is on the next
+component written under it — in that case, provider adapters under active development — which
+inherits a documented licence to skip a principle nobody will re-check.
+
+**So audit exemptions by Statement, one principle at a time.** Two questions, and an area-level
+answer to either is a finding:
+
+1. Does the principle's Statement name a subject this repository has? Not: does the area name
+   sound like us.
+2. If it binds, do we satisfy it **today**, by evidence? Compliance you cannot point at is
+   indistinguishable from an exemption.
+
+This is the same failure the `platforms/` rule above describes, one level up: there, scope keys
+on the principle's subject rather than its file; here, on its Statement rather than its area
+name. If a repository got one wrong it will usually have got the other wrong too, so check both
+in the same pass.
 
 ## Recording decisions (ADRs)
 
