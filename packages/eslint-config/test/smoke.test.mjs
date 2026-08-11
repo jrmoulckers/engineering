@@ -158,6 +158,32 @@ describe('react preset lints real files', () => {
       `expected rules-of-hooks, got: ${[...ruleIds(found)]}`,
     );
   });
+
+  test('never hands eslint-plugin-react the version it cannot detect', () => {
+    // eslint-plugin-react@7.37.5 declares `eslint: … || ^9.7` and its version
+    // detection calls `context.getFilename()`, removed in ESLint 10. Passing
+    // `'detect'` makes every rule in the plugin fail to load with
+    // `contextOrFilename.getFilename is not a function`. The preset resolves
+    // the version itself and passes a concrete string, so the detection path
+    // is never entered.
+    //
+    // This is asserted on the config rather than by linting because the fault
+    // only appears on ESLint 10, and the repository's own devDependency pins
+    // one major — under ESLint 9 a regression here lints perfectly. The
+    // eslint-majors CI matrix covers the load-time half; this covers the half
+    // that is invisible on the pinned version.
+    const versions = reactConfig()
+      .map((entry) => entry.settings?.react?.version)
+      .filter((v) => v !== undefined);
+
+    assert.ok(
+      !versions.includes('detect'),
+      "settings.react.version must never be 'detect' — it breaks every rule on ESLint 10",
+    );
+    for (const v of versions) {
+      assert.match(v, /^\d+\./, `expected a concrete React version, got ${JSON.stringify(v)}`);
+    }
+  });
 });
 
 describe('next preset lints real files', () => {

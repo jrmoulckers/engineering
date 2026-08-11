@@ -338,6 +338,19 @@ The Next row includes `eslint-plugin-react-hooks` because Next.js is React and t
 hooks. Earlier revisions of this table omitted it, which is worth knowing if you adopted from a
 copy: the preset then fails to load rather than silently skipping the rules.
 
+**On ESLint 10, do not set `settings.react.version` to `'detect'`.** `eslint-plugin-react@7.37.5`
+— the current release — declares `eslint: ... || ^9.7`, and its version detection calls
+`context.getFilename()`, which ESLint 10 removed. Every rule in the plugin then fails to load
+with `contextOrFilename.getFilename is not a function`, which reads like a broken plugin rather
+than a removed API.
+
+`reactConfig()` and `nextConfig()` are **not** affected: they resolve the installed React version
+themselves at config-construction time and pass a concrete string, so nothing enters the detection
+path. Verified against ESLint 10.8.1 with `eslint-plugin-react@7.37.5` and React 19 — the preset
+lints normally, and the same config forced to `'detect'` throws the error above. If you are
+migrating, the `'detect'` line is usually the only thing you need to delete; keeping your own
+`settings.react` block is what reintroduces the failure.
+
 `.npmrc` has no Prettier parser. Add it to `.prettierignore`, or `format:check` fails on a file
 Prettier cannot parse.
 
@@ -536,13 +549,33 @@ The shared config sets `endOfLine: 'lf'`. Commit a `.gitattributes` alongside it
 
 ```
 * text=auto eol=lf
+
+# Windows shells are the one place LF is not automatically safe.
+*.bat text eol=crlf
+*.cmd text eol=crlf
 ```
 
-Without it, a Windows checkout under `core.autocrlf=true` gets CRLF in the working tree while
-the index stays LF. `format:check` then **passes in CI and fails on every Windows machine**,
-which reads as a broken developer setup rather than a missing file. Adding it may reformat many
-files in the working tree while producing a zero-byte commit diff — that is the fix working, not
-a mass rewrite.
+Without the first line, a Windows checkout under `core.autocrlf=true` gets CRLF in the working
+tree while the index stays LF. `format:check` then **passes in CI and fails on every Windows
+machine**, which reads as a broken developer setup rather than a missing file. Adding it may
+reformat many files in the working tree while producing a zero-byte commit diff — that is the fix
+working, not a mass rewrite.
+
+The `*.bat` / `*.cmd` carve-out is precautionary, and it is worth being precise about why, because
+the usual justification is stronger than the evidence. The claim is that `cmd.exe` misparses
+LF-only batch files. Tested on Windows 11 (10.0.26100) across the shapes normally cited —
+a `for` loop block, an `if`/`else` block, a forward `goto`, and `call :label` where the label is
+the final line with no trailing newline — **all four ran correctly with LF endings**. So this is
+not a bug you are likely to hit on a current machine.
+
+Keep the carve-out anyway: it costs nothing, it matches the convention most `.gitattributes`
+templates ship, and `cmd.exe` reads batch files by byte offset, so the tolerance is a property of
+the current implementation rather than a guarantee. Just do not repeat the "it breaks parsing"
+rationale as established fact — a repository that adopts a rule on a reason it never checked
+cannot tell later whether the rule is still needed.
+
+Everything else stays LF, including `.sh` and `.ps1`. Shell scripts genuinely do fail with CRLF —
+that failure is real and reproducible, and `eol=lf` is what prevents it.
 
 ### TypeScript — `tsconfig.json`
 
