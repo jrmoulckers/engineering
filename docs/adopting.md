@@ -1340,7 +1340,7 @@ exists to be run before you open the PR, when there is still a cheap moment to f
 invisible.** Every run now prints its own identity:
 
 ```
-checker v6; checks run: IDs, stated names, link paths. Index: <url>
+checker v7; checks run: IDs, stated names, link paths. Index: <url>
 ```
 
 If that line is missing, or names fewer checks than you expected, you are running an old copy and
@@ -1374,24 +1374,43 @@ URL line alone is not possible — and reading a summary of it instead of the fi
 correct citation gets mistaken for a wrong one.
 
 **The statement is printed because a three-word title pattern-matches too easily — but do not
-treat it as the safer signal.** A consumer proposed this change on the reasoning that "Assurance
-precedence" _sounds_ like it could be about accessibility, and the statement would settle it. The
-example above is why that reasoning is incomplete: `ENG-PERF-009`'s statement contains the literal
-word **accessibility**. The principle most often miscited for accessibility is the one whose
-statement most strongly appears to confirm the miscitation.
+treat it as automatically safer.** A statement can name a concern in passing, and a keyword match
+then reads as confirmation. `ENG-PERF-009` "Assurance precedence" is the standing example: its
+statement contains the literal word **accessibility**, so it will appear to confirm any citation
+placed near an accessibility claim, whether or not it governs one.
 
-So the statement helps against a vague title and hurts against a keyword. It clearly disproves
-`ENG-TEST-003` ("Add a failing regression test at the narrowest authoritative boundary") cited for
-test _colocation_, and `ENG-ARCH-003` ("Record consequential architectural tradeoffs as ADRs")
-cited for a _three-tier shape_. It actively argues _for_ the one miscitation that actually
-recurred. Two of the three real cases improve; the most common one gets worse.
+So the question to ask is not "does this principle mention the topic" but **"does this principle
+govern this claim?"** `ENG-PERF-009` governs _changes made for performance_. It correctly supports
+"a performance change may not trade accessibility away" and does not support "this project
+commits to WCAG 2.2 AA", which no ratified principle requires.
 
-The question to ask is therefore not "does this principle mention the topic" but **"does this
-principle govern this claim?"** `ENG-PERF-009` governs _changes made for performance_; it has
-nothing to say about an accessibility commitment that was never a performance tradeoff. The
-checker prints that question above the review output, because reading for a keyword is the habit
-that produced every miscitation seen so far, and giving that habit more text to match on is not
-by itself a fix.
+**The reviewer's false positive is a failure mode too, and it costs more than it looks.** All three
+worked examples that previously appeared here were wrong. A repository was flagged for citing
+`ENG-PERF-009` at an accessibility rule, `ENG-TEST-003` at test colocation, and `ENG-ARCH-003` at a
+tier boundary. Reading the file settled it: every one was already scoped correctly in the prose —
+"`ENG-PERF-009` **additionally** forbids trading accessibility away for performance", "**a libro
+convention**; the obligation it serves is `ENG-TEST-003`", and an `ENG-ARCH-003` citation pointing
+at the ADR that discharges it. The citations were exemplary. The flag was not.
+
+Two things caused it, and both are worth avoiding:
+
+- **Judging a citation from one line.** A wrapped markdown link leaves the citing line a bare URL,
+  so the qualifying clause sits on the next line. The selection effect is perverse: a long URL is
+  the single most likely thing to get a line of its own, so line-oriented review is least reliable
+  exactly where citations are most carefully written. `--review` prints a context window for this
+  reason — but the reviewer who reported this had been shown a summary, not the file.
+- **Generalizing from an unverified flag.** The false conviction was then written into this guide
+  as an observed pattern and broadcast to other repositories, one of which spent a full audit
+  looking for a defect that never existed. A wrong finding propagates exactly like a right one.
+
+**Wrap so a citation never sits alone on a line.** Keep the qualifying clause on the same line as
+the link. It is a one-line authoring convention that makes any line-oriented review of your file
+sound, and it costs nothing.
+
+The statement-over-title case survives all of this, on better evidence: judging by title alone, one
+consumer would have wrongly convicted `ENG-SEC-007` "Secure failure" for guarding a short API token
+(the statement — "reject unsafe configuration before service" — clears it), while missing a real
+`ENG-SEC-005` defect. Read the statement, then ask whether it governs.
 
 **When an ID appears more than once, judge each use independently.** `--review` marks repeated
 citations `[use k of n]` for this reason. A consumer found a wrong `ENG-SEC-005` citation in a file
@@ -1429,7 +1448,14 @@ governing principle is filed under construction rather than under secrets. **Sea
 matches the feeling finds the principle that matches the feeling** — which is exactly how a
 plausible wrong ID gets chosen. Search the statements for the mechanism you are actually asserting.
 
-**A good discriminator for a suspected miscitation: apply the rest of the principle.** The same
+**Fetch before you audit, and audit the ref you think you are auditing.** A consumer's first run
+reported a deviation their repository had already fixed: their `origin/main` was stale, so the
+checker faithfully reported a state that no longer existed. This is a second, independent staleness
+from the one the tool's version line addresses — that one is a stale _checker_, this is a stale
+_tree_ — and it fails in the more expensive direction, because re-reporting a fixed defect sends
+someone to re-fix it. `git fetch` first, and say which ref your result covers.
+
+The same
 author convicted their own `ENG-SEC-001` citation by observing that you cannot _rotate_ a home
 directory path, and that the rationale — "deleting a leaked value does not revoke copies" — says
 nothing about one. A principle you are citing for one clause should still make sense in its other
