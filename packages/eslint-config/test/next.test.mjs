@@ -68,29 +68,52 @@ describe('next preset', () => {
 
   test('peer range admits the installed plugin major', async () => {
     const { default: manifest } = await import('../package.json', { with: { type: 'json' } });
-    const range = manifest.frameworkPlugins['@next/eslint-plugin-next'];
+    const range = manifest.peerDependencies['@next/eslint-plugin-next'];
     // The preset resolves both majors, so the declared range must not forbid either.
     assert.match(range, /15/);
     assert.match(range, /16/);
   });
 
-  test('framework plugins are not peerDependencies, or every consumer installs them', async () => {
-    // `peerDependenciesMeta.optional` suppresses the *error* when a peer is
-    // missing; it does not stop npm 7+ from installing one it can resolve. With
-    // these declared as peers, a Svelte-only repository was measured pulling in
-    // eslint-plugin-react, @next/eslint-plugin-next, eslint-plugin-react-hooks
-    // and react-is — roughly 5 MB of tooling for a framework it does not use.
-    // The presets import their plugins directly and each is reached only
-    // through its own subpath export, so a missing plugin still fails loudly.
+  test('framework plugins are optional peerDependencies', async () => {
+    // These were briefly moved out of `peerDependencies` into a bespoke
+    // `frameworkPlugins` field, on the belief that npm 7+ installs an optional
+    // peer whenever it can resolve one. That belief is false, and this test
+    // exists so it does not return.
+    //
+    // Measured by packing this package and installing the tarball into a bare
+    // consumer: `eslint` (a *required* peer) is auto-installed, and all five
+    // optional peers are not. Same result on npm 7, npm 11, pnpm 11, and pnpm
+    // with `auto-install-peers=true`. Declaring them optional therefore costs
+    // a consumer nothing at install time, while keeping the supported range
+    // published where npm will check it and warn on a mismatch.
     const { default: manifest } = await import('../package.json', { with: { type: 'json' } });
-    const peers = Object.keys(manifest.peerDependencies ?? {});
-    for (const name of Object.keys(manifest.frameworkPlugins ?? {})) {
-      assert.ok(
-        !peers.includes(name),
-        `${name} must not be a peerDependency — npm would install it for every consumer`,
+    const peers = manifest.peerDependencies ?? {};
+    const meta = manifest.peerDependenciesMeta ?? {};
+
+    assert.ok(
+      !('frameworkPlugins' in manifest),
+      'frameworkPlugins is a bespoke field npm ignores; declare plugins as optional peers instead',
+    );
+
+    const frameworkPlugins = [
+      '@next/eslint-plugin-next',
+      'eslint-plugin-jsx-a11y',
+      'eslint-plugin-react',
+      'eslint-plugin-react-hooks',
+      'eslint-plugin-svelte',
+    ];
+    for (const name of frameworkPlugins) {
+      assert.ok(name in peers, `${name} must be declared so npm can version-check it`);
+      assert.equal(
+        meta[name]?.optional,
+        true,
+        `${name} must be optional — a Svelte repo must not be required to install React plugins`,
       );
     }
-    assert.deepEqual(peers.sort(), ['eslint', 'typescript']);
+
+    // eslint is the only peer a consumer must always have. Marking it optional
+    // would silence the one mismatch warning that matters universally.
+    assert.equal(meta.eslint?.optional, undefined, 'eslint must remain a required peer');
   });
 });
 

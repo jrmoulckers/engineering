@@ -866,15 +866,12 @@ Peer dependencies are not bundled — install the ones your stack needs:
 | React   | `eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y` |
 | Next.js | `@next/eslint-plugin-next eslint-plugin-react-hooks`                   |
 
-**From `0.9.0` these are genuinely not installed for you, and that is the point.** Framework
-plugins were previously declared as optional `peerDependencies`. That does not do what it appears
-to: `peerDependenciesMeta.optional` suppresses the _error_ when a peer is missing, but npm 7+ still
-installs an optional peer whenever it can resolve one. A Svelte-only repository was measured
-receiving `eslint-plugin-react`, `@next/eslint-plugin-next`, `eslint-plugin-react-hooks` and
-`react-is`; removing them took a clean install from **75 MB to 36.6 MB**.
+**These are not installed for you, and that is deliberate — but the reason given here was wrong for
+several releases, so read this if you adopted between `0.9.0` and `0.12.0`.**
 
-They are now recorded under a `frameworkPlugins` field, which npm ignores, so the supported ranges
-stay published without npm acting on them:
+Framework plugins are declared as **optional `peerDependencies`**. npm does not install an optional
+peer, so a Svelte-only repository never receives the React or Next plugins — while the supported
+range stays somewhere npm will check it and warn you on a mismatch:
 
 | Plugin                      | Supported range        |
 | --------------------------- | ---------------------- |
@@ -884,11 +881,30 @@ stay published without npm acting on them:
 | `eslint-plugin-jsx-a11y`    | `^6.10.0`              |
 | `@next/eslint-plugin-next`  | `^15.0.0 \|\| ^16.0.0` |
 
+> **Correction, `0.12.0`.** From `0.9.0` these were moved out of `peerDependencies` into a bespoke
+> `frameworkPlugins` field, and this page asserted that `peerDependenciesMeta.optional` "suppresses
+> the error when a peer is missing, but npm 7+ still installs an optional peer whenever it can
+> resolve one."
+>
+> **That is false, and the change it justified removed version checking for no benefit.** Measured by
+> packing this package and installing the tarball into a bare consumer: `eslint` — a _required_ peer
+> — is auto-installed, and all five optional peers are not. Same result on npm 7, npm 11, pnpm 11,
+> and pnpm with `auto-install-peers=true`. A clean install of the Svelte-only tree came to 38.7 MB
+> with zero React or Next plugins present, at the very version the original report was filed
+> against.
+>
+> The consumer's measurement of 37 packages / 6.2 MB was real; the diagnosis was not, and nobody
+> re-derived it before it became a design change, a documented mechanism, and a regression test that
+> asserted the wrong invariant. If you are carrying a workaround for implicitly-arriving plugins,
+> you can drop it — and if you copied the "optional peers are still installed" claim into your own
+> notes, it is wrong there too.
+>
+> The lesson worth keeping: **a measurement is evidence for the number, not for the cause.**
+
 Each preset is reached only through its own subpath export and imports its plugin directly, so a
 missing one fails immediately at config load with the package named — you will not get a silent
-half-configured lint run. The cost of this change is that npm no longer checks the _version_ for
-you, so the table above is the contract; a plugin outside its range will fail at lint time rather
-than install time.
+half-configured lint run. With the plugins declared again, a version outside its range is now caught
+at install time as an `npm warn peerOptional` rather than only at lint time.
 
 If you adopted before `0.9.0` and relied on the plugins arriving implicitly, add the row for your
 stack to your own `devDependencies` when you upgrade.
