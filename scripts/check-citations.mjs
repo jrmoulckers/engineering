@@ -1,30 +1,39 @@
 #!/usr/bin/env node
 // Validates ENG-* principle citations in documentation.
 //
-// Two failure modes, only one of which a existence check can catch:
+// Three failure modes, only one of which an existence check can catch:
 //
 //   1. The ID does not exist        -> reported as an error, exit 1.
-//   2. The ID exists but means      -> cannot be detected mechanically. The
+//   2. The ID exists but the link   -> reported as an error, exit 1. The area
+//      points at the wrong file        prefix does not match the directory:
+//                                      only ARCH lives under architecture/,
+//                                      so a hand-written path is wrong about
+//                                      nine times out of ten.
+//   3. The ID exists but means      -> cannot be detected mechanically. The
 //      something other than the        checker prints each citation next to the
 //      surrounding prose claims        principle's real title so a human or an
 //                                      agent reviewing the diff sees the
 //                                      mismatch immediately.
 //
-// Mode 2 is the common one. Every miscitation observed during the seven-repo
+// Mode 3 is the common one. Every miscitation observed during the seven-repo
 // migration used a real ID that meant something else, so `--review` output is
-// the point of this tool, not the pass/fail exit code.
+// the point of this tool, not the pass/fail exit code. Mode 2 was found
+// independently by three consuming repositories, which is why it is checked
+// here rather than left to a recipe each repository has to copy.
 
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const CITATION = /\bENG-[A-Z]+-\d{3}\b/g;
+// A markdown link whose visible text names a principle ID.
+const ID_LINK = /\[([^\]]*?)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 const DEFAULT_INDEX =
   'https://raw.githubusercontent.com/jrmoulckers/engineering/main/principles/index.json';
 const TEXT_EXT = new Set(['.md', '.mdx', '.markdown', '.txt', '.yml', '.yaml', '.json']);
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', '.svelte-kit', 'vendor']);
 
 function parseArgs(argv) {
-  const opts = { paths: [], index: DEFAULT_INDEX, review: false, json: false };
+  const opts = { paths: [], index: DEFAULT_INDEX, review: false, json: false, links: true };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--index') {
@@ -32,6 +41,8 @@ function parseArgs(argv) {
       i += 1;
     } else if (arg === '--review') {
       opts.review = true;
+    } else if (arg === '--no-links') {
+      opts.links = false;
     } else if (arg === '--json') {
       opts.json = true;
     } else if (arg === '--help' || arg === '-h') {
@@ -55,10 +66,14 @@ Options:
   --review            Print every citation with the principle's real title,
                       so wrong-meaning citations are visible. Use this when
                       writing citations; existence alone proves little.
+  --no-links          Skip link-path checking. On by default: a link whose
+                      text names a real ID but whose path is wrong looks
+                      authoritative and 404s, and the area prefix does not
+                      follow the directory layout.
   --json              Machine-readable output.
   -h, --help          Show this message.
 
-Exit codes: 0 = no unknown IDs, 1 = unknown IDs found, 2 = tool error.`;
+Exit codes: 0 = clean, 1 = unknown IDs or wrong link paths, 2 = tool error.`;
 
 async function loadIndex(source) {
   let raw;
@@ -103,8 +118,20 @@ async function collectFiles(target) {
 
 async function scanFile(file) {
   const hits = [];
+  const links = [];
   const lines = (await readFile(file, 'utf8')).split(/\r?\n/);
   lines.forEach((text, i) => {
+    for (const [, label, href] of text.matchAll(ID_LINK)) {
+      const id = label.match(/\bENG-[A-Z]+-\d{3}\b/)?.[0];
+      if (!id) continue;
+      const target = href.split('#')[0].trim();
+      // Only links that aim at a principle source file. A link whose text names
+      // an ID but points at a practice guide is citing the technique, not the
+      // principle, and is correct as written.
+      if (!/(^|\/)principles\//.test(target)) continue;
+      links.push({ file, line: i + 1, id, href, target });
+    }
+
     for (const match of text.matchAll(CITATION)) {
       hits.push({
         file,
@@ -121,7 +148,7 @@ async function scanFile(file) {
       });
     }
   });
-  return hits;
+  return { hits, links };
 }
 
 async function main() {
@@ -137,9 +164,24 @@ async function main() {
   for (const target of opts.paths) files.push(...(await collectFiles(target)));
 
   const citations = [];
-  for (const file of files) citations.push(...(await scanFile(file)));
+  const links = [];
+  for (const file of files) {
+    const scanned = await scanFile(file);
+    citations.push(...scanned.hits);
+    links.push(...scanned.links);
+  }
 
   const unknown = citations.filter((c) => !known.has(c.id));
+
+  // A link that names a real ID but points at the wrong file is worse than a
+  // wrong ID: it looks authoritative and 404s. The area prefix does not follow
+  // the directory layout, so this is guesswork nobody wins.
+  const badLinks = opts.links
+    ? links
+        .filter((l) => known.has(l.id))
+        .map((l) => ({ ...l, want: known.get(l.id).source }))
+        .filter((l) => !l.target.endsWith(l.want))
+    : [];
 
   if (opts.json) {
     console.log(
@@ -151,12 +193,13 @@ async function main() {
             title: known.get(c.id)?.title ?? null,
           })),
           unknown,
+          badLinks,
         },
         null,
         2,
       ),
     );
-    return unknown.length > 0 ? 1 : 0;
+    return unknown.length > 0 || badLinks.length > 0 ? 1 : 0;
   }
 
   if (citations.length === 0) {
@@ -185,6 +228,20 @@ async function main() {
     console.error(`${unknown.length} unknown citation(s):\n`);
     for (const c of unknown) console.error(`  ${c.file}:${c.line}  ${c.id}`);
     console.error('\nResolve each against principles/index.json.');
+    return 1;
+  }
+
+  if (badLinks.length > 0) {
+    console.error(`${badLinks.length} citation link(s) point at the wrong file:\n`);
+    for (const l of badLinks) {
+      console.error(`  ${l.file}:${l.line}  ${l.id} -> ${l.href}`);
+      console.error(`      expected a path ending in ${l.want}`);
+    }
+    console.error(
+      '\nThe area prefix does not match the directory: only ARCH lives under\n' +
+        'architecture/. Copy the "source" field from principles/index.json rather\n' +
+        'than deriving the path from the ID.',
+    );
     return 1;
   }
 

@@ -759,54 +759,27 @@ That asserts an equivalence the principle does not support. There is no ratified
 principle, so the fix is to state the accessibility rule as your own and cite `ENG-PERF-009`
 only for what it actually constrains.
 
-**Resolve link paths from `index.json`, never by hand.** IDs and locations are independent: a
-correct ID says nothing about which file holds it, and the prefix is not derivable from the ID —
-`ENG-INT-005` and `ENG-DATA-001` both live under `principles/platforms/`, not under directories
-named for their prefix. A hand-written path produces a valid-looking citation with a dead link,
-and the ID checker passes because the ID is right. `index.json` carries a `source` field for each
-principle, so verify against it:
+**Link paths are checked for you.** IDs and locations are independent, and the area prefix is not
+derivable from the ID: of eleven prefixes, only `ARCH` lives under a directory named after it.
+`ENG-INT-001` is under `principles/platforms/`, not `principles/architecture/`. A hand-written
+path therefore produces a valid-looking citation with a dead link, and an ID-only check passes
+because the ID is right.
 
-```bash
-curl -fsSL -o /tmp/index.json \
-  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.11/principles/index.json
+`check-citations.mjs` validates link paths by default. It compares any markdown link whose text
+names an `ENG-*` ID against that principle's `source` field in `index.json`:
+
+```text
+docs/architecture/connectors.md:14  ENG-INT-001 -> .../principles/architecture/integration.md
+    expected a path ending in principles/platforms/integration-boundaries.md
 ```
 
-```js
-// check-citation-paths.mjs — run: node check-citation-paths.mjs . /tmp/index.json
-import { readFileSync } from 'node:fs';
-import { globSync } from 'node:fs';
+Links pointing at a practice guide are left alone — naming an ID while linking to the technique is
+correct as written. Pass `--no-links` to disable the check, though the only good reason is a
+corpus you do not control.
 
-const [dir = '.', indexPath = '/tmp/index.json'] = process.argv.slice(2);
-const byId = new Map(
-  JSON.parse(readFileSync(indexPath, 'utf8')).principles.map((p) => [p.id, p.source]),
-);
-
-let bad = 0;
-for (const file of globSync('**/*.md', {
-  cwd: dir,
-  exclude: (p) => p.includes('node_modules'),
-})) {
-  const text = readFileSync(`${dir}/${file}`, 'utf8');
-  // Markdown links whose text contains a principle ID.
-  for (const [, id, href] of text.matchAll(/\[[^\]]*?(ENG-[A-Z]+-\d+)[^\]]*?\]\(([^)]+)\)/g)) {
-    const want = byId.get(id);
-    if (!want) continue; // ID existence is the other checker's job.
-    const path = href.split('#')[0];
-    // Only links that aim at the principle source. A link whose text names an
-    // ID but points at a practice guide is citing the technique, not the
-    // principle, and is correct as written.
-    if (!path.includes('principles/')) continue;
-    if (!path.endsWith(want)) {
-      console.log(`${file}: ${id} -> ${href}\n  expected a path ending in ${want}`);
-      bad++;
-    }
-  }
-}
-process.exit(bad === 0 ? 0 : 1);
-```
-
-A consumer that skipped this wrote two wrong paths into a single new document while getting both
-IDs right, then caught them only by scripting the check.
+Three separate repositories wrote a correct ID with a wrong path before this was enforced, one of
+them in a document whose two links were both wrong while both IDs were right. Do not hand-write the
+path; copy `source` from `index.json`.
 
 **If no principle covers it, cite nothing.** A near-miss citation is the one failure mode this
 whole scheme cannot survive: it transfers authorship of a rule to this repository, which never
