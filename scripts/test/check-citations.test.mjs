@@ -257,3 +257,50 @@ describe('check-citations', () => {
     });
   });
 });
+
+describe('bare multi-citation annotation', () => {
+  const SRC = 'https://github.com/jrmoulckers/engineering/blob/main/principles';
+  const link = (id) => `[\`${id}\`](${SRC}/assurance/security-and-privacy.md)`;
+  const pair = (glue) =>
+    `The bridge never persists a library ${link('ENG-SEC-008')}${glue}` +
+    `${link('ENG-SEC-004')}.\n`;
+
+  test('annotates two principle links sharing a line with no connective', () => {
+    const dir = fixture(pair(', '));
+    try {
+      assert.match(run(dir, ['--review']).out, /note: adjacent IDs/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('stays silent once a connective scopes the second ID', () => {
+    const dir = fixture(pair('; additionally '));
+    try {
+      assert.doesNotMatch(run(dir, ['--review']).out, /note: adjacent IDs/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Bare IDs in prose are discussion, not citation. Counting them fired on a
+  // third of this repository's own citations, which is why the check looks for
+  // links rather than for the ID pattern.
+  test('ignores bare IDs mentioned in prose', () => {
+    const dir = fixture('Both ENG-SEC-008 and ENG-SEC-004 are listed in the table.\n');
+    try {
+      assert.doesNotMatch(run(dir, ['--review']).out, /note: adjacent IDs/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('never changes the exit code', () => {
+    const dir = fixture(pair(', '));
+    try {
+      assert.equal(run(dir, ['--review']).code, 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

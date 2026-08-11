@@ -53,9 +53,13 @@ const DEFAULT_INDEX =
 // copy is otherwise indistinguishable from a current one — a consumer reported
 // a missing check that had shipped several releases earlier, having run an old
 // copy that could not tell them so.
-const TOOL_VERSION = '7';
+const TOOL_VERSION = '8';
 const TEXT_EXT = new Set(['.md', '.mdx', '.markdown', '.txt', '.yml', '.yaml', '.json']);
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', '.svelte-kit', 'vendor']);
+// Words that scope one ID against another. Their absence around adjacent IDs is
+// what turns a pair of citations into an implied equivalence claim.
+const CONNECTIVE =
+  /\b(additionally|also|beneath|under|instance of|case of|whereas|while|only the|in part|partly|narrower|broader|discharg|satisf|serves|separately|respectively)\b/i;
 
 function parseArgs(argv) {
   const opts = { paths: [], index: DEFAULT_INDEX, review: false, json: false, links: true };
@@ -169,6 +173,21 @@ async function scanFile(file) {
     }
 
     for (const match of text.matchAll(CITATION)) {
+      const window = lines
+        .slice(Math.max(0, i - 2), i + 3)
+        .map((l, k) => ({ n: Math.max(0, i - 2) + k + 1, text: l }))
+        .filter((l) => l.text.trim() !== '');
+      // Two citation LINKS side by side on one line with no connective assert
+      // "this rule IS those principles". Usually one binds only in part, which
+      // the bare pairing cannot say. Scoped to links on the citing line, not
+      // to IDs in a context window: bare IDs in prose are discussion, not
+      // citation, and counting those fired on a third of all citations here.
+      const linkIds = new Set(
+        [...text.matchAll(ID_LINK)]
+          .filter(([, , href]) => /(^|\/)principles\//.test(href.split('#')[0].trim()))
+          .map(([, label]) => label.match(/\bENG-[A-Z]+-\d{3}\b/)?.[0])
+          .filter(Boolean),
+      );
       hits.push({
         file,
         line: i + 1,
@@ -177,10 +196,8 @@ async function scanFile(file) {
         // A wrapped markdown link puts the ID on a line of its own, with the
         // claim it supports on a neighbouring line. Showing only the citing
         // line renders as a bare URL and hides the very thing being checked.
-        window: lines
-          .slice(Math.max(0, i - 2), i + 3)
-          .map((l, k) => ({ n: Math.max(0, i - 2) + k + 1, text: l }))
-          .filter((l) => l.text.trim() !== ''),
+        window,
+        barePair: linkIds.size > 1 && !CONNECTIVE.test(text),
       });
     }
 
@@ -308,6 +325,9 @@ async function main() {
     const printBody = (c, principle) => {
       if (principle?.statement) {
         console.log(`         says: ${principle.statement}`);
+      }
+      if (c.barePair) {
+        console.log('         note: adjacent IDs, no connective — does each one bind in full?');
       }
       for (const l of c.window ?? [{ n: c.line, text: c.context }]) {
         console.log(`      ${l.n === c.line ? '>' : ' '}  ${l.text.trim()}`);

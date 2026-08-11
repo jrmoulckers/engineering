@@ -1483,6 +1483,14 @@ only when the challenge is checked against nothing and then relayed onward. So t
 flag** — which is also the argument for keeping `--review` cheap enough that checking is the easy
 path.
 
+**A broadcast finding survives independent checking, because nobody re-checks the premise.** The
+repository that spent an audit on the phantom defect did re-run the checker, read its own citations,
+and correctly report itself clean — _against the three examples_, which it took as established fact
+without opening the file they came from. Their own summary of it is the sharpest statement of this
+whole failure mode: the same shortcut, one level down. No tool helps there. A finding you received
+is an artifact you have not read, and the fact that it arrived from an authority is precisely what
+makes it feel already-verified.
+
 **Wrap so a citation never sits alone on a line.** Keep the qualifying clause on the same line as
 the link. It is a one-line authoring convention that makes any line-oriented review of your file
 sound, and it costs nothing.
@@ -1662,6 +1670,24 @@ Their broader conclusion is the right default: **"no change" is a legitimate res
 because a construction _permits_ one is the same failure as adding one because it sounds right.
 The same repository also declined to manufacture a case for the other two shapes, and reported that
 instead. If none of the three fit, cite nothing and say so.
+
+**Two IDs side by side with nothing between them assert that your rule _is_ those principles.** That
+is a stronger claim than citing either alone, and it is usually not the one you mean. One consumer
+supported "the bridge never persists a user's library" with a bare pair of `ENG-SEC-008` and
+`ENG-SEC-004`. Both IDs were correct and the checker was silent, because per-principle scoping makes
+a bare pair _permissible_. But only the data-minimization half of `ENG-SEC-008` binds — its
+lifecycle-evidence half has nothing to attach to, precisely because the bridge retains nothing — and
+`ENG-SEC-004` binds something else entirely, the bridge's own credentials. Their fix names the rule
+as a local convention, cites the obligation genuinely beneath it, says which half does not bind and
+why, and marks the second ID as _additionally_ binding. **Permissible and accurate are not the same
+test**, and stopping at the first is easy because nothing objects.
+
+`--review` now prints `note: adjacent IDs, no connective` when two principle links share a line with
+no scoping word between them. It is an annotation and never affects the exit code: a bare pair is
+often correct, so this is a prompt to check, not a finding. It is also deliberately narrow — an
+earlier version looked for IDs across a context window and fired on a third of this repository's own
+citations, nearly all of them prose _discussing_ principles rather than citing them. A checker that
+cries wolf is a checker somebody turns off.
 
 **State a boundary by file kind, not by directory, and grep before you assert it.** Framework
 isolation is the case where this bites. `ENG-INT-001` requires framework behaviour to sit behind
