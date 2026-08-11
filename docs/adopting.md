@@ -787,6 +787,14 @@ older in CI. If you verified that way, re-check the range you actually committed
 > against the registry — and for a repository blocked on package access, that is precisely the step
 > it cannot run. Treat a `file:`-verified adoption as carrying **one unvalidated field** into CI,
 > and re-read the range by eye against `versions.json` before the pull request opens.
+>
+> **`npm pack` has the same hazard with a sharper edge.** A consumer verified by packing the local
+> checkout, then correctly observed that the packed versions each satisfied their declared range —
+> and concluded the green run therefore covered the manifest. It did, but only against **that
+> checkout**, which was several minors behind `main`. A `file:` link at least always resolves to
+> current source. `npm pack` freezes whatever the tree happened to be, so the check "does the
+> packed version satisfy my range?" can pass while both sides are stale together. Self-consistency
+> is not currency. Compare against `versions.json` on `main`, not against the tree you packed from.
 
 Peer dependencies are not bundled — install the ones your stack needs:
 
@@ -877,8 +885,32 @@ only when a file is named explicitly or matched by an explicit glob. So:
 - If your script is `prettier --check .`, there is nothing to do. Adding `.npmrc` to
   `.prettierignore` is an inert entry guarding a failure the repository cannot have.
 - If your script is `prettier --check "**/*"`, you were **already failing** on binary assets —
-  PNGs, `.wasm` — before `.npmrc` existed. Adding one entry does not fix that, and the honest fix
-  is to target the directory.
+  PNGs, `.wasm` — before `.npmrc` existed. Adding one entry does not fix that. Use
+  **`--ignore-unknown`**, or target the directory.
+
+> **`--ignore-unknown` is the general fix; `.prettierignore` handles only the file that already
+> bit you.** A second consumer made this point after reproducing the glob-vs-directory split
+> independently, and it is right. Measured on 3.9.6 against a fixture holding `.npmrc`, a PNG, and
+> one badly-formatted Markdown file:
+>
+> | Invocation                               | Result                                               |
+> | ---------------------------------------- | ---------------------------------------------------- |
+> | `prettier --check "**"`                  | `No parser could be inferred` on the PNG, **exit 2** |
+> | `prettier --check "**" --ignore-unknown` | skips both, still flags the Markdown, **exit 1**     |
+>
+> The exit code is the part worth noticing. Without the flag the run exits **2** — a tooling error,
+> not a formatting verdict — so the real Markdown finding is reported alongside a failure that has
+> nothing to do with code style. With the flag you get exit **1** and a genuine result. An ignore
+> entry per offending file converges on the same place one bite at a time, and only for files that
+> already exist; `--ignore-unknown` covers every future extensionless config for free.
+
+**A green run is not a refutation of this warning.** If you were told this would hit you and it did
+not, check the shape of your format script before concluding the warning was wrong — the
+directory form silently saved you, and it will keep saving you right up until someone switches it
+to a glob. That is also the one defensible reason to add the `.prettierignore` entry anyway: as
+insurance against the script form changing, recorded as such, rather than as a fix for a failure
+you had. One consumer did exactly that, with a comment saying so. That is fine. What is not fine is
+a later reader inferring from the entry that the repository once had the bug.
 
 > **The suggested fix creates the next instance of the failure it fixes.** Verified: adding a
 > `.prettierignore` containing `.npmrc` under a `**/*` glob removes the `.npmrc` error and
