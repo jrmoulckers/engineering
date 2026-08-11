@@ -1,6 +1,7 @@
 import next from '@next/eslint-plugin-next';
 
 import { base } from './base.js';
+import { resolveHooks } from './hooks.js';
 
 /**
  * Is this a flat config, rather than a legacy eslintrc object?
@@ -54,7 +55,16 @@ function resolveCoreWebVitals() {
  * plugins — ORM guards, i18n literal checks, and similar domain rules — stay in
  * the consuming repository and are passed through `rules` and `extend`.
  *
- * Requires `@next/eslint-plugin-next` in the consumer.
+ * Requires `@next/eslint-plugin-next` and `eslint-plugin-react-hooks` in the
+ * consumer.
+ *
+ * **Hooks linting is included.** Next.js is React, and `eslint-config-next` —
+ * what consumers migrate off — bundles `eslint-plugin-react-hooks`. Omitting it
+ * here would silently drop `rules-of-hooks` and `exhaustive-deps`, the two rules
+ * most likely to catch a real bug, with no signal at the call site. The React
+ * Compiler family stays opt-in via `compiler`, because enabling it wholesale
+ * produces enough findings on an existing codebase that repositories respond by
+ * disabling the plugin outright.
  *
  * **Type-aware.** `@typescript-eslint/no-misused-promises` needs type
  * information, so this preset enables typescript-eslint's project service for
@@ -63,11 +73,12 @@ function resolveCoreWebVitals() {
  * if your repository cannot supply a project — the type-aware rule is then
  * dropped rather than left enabled and crashing.
  *
- * @param {Parameters<typeof base>[0] & { typeAware?: boolean }} [options]
+ * @param {Parameters<typeof base>[0] & { typeAware?: boolean, compiler?: boolean }} [options]
+ * @param {boolean} [options.compiler] Enable the React Compiler rule family. Defaults to false.
  * @returns {import('eslint').Linter.Config[]}
  */
 export function nextConfig(options = {}) {
-  const { ignores = [], extend = [], typeAware = true, ...rest } = options;
+  const { ignores = [], extend = [], typeAware = true, compiler = false, ...rest } = options;
 
   return base({
     ...rest,
@@ -84,6 +95,7 @@ export function nextConfig(options = {}) {
     ],
     extend: [
       resolveCoreWebVitals(),
+      ...resolveHooks(compiler),
       {
         rules: {
           // A type-only import that survives into the emitted module changes
