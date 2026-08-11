@@ -378,6 +378,23 @@ jobs:
 Pass a `secrets: NODE_AUTH_TOKEN:` block only for a registry the job's own token cannot reach.
 If you staged one for GitHub Packages, delete it.
 
+**Deleting it is a simplification, not a repair — and that distinction is worth stating out loud.**
+`NODE_AUTH_TOKEN` is still a declared optional `workflow_call` secret in every one of these
+callees, so a caller that keeps passing it goes on working. The old shape carries dead config; it
+does not break. One repository checked the callees' `on.workflow_call` blocks _before_ removing the
+secret rather than after, which is the right order, and it turned an apparently urgent change into
+a tidy-up.
+
+This generalizes past workflows, and it is a duty on whoever publishes the guidance rather than on
+you: **whenever a recommended shape changes, say whether the previous shape still works.** Silence
+on that point reads as _breaking_, and the rational response to a suspected break is to re-pin
+immediately — which is precisely the action most likely to expose an unrelated latent fault, such
+as the permission-ceiling failure above. A shape change announced without a compatibility note can
+therefore cause more breakage than the change itself ever would.
+
+So when you receive one: establish whether it is required or cosmetic before you schedule it, and
+verify against the callee's declared interface rather than against the announcement.
+
 **An explicitly passed secret beats the fallback, and that destroys your diagnosis.** If the caller
 passes `NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}`, the workflow authenticates as that PAT
 and never exercises `github.token` at all. A `403 permission_denied: read_package` then tells you
