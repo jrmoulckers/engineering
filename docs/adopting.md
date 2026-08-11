@@ -517,6 +517,19 @@ rather than trusting this table, which is a literal and therefore ages:
 npm view @jrmoulckers/tsconfig version --registry=https://npm.pkg.github.com
 ```
 
+**If that command fails for you, this table is your authority — not a git tag.** A consumer
+without `read:packages` gets `401`/`403` here, which is the same position as a repository whose
+access grant has not landed yet. The tempting fallback is to read
+`packages/<name>/package.json` at a tag, and it is wrong in a way that looks authoritative: it
+reports the source tree at that moment, not what is published. That failure has now happened
+repeatedly, in both directions — a consumer concluding a fix was missing when it had shipped
+several releases earlier, and Engineering citing a repository tag as though it were an
+installable version. **Both are the same mistake**, and the second one causes the first.
+
+So: if you cannot query the registry, take versions from this table or from the release notes,
+and say in your report that you could not verify against the registry. That sentence is what
+lets the claim be checked rather than propagated.
+
 If you are reporting a defect in a preset, **state the version you resolved, not the range you
 pinned.** Several reports have described behaviour fixed many releases earlier, because a `^0.1.0`
 range held the install at `0.1.x` while the report was written against current documentation.
