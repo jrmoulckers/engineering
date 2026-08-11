@@ -941,6 +941,29 @@ it locally means you also own the TypeScript floor it implies.
 them. Without it the first run fails with `TS2688: Cannot find type definition file for 'node'`,
 which reads like a broken preset rather than a missing dev dependency.
 
+#### Replacing an existing root `tsconfig.base.json`
+
+If your repository already has a root TypeScript config, two things decide the migration, and
+they are documented in different sections — so read both before opening the PR.
+
+1. **`tsconfig` is a vendored package, not a registry one** (§2). Replacing a local base does not
+   add a registry dependency, does not need a token, and does not wait on package access. If you
+   have been holding a tsconfig migration behind registry auth, it was never blocked.
+2. **Pick the variant per package, not per repository.** A repository whose server runs `.ts`
+   directly and whose web app emits needs `node.json` for the former and `base.json` for the
+   latter. That is the normal shape, not a workaround.
+
+**Diff the old base against the preset before deleting it, option by option**, and treat any
+option the preset lacks as a finding rather than an oversight. The presets are deliberately not
+supersets. A concrete case: a repository fixing a Node 24 `ERR_MODULE_NOT_FOUND` had added
+`allowImportingTsExtensions` to its own base; `base.json` does not set it, so a straight
+replacement would have reintroduced the bug the option was added to fix. The answer was
+`node.json` for that package — not hoisting the option into the base, which breaks every
+emitting consumer with `TS5096` as shown above.
+
+State the delta in the PR description. "Adopted the shared base" hides a regression; "adopted
+the shared base; server moves to `node.json` to keep `.ts` specifiers working" does not.
+
 **Svelte repositories replacing `@tsconfig/svelte`:** use `vite-app.json` and drop `sourceMap`.
 `@tsconfig/svelte` sets it, explaining it is needed "to have warnings/errors of the Svelte
 compiler at the correct position" — a rationale that predates Svelte 5. Measured on svelte-check
@@ -1233,6 +1256,17 @@ local-first, so `local-first.md` does not apply to us" would drop three principl
 **Check whether the platform-independent half still binds.** The exportability requirement in
 `ENG-LOCAL-001` holds no matter who is authoritative, so a server-canonical product still owes
 it.
+
+The whole rule, in one sentence, if you need something quotable for a review:
+
+> A `platforms/` principle binds a repository when the repository is on that platform and the
+> principle's specific subject applies to it; being outside one principle's subject does not
+> release the sibling principles in the same file, nor the platform-independent parts of the
+> principle itself.
+
+Key on the **subject**, not the directory. `ENG-LOCAL-001` is about where the system of record
+lives; `002`, `003` and `004` are about the sync seam. A repository can answer the first
+question differently while owing all three of the others, which is exactly docket's position.
 
 **Say it where the architecture is described**, not in a compliance appendix — and word it as
 scope rather than as a departure, because a reader who finds it later will otherwise read it as
