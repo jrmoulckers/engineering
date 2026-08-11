@@ -30,7 +30,8 @@ Practices may change freely as tooling changes. Principles may not.
 | [Security](security.md)                       | `ENG-SEC-002`–`ENG-SEC-008`                                                                                   |
 | [Build and release](build-and-release.md)     | `ENG-BUILD-002`–`ENG-BUILD-008`                                                                               |
 | [Frontend layering](frontend-layering.md)     | `ENG-ARCH-001`, `ENG-WEB-004`                                                                                 |
-| [Local-first sync](local-first-sync.md)       | `ENG-LOCAL-001`–`ENG-LOCAL-004`, `ENG-DATA-001`–`ENG-DATA-003`                                                |
+| [Local-first sync](local-first-sync.md)       | `ENG-LOCAL-001`–`ENG-LOCAL-004`, `ENG-DATA-001`                                                               |
+| [Event and data contracts](data-contracts.md) | `ENG-DATA-002`, `ENG-DATA-003`                                                                                |
 | [Performance budgets](performance-budgets.md) | `ENG-WEB-003`, `ENG-PERF-001`, `ENG-PERF-002`, `ENG-PERF-005`, `ENG-PERF-007`, `ENG-PERF-008`, `ENG-TEST-004` |
 | [Go services and tools](go.md)                | `ENG-ARCH-001/002/004`, `ENG-API-001`, `ENG-TEST-001/004/007/010`, `ENG-BUILD-001`                            |
 
