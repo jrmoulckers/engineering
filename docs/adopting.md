@@ -1308,11 +1308,18 @@ node /tmp/check-citations.mjs . --review \
   --index "https://raw.githubusercontent.com/jrmoulckers/engineering/${REF}/principles/index.json"
 ```
 
+**That recipe is for a local pre-PR run, not for CI.** A consumer declined to wire it into their
+workflow and was right to: `curl | node` from a tag, inside a job holding a token, is a
+supply-chain seam, and a tag is mutable — it can be moved to point at different code after you
+reviewed it. If you do want it in CI, pin `REF` to a **commit SHA** rather than a tag, so the
+fetched bytes cannot change under you. Nothing here needs to run in CI to be useful; the check
+exists to be run before you open the PR, when there is still a cheap moment to fix a citation.
+
 **Confirm which checks actually ran — the script is fetched, not installed, so a stale copy is
 invisible.** Every run now prints its own identity:
 
 ```
-checker v3; checks run: IDs, stated names, link paths. Index: <url>
+checker v4; checks run: IDs, stated names, link paths. Index: <url>
 ```
 
 If that line is missing, or names fewer checks than you expected, you are running an old copy and
@@ -1328,11 +1335,13 @@ what it did, rather than to remember what it should have done.
 
 **Read the `--review` output; do not just check the exit code.** The exit code only catches an
 ID that does not exist, and that is the rarer mistake. A real ID used for the wrong rule
-exits 0. `--review` prints each principle's real title, plus the neighbouring lines, against
-every citation:
+exits 0. `--review` prints each principle's real title and its full statement, plus the
+neighbouring lines, against every citation:
 
 ```
     171  ENG-PERF-009   Assurance precedence
+         says: Reject performance changes that weaken correctness, accessibility,
+               privacy, or security.
          keyboard control and correctly labelled transport controls.
       >  [`ENG-PERF-009`](…/assurance/performance.md)
          additionally forbids trading accessibility away for performance.
@@ -1342,6 +1351,34 @@ The neighbouring lines are the point. A wrapped markdown link leaves the citing 
 so the claim being checked sits on the line above or below it. Judging that citation from the
 URL line alone is not possible — and reading a summary of it instead of the file is how a
 correct citation gets mistaken for a wrong one.
+
+**The statement is printed because a three-word title pattern-matches too easily — but do not
+treat it as the safer signal.** A consumer proposed this change on the reasoning that "Assurance
+precedence" _sounds_ like it could be about accessibility, and the statement would settle it. The
+example above is why that reasoning is incomplete: `ENG-PERF-009`'s statement contains the literal
+word **accessibility**. The principle most often miscited for accessibility is the one whose
+statement most strongly appears to confirm the miscitation.
+
+So the statement helps against a vague title and hurts against a keyword. It clearly disproves
+`ENG-TEST-003` ("Add a failing regression test at the narrowest authoritative boundary") cited for
+test _colocation_, and `ENG-ARCH-003` ("Record consequential architectural tradeoffs as ADRs")
+cited for a _three-tier shape_. It actively argues _for_ the one miscitation that actually
+recurred. Two of the three real cases improve; the most common one gets worse.
+
+The question to ask is therefore not "does this principle mention the topic" but **"does this
+principle govern this claim?"** `ENG-PERF-009` governs _changes made for performance_; it has
+nothing to say about an accessibility commitment that was never a performance tradeoff. The
+checker prints that question above the review output, because reading for a keyword is the habit
+that produced every miscitation seen so far, and giving that habit more text to match on is not
+by itself a fix.
+
+**The checker reads the working tree, not git history.** It walks files on disk and never shells
+out to git, so a miscitation already merged to `main` is invisible from a feature branch that does
+not touch that file. A clean run means _the tree you are standing in_ is clean. To clear a
+repository rather than a branch, run it against a checkout of `main` as well — the repository that
+reported the cleanest result was clean partly because every one of its citations was still
+unmerged, which is the case least likely to hide anything and therefore the case that proves the
+least.
 
 The example above is **correct**, and reads as correct: `ENG-PERF-009` is not an accessibility
 rule, and the prose does not claim it is — it says the principle _additionally_ forbids trading

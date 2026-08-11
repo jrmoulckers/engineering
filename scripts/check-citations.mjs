@@ -11,15 +11,25 @@
 //                                      nine times out of ten.
 //   3. The ID exists but means      -> cannot be detected mechanically. The
 //      something other than the        checker prints each citation next to the
-//      surrounding prose claims        principle's real title so a human or an
-//                                      agent reviewing the diff sees the
-//                                      mismatch immediately.
+//      surrounding prose claims        principle's real title AND statement so a
+//                                      human or an agent reviewing the diff sees
+//                                      the mismatch.
 //
 // Mode 3 is the common one. Every miscitation observed during the seven-repo
 // migration used a real ID that meant something else, so `--review` output is
 // the point of this tool, not the pass/fail exit code. Mode 2 was found
 // independently by three consuming repositories, which is why it is checked
 // here rather than left to a recipe each repository has to copy.
+//
+// The statement is printed because a three-word title pattern-matches too
+// easily. But it is not strictly safer, and the difference matters: a statement
+// naming a concern in passing reads as confirmation. ENG-PERF-009 "Assurance
+// precedence" is "Reject performance changes that weaken correctness,
+// ACCESSIBILITY, privacy, or security" — so the one principle most often
+// miscited for accessibility is the one whose statement contains the word.
+// Reading for a keyword is what produced the miscitation; the statement gives
+// that habit more to match on. Hence the banner: ask whether the principle
+// governs the claim, not whether it mentions the topic.
 
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -39,7 +49,7 @@ const DEFAULT_INDEX =
 // copy is otherwise indistinguishable from a current one — a consumer reported
 // a missing check that had shipped several releases earlier, having run an old
 // copy that could not tell them so.
-const TOOL_VERSION = '3';
+const TOOL_VERSION = '4';
 const TEXT_EXT = new Set(['.md', '.mdx', '.markdown', '.txt', '.yml', '.yaml', '.json']);
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', '.svelte-kit', 'vendor']);
 
@@ -258,6 +268,12 @@ async function main() {
   }
 
   if (opts.review) {
+    console.log(
+      '\nAsk of each citation: does this principle GOVERN the claim, or does it\n' +
+        'merely mention the topic? A statement can name a concern in passing —\n' +
+        'ENG-PERF-009 mentions accessibility while governing performance changes\n' +
+        'only — and a keyword match reads as confirmation when it is not one.',
+    );
     let current = null;
     for (const c of citations) {
       if (c.file !== current) {
@@ -267,6 +283,9 @@ async function main() {
       const principle = known.get(c.id);
       const title = principle ? principle.title : '*** UNKNOWN ID ***';
       console.log(`  ${String(c.line).padStart(5)}  ${c.id.padEnd(14)} ${title}`);
+      if (principle?.statement) {
+        console.log(`         says: ${principle.statement}`);
+      }
       for (const l of c.window ?? [{ n: c.line, text: c.context }]) {
         console.log(`      ${l.n === c.line ? '>' : ' '}  ${l.text.trim()}`);
       }
