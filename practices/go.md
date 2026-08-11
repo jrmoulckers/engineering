@@ -63,25 +63,73 @@ transfer yields a valid empty config, and an empty config lints nothing while re
 **Write it to the repository root.** This is required, not cosmetic. golangci-lint's default
 `run.relative-path-mode: cfg` resolves reported paths relative to the config file's directory,
 so a config outside the repository produces diagnostics with paths like
-`../../elsewhere/file.go`. Root placement also makes a bare `golangci-lint run` and editor
-integrations work with no flags.
+`../../elsewhere/file.go`. Root placement also lets editor integrations discover the config with
+no configuration of their own — though see below for why your own invocations should still name it
+explicitly.
 
 Since `jrmoulckers/engineering` is public, the fetch needs no token.
+
+**Always pass `--config` explicitly. A missing config does not fail — it lints less.** This is the
+sharpest edge in the whole pattern, because the fetched file is deliberately untracked: a
+contributor who clones and runs `golangci-lint run` before running the fetch has no
+`.golangci.yml` at all. golangci-lint does not error on that. It treats the absence as
+`ConfigFileNotFoundError`, swallows it, and proceeds with its **built-in defaults** — roughly
+`errcheck`, `govet`, `ineffassign`, `staticcheck` and `unused`, with none of this config's
+settings. Everything the shared config adds on top, including `errorlint`, `nilerr`, `revive`,
+`misspell` and `unconvert`, is silently absent.
+
+The result is the worst available outcome: a plausible, clean, **locally green** run against a
+smaller rule set, then a red CI, with nothing on screen connecting the two. It is the same class as
+the truncated-config case above — a step reporting success while checking less than you think.
+
+Naming the file converts that into a hard failure, because an explicitly supplied path is read
+directly rather than searched for, so its absence surfaces as an error instead of a fallback:
+
+```bash
+golangci-lint run --config .golangci.yml ./...
+```
+
+Use that form everywhere the linter is invoked — CI, scripts, and the command you put in your
+README. Prefer wiring the fetch and the run into a single `make lint` (or equivalent) target, so
+the config cannot be absent when the linter runs; the explicit `--config` is then the backstop for
+anyone who bypasses the target. Documentation alone is the weakest of the three, because the
+contributor who most needs the warning is the one who has not read the file yet.
 
 ## Static signals (`ENG-TEST-004`)
 
 Each signal reports independently and blocks the merge:
 
 ```bash
-test -z "$(gofmt -l .)"   # format
-go vet ./...              # vet
-golangci-lint run         # lint  — configs/golangci.yml
-go test ./...             # behavior
-go build ./...            # build
+test -z "$(gofmt -l .)"                        # format
+go vet ./...                                   # vet
+golangci-lint run --config .golangci.yml ./... # lint  — configs/golangci.yml
+go test ./...                                  # behavior
+go build ./...                                 # build
 ```
 
 `gofmt` and `go vet` are the floor, not the ceiling. `golangci-lint` adds the error-handling and
 shadowing checks that `vet` alone does not cover.
+
+**`unused` catches incomplete deletions, which is the most valuable thing this config does.** The
+argument for a shared linter usually gets made on style, and style is the least convincing part of
+it. The stronger case is removal: when a repository cut an audit-console feature, deleting the
+endpoints orphaned five symbols — an adapter-name table, three handler helpers, and a test helper —
+that lost their only callers. Nothing in a `gofmt` + `go vet` bar reports that, the build stays
+green, and the tests still pass because the code is simply never reached. `unused` named all five.
+
+That is exactly the failure mode of a "cut the feature" commit, and it is worth leading with when
+someone asks what the config buys beyond package comments. Verify each report has no remaining
+reference before deleting, rather than trusting the linter alone.
+
+**Re-run the linter after every rebase; do not infer cleanliness from a clean merge.** Lint fixes
+can evaporate silently. In the same repository, an `errcheck` fix disappeared during a rebase
+because the handler containing it had been deleted upstream — the correct outcome, reached without
+any conflict to review. A textually clean rebase says nothing about whether the tree still passes.
+
+The corollary is worth knowing before you plan an adoption: **this cost is paid per rebase, not
+once.** A repository that reported 37 and then 23 issues in earlier rounds found only 6 after a
+later rebase, and 5 of those 6 were the deletion case above. The number falls quickly once the tree
+is clean, so a large first count is not a forecast of the second.
 
 ## Package boundaries (`ENG-ARCH-001`)
 

@@ -1161,13 +1161,23 @@ lint rules with no commit on your side, surfacing on whichever unrelated PR happ
 and `git log` would no longer explain why a green PR went red. Make the pin easy to update and
 loud when it is stale; never make it automatic.
 
-Five details carry the weight here:
+Six details carry the weight here:
 
 **Write it to the repository root.** This is required, not cosmetic. golangci-lint's default
 `run.relative-path-mode: cfg` resolves reported paths relative to the config file's directory,
 so a config held outside the repository produces diagnostics with paths like
-`../../elsewhere/file.go`. Root placement also makes a bare `golangci-lint run` and editor
-integrations work with no flags.
+`../../elsewhere/file.go`. Root placement also lets editor integrations discover the config without
+configuration of their own.
+
+**Invoke it as `golangci-lint run --config .golangci.yml ./...`, never bare.** Because the fetched
+config is deliberately untracked, a contributor who runs the linter before running the fetch has no
+`.golangci.yml` — and golangci-lint does not treat that as an error. It swallows the
+`ConfigFileNotFoundError` and falls back to its **built-in defaults**, a strictly smaller set
+(roughly `errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`) with none of the shared
+settings. The run looks clean locally and goes red in CI, with nothing explaining the gap. Naming
+the path makes the file read directly rather than searched for, so its absence fails loudly. Better
+still, wire the fetch and the run into one `make lint` target so the config cannot be missing;
+`--config` is the backstop for anyone bypassing it.
 
 **Pin to a tag, never `main`.** An unpinned fetch means an unrelated commit here can turn a
 consumer's build red with no change on their side, which is the same failure mode `GH-ACT-003`
