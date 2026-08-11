@@ -299,6 +299,14 @@ steps:
 > no failing step to open, no error text, just `startup_failure`. It reads like an outage rather
 > than a missing scope, so check this first. Workflows with no `permissions:` block at all
 > inherit the repository default and are unaffected.
+>
+> This was measured against a deliberately misconfigured caller, and there is genuinely nothing to
+> read: **zero jobs created** (`/actions/runs/<id>/jobs` returns `total_count: 0`), **no check-run
+> for the failing job**, and `gh run view --log` answers `failed to get run log: log not found`.
+> The only surface text is the generic _"This run likely failed because of a workflow file
+> issue."_ The ceiling is enforced before any job is instantiated, so no preflight step or `if:`
+> guard can ever report it — anything you write lives inside a job that is never created. Diagnose
+> it by reading the caller's `permissions:` block against the callee's, not by looking for output.
 
 **The packages are private today, so `GITHUB_TOKEN` is not enough on its own**: each consuming
 repository must also be added under the package's **Manage Actions access** settings with
@@ -351,6 +359,26 @@ jobs:
 
 Pass a `secrets: NODE_AUTH_TOKEN:` block only for a registry the job's own token cannot reach.
 If you staged one for GitHub Packages, delete it.
+
+**An explicitly passed secret beats the fallback, and that destroys your diagnosis.** If the caller
+passes `NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}`, the workflow authenticates as that PAT
+and never exercises `github.token` at all. A `403 permission_denied: read_package` then tells you
+about **the PAT's** authorization — a missing `read:packages` scope, or un-authorized SSO — which
+is indistinguishable in the log from the package being unreachable. Deleting the line splits the two
+cleanly:
+
+| After removing the explicit secret | Means                                    |
+| ---------------------------------- | ---------------------------------------- |
+| install succeeds                   | the PAT was the problem                  |
+| `403` on `github.token`            | the package's Manage Actions access list |
+| `401`                              | `packages: read` missing from the caller |
+
+**The empty-token trap does not apply to these workflows.** Elsewhere in this guide, an unset
+`NODE_AUTH_TOKEN` sends an empty credential and 401s. At the pinned ref above the expression is
+`${{ secrets.packages-read-token || github.token }}`, so an unset or empty secret **degrades to the
+job token** rather than sending nothing. That is strictly better, but it means a stale secret name
+fails as a _403 against the wrong identity_ instead of an obvious 401 — quieter, and easier to
+misread as a package problem.
 
 **The `packages: read` line above is not optional here, and this is where omitting it hurts
 most.** Every one of these callees requests `packages: read` at job level, and a caller's
