@@ -49,7 +49,7 @@ const DEFAULT_INDEX =
 // copy is otherwise indistinguishable from a current one — a consumer reported
 // a missing check that had shipped several releases earlier, having run an old
 // copy that could not tell them so.
-const TOOL_VERSION = '4';
+const TOOL_VERSION = '5';
 const TEXT_EXT = new Set(['.md', '.mdx', '.markdown', '.txt', '.yml', '.yaml', '.json']);
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', '.svelte-kit', 'vendor']);
 
@@ -272,8 +272,18 @@ async function main() {
       '\nAsk of each citation: does this principle GOVERN the claim, or does it\n' +
         'merely mention the topic? A statement can name a concern in passing —\n' +
         'ENG-PERF-009 mentions accessibility while governing performance changes\n' +
-        'only — and a keyword match reads as confirmation when it is not one.',
+        'only — and a keyword match reads as confirmation when it is not one.\n' +
+        '\n' +
+        'Where a citation is marked "use k of n", judge it on its own. A repo\n' +
+        'that cites an ID correctly in one place and wrongly in another is the\n' +
+        'observed shape: the correct nearby use makes the ID read as known-good\n' +
+        'for the file, so the second use is never re-derived. Repetition is\n' +
+        'normal and is not itself a defect — most IDs here are cited more than\n' +
+        'once — so this is a prompt to check, not a finding.',
     );
+    const useCount = new Map();
+    for (const c of citations) useCount.set(c.id, (useCount.get(c.id) ?? 0) + 1);
+    const seen = new Map();
     let current = null;
     for (const c of citations) {
       if (c.file !== current) {
@@ -282,7 +292,11 @@ async function main() {
       }
       const principle = known.get(c.id);
       const title = principle ? principle.title : '*** UNKNOWN ID ***';
-      console.log(`  ${String(c.line).padStart(5)}  ${c.id.padEnd(14)} ${title}`);
+      const total = useCount.get(c.id);
+      const nth = (seen.get(c.id) ?? 0) + 1;
+      seen.set(c.id, nth);
+      const marker = total > 1 ? `  [use ${nth} of ${total}]` : '';
+      console.log(`  ${String(c.line).padStart(5)}  ${c.id.padEnd(14)} ${title}${marker}`);
       if (principle?.statement) {
         console.log(`         says: ${principle.statement}`);
       }

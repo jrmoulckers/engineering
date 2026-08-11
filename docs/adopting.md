@@ -1144,7 +1144,28 @@ including `vite/client`:
 Unlike the `baseUrl` case this one fails loudly — `TS2591: Cannot find name 'process'`, naming the
 fix — so it costs a confusing few minutes rather than a wrong conclusion.
 
-**Svelte repositories replacing `@tsconfig/svelte`:** use `vite-app.json` and drop `sourceMap`.
+**`allowImportingTsExtensions` is deliberately absent from `base.json`, and cannot be added there.**
+A consumer whose previous config set it asked for it in the base, correctly noting that the shared
+base is therefore **not a superset** of what it replaces. It is not an oversight. The option is only
+legal when `noEmit` or `emitDeclarationOnly` is set, so putting it in a base that every preset
+inherits hard-breaks any consumer that emits. Measured on TypeScript 5.9.3, base with the flag and a
+consumer setting `noEmit: false`:
+
+```
+tsconfig.json(1,26): error TS5096: Option 'allowImportingTsExtensions' can only be used
+when either 'noEmit' or 'emitDeclarationOnly' is set.
+```
+
+This is the `ignoreDeprecations` shape again: a fix in the shared base that repairs one half of the
+supported range by breaking the other. Set it in your own `tsconfig.json`, next to the `noEmit` that
+makes it legal. It fails loudly and names the fix, so it is the cheap class of error.
+
+The general point matters more than this flag. **The presets are a considered baseline, not a
+superset of every config they replace**, and an adoption that reports "nothing lost" has usually
+measured one tool. The consumer above was explicit that their own "0 lost" result covered ESLint
+only and was being cited as the reference for six other repositories — say which tool your result
+covers, because the next repository will read it as covering all of them.
+
 `@tsconfig/svelte` sets it, explaining it is needed "to have warnings/errors of the Svelte
 compiler at the correct position" — a rationale that predates Svelte 5. Measured on svelte-check
 4.7.5 with svelte 5, diagnostic positions are identical with and without it, both for TS errors
@@ -1319,7 +1340,7 @@ exists to be run before you open the PR, when there is still a cheap moment to f
 invisible.** Every run now prints its own identity:
 
 ```
-checker v4; checks run: IDs, stated names, link paths. Index: <url>
+checker v5; checks run: IDs, stated names, link paths. Index: <url>
 ```
 
 If that line is missing, or names fewer checks than you expected, you are running an old copy and
@@ -1372,7 +1393,28 @@ checker prints that question above the review output, because reading for a keyw
 that produced every miscitation seen so far, and giving that habit more text to match on is not
 by itself a fix.
 
-**The checker reads the working tree, not git history.** It walks files on disk and never shells
+**When an ID appears more than once, judge each use independently.** `--review` marks repeated
+citations `[use k of n]` for this reason. A consumer found a wrong `ENG-SEC-005` citation in a file
+that also cited `ENG-SEC-005` **correctly** ninety-eight lines earlier — right for the runtime
+parsers guarding an unchecked request body, wrong for a server-side authorization invariant. Their
+diagnosis of why it survived two reviews is worth repeating: a correct nearby use makes the ID read
+as _known-good for this file_, so the second use is confirmed by association instead of re-derived.
+That is a reviewer failure the exit code cannot reach, since both uses are of a real ID.
+
+**Repetition is a prompt, not a finding.** The same consumer proposed flagging multi-use IDs as a
+smell. Measured before adopting: in this repository **100% of cited IDs appear more than once**
+(495 citations across 66 principles), and in the smallest consumer audited, 4 of 5. A flag firing on
+nearly every citation is a flag nobody reads. It would also have been wrong on their own best
+example — they cite `ENG-ARCH-001` for both "one canonical record" and "components never touch
+storage", which _sounds_ like one must be wrong, and both are correct because the statement carries
+both halves ("each fact in one authoritative home" **and** "the smallest explicit boundary that keeps
+dependencies acyclic"). So the marker states the fact and leaves the verdict to the reader.
+
+That case is also the cleanest argument for printing statements rather than titles. Judging by title
+alone, that consumer would have raised two false positives — `ENG-SEC-007` "Secure failure" looks
+unrelated to rejecting a short API token until the statement says "reject unsafe configuration before
+service" — while missing the one real defect.
+
 out to git, so a miscitation already merged to `main` is invisible from a feature branch that does
 not touch that file. A clean run means _the tree you are standing in_ is clean. To clear a
 repository rather than a branch, run it against a checkout of `main` as well — the repository that
