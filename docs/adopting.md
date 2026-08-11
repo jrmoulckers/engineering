@@ -1340,7 +1340,7 @@ exists to be run before you open the PR, when there is still a cheap moment to f
 invisible.** Every run now prints its own identity:
 
 ```
-checker v5; checks run: IDs, stated names, link paths. Index: <url>
+checker v6; checks run: IDs, stated names, link paths. Index: <url>
 ```
 
 If that line is missing, or names fewer checks than you expected, you are running an old copy and
@@ -1401,7 +1401,41 @@ diagnosis of why it survived two reviews is worth repeating: a correct nearby us
 as _known-good for this file_, so the second use is confirmed by association instead of re-derived.
 That is a reviewer failure the exit code cannot reach, since both uses are of a real ID.
 
-**Repetition is a prompt, not a finding.** The same consumer proposed flagging multi-use IDs as a
+**Run `--by-id` as well as `--review`.** It groups every use of an ID together, most-cited first,
+instead of walking files in order. Two consumers independently hit the same defect from opposite
+directions: one cited an ID correctly and then wrongly ninety-eight lines later in the _same file_,
+the other cited one ID four times across _four files_ with two different meanings. File-ordered
+review misses both, for the same reason — the uses are never adjacent, so the divergence is never a
+comparison. Grouped, the question becomes one you can answer at a glance: do all of these lines
+claim the same rule?
+
+**A cluster of miscitations usually has one cause, not several.** The four-file case was one ID
+used for one wrong idea, not four independent misreadings — so it was one fix, and its author found
+it by asking what the uses had in common. When `--by-id` shows a group that splits cleanly in two,
+you have found a single mistake, not a run of bad luck.
+
+**Before concluding a rule is uncovered, search by the mechanism rather than by the feeling.** That
+same consumer concluded no principle covered "no environment residue — machine paths, drive letters,
+home directories — in committed artifacts", having checked the security and privacy principles
+because a stray home directory _feels_ like leakage. It is covered, just not there:
+`ENG-ARCH-004` requires equivalent declared inputs to produce equivalent outputs, and `ENG-TEST-005`
+requires generated or distributed interfaces to reproduce deterministically. An artifact carrying
+the path of the machine that produced it fails both — two developers with identical inputs produce
+different bytes. The residue is a **reproducibility** defect that presents as a privacy one.
+
+This is the third instance of the same search failure: `ENG-DATA-*` is scoped by durability rather
+than by data-ness, `ENG-INT-*` by external input rather than by having a service, and here the
+governing principle is filed under construction rather than under secrets. **Searching the area that
+matches the feeling finds the principle that matches the feeling** — which is exactly how a
+plausible wrong ID gets chosen. Search the statements for the mechanism you are actually asserting.
+
+**A good discriminator for a suspected miscitation: apply the rest of the principle.** The same
+author convicted their own `ENG-SEC-001` citation by observing that you cannot _rotate_ a home
+directory path, and that the rationale — "deleting a leaked value does not revoke copies" — says
+nothing about one. A principle you are citing for one clause should still make sense in its other
+clauses. Where it does not, you have matched a topic rather than a rule.
+
+The same consumer proposed flagging multi-use IDs as a
 smell. Measured before adopting: in this repository **100% of cited IDs appear more than once**
 (495 citations across 66 principles), and in the smallest consumer audited, 4 of 5. A flag firing on
 nearly every citation is a flag nobody reads. It would also have been wrong on their own best
