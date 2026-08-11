@@ -1532,3 +1532,59 @@ Typecheck both. The difference from disabling it globally is that the excluded s
 finite**, new directories are covered by default, and progress is a shrinking `include` rather
 than a closed issue. If even that is too much at once, keep the flag off but record the error
 count in the tracking issue so the number is a ratchet rather than a memory.
+
+### Triage the list; the bug-to-appeasement ratio is not predictable
+
+That third repository then audited its suppression rather than defending it, and the result
+changes the advice above more than the count did. Under `tsc` it had **263 diagnostics, 87 of
+them in production code, and exactly one was a bug.**
+
+Set against the earlier reports, the spread is the finding:
+
+| Repository | Production diagnostics | Real bugs found |
+| ---------- | ---------------------- | --------------- |
+| First      | 109                    | 19              |
+| Third      | 87                     | 1               |
+
+Same flag, same language, two orders of magnitude apart in yield. **So do not plan from either
+number.** "A three-figure count is not noise" is true, and its corollary is equally true: most of
+a given list may be compiler appeasement, and you cannot tell which case you are in without
+reading it. Triage the list. Production first, in file-sized batches.
+
+The reason the ratio moves is that a large share of diagnostics come from idioms where the
+invariant is real and local but inexpressible to the checker:
+
+| Idiom                     | Example                                        |
+| ------------------------- | ---------------------------------------------- |
+| Loop-guarded indexing     | `while (i < xs.length) { xs[i].v }`            |
+| Paired-swap destructuring | `[a[i], a[j]] = [a[j], a[i]]`                  |
+| Modulo indexing           | `words[h % words.length]` on a non-empty array |
+| Fixed-size typed arrays   | `new Uint32Array(1)` then `buf[0]`             |
+
+None is a latent crash. Clearing them is refactoring for provability, not bug-fixing — worth
+doing, but it is not the same work as fixing the one real defect hiding among them, and it should
+not be scheduled as though it were.
+
+**This is where the "no `!` in production" rule needs its honest edge.** The rule exists because
+`!` re-hides the bug class the flag finds. Against a provably-safe idiom there is no bug to
+re-hide, so the rule is protecting nothing — but you cannot tell the two apart by looking at the
+`!`, which is exactly why the rule is unconditional. Resolve it by making the invariant visible
+instead of asserting past it: destructure the element once (`const row = xs[i]; if (!row) break;`),
+hoist the pair out of the swap, or keep the scoped `tsconfig` override above for a directory that
+is dense with one idiom. A runtime guard helper is right in tests and wrong in a hot loop; the
+scoped override is the better lever there, because it is named, finite, and shrinking.
+
+**Audit before you suppress, not after.** The third repository's single bug was found only
+because it flipped the flag back on and read the output, and it was the same shape as the first
+repository's worst finding — **two arrays indexed by a position derived from each other, correct
+only while their lengths agree**. In the first it was `getAllKeys()` zipped against `getAll()`; in
+the third, a palette indexed by a position found in a _different_ palette, which returns
+`undefined` typed as `string` the moment someone adds one entry without its counterpart.
+
+Two of three repositories carried that shape. The third searched for it specifically and found
+none — it had no positional zip anywhere, because every read either consumed a whole array or
+keyed a map by a field on the record. That negative is worth as much as the positives: the search
+is cheap, bounded, and its answer is trustworthy either way. Grep for it directly rather than
+waiting for the compiler to raise it — any `b[i]` where `i` came from `a.indexOf(...)`,
+`a.findIndex(...)`, or a loop over `a` — and note that **keying by a field instead of a position
+removes the shape entirely**, which is the durable fix rather than a guard at each site.
