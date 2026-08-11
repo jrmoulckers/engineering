@@ -90,6 +90,17 @@ const ID_LINK = /\[([^\]]*?)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 // success on the five it never looked at. Any dash, and backticks or emphasis
 // around either endpoint, since these are written in prose.
 const RANGE = /\b(ENG-([A-Z]+)-(\d{3}))\b[`*_]*\s*[–—-]\s*[`*_]*(?:ENG-([A-Z]+)-)?(\d{3})\b/g;
+// A proposal or decision record legitimately names IDs that do not exist yet,
+// and a mutation-testing table legitimately names one that never will. Both
+// would otherwise be unfixable failures that pressure someone to weaken the
+// check for every file.
+//
+// The escape hatch names the exact IDs rather than excluding a path, so it
+// cannot silently cover a typo: an unlisted unknown ID in the same file still
+// fails. Ranges are rejected for the same reason.
+//
+//   <!-- check-citations: allow-unknown ENG-NATIVE-001 ENG-NATIVE-002 -->
+const ALLOW_UNKNOWN = /<!--\s*check-citations:\s*allow-unknown\s+([^>]*?)\s*-->/g;
 const DEFAULT_INDEX =
   'https://raw.githubusercontent.com/jrmoulckers/engineering/main/principles/index.json';
 // Bumped whenever a check is added or its verdict changes. Printed on every
@@ -97,7 +108,7 @@ const DEFAULT_INDEX =
 // copy is otherwise indistinguishable from a current one — a consumer reported
 // a missing check that had shipped several releases earlier, having run an old
 // copy that could not tell them so.
-const TOOL_VERSION = '11';
+const TOOL_VERSION = '12';
 // Citations live in source comments as often as in prose. A consumer filed two
 // wrong citations against themselves in `.ts` files, then ran this tool over
 // that repository and got `41 citations, all IDs exist`, exit 0 -- because the
@@ -337,8 +348,26 @@ async function scanFile(file) {
   // convention, because a convention silently covers files nobody chose, and a
   // silent skip is how this checker returned green over the two wrong citations
   // that prompted widening the extension set. Skips are counted and printed.
-  if (IGNORE_PRAGMA.test(raw)) return { hits, links, titled, duplicated, ignored: true };
+  if (IGNORE_PRAGMA.test(raw))
+    return { hits, links, titled, duplicated, malformed: [], ignored: true };
   const lines = raw.split(/\r?\n/);
+
+  const allowed = new Set();
+  const malformed = [];
+  // Markers inside fenced code blocks are documentation examples, not live
+  // configuration. Without this, `docs/adopting.md` explaining the marker would
+  // silently grant itself the exemption it is describing.
+  const outsideFences = raw.replace(/^([ \t]*)(```+|~~~+)[\s\S]*?^\1\2[^\n]*$/gm, '');
+  for (const marker of outsideFences.matchAll(ALLOW_UNKNOWN)) {
+    for (const token of marker[1].split(/[\s,]+/).filter(Boolean)) {
+      // Exact IDs only. A wildcard or range would be ignored by set membership
+      // anyway, so the author would otherwise see a confusing "unknown ID"
+      // error for a marker they believed covered it. Say what is wrong instead.
+      if (/^ENG-[A-Z]+-\d{3}$/.test(token)) allowed.add(token);
+      else malformed.push({ file, token });
+    }
+  }
+
   lines.forEach((text, i) => {
     for (const [, label, href] of text.matchAll(ID_LINK)) {
       const id = label.match(/\bENG-[A-Z]+-\d{3}\b/)?.[0];
@@ -369,6 +398,7 @@ async function scanFile(file) {
         file,
         line: i + 1,
         id: match[0],
+        allowedUnknown: allowed.has(match[0]),
         context: text.trim(),
         // A wrapped markdown link puts the ID on a line of its own, with the
         // claim it supports on a neighbouring line. Showing only the citing
@@ -436,7 +466,7 @@ async function scanFile(file) {
       }
     }
   });
-  return { hits, links, titled, duplicated };
+  return { hits, links, titled, duplicated, malformed };
 }
 
 // Compare loosely: case, surrounding punctuation and internal whitespace are
@@ -448,6 +478,14 @@ function normalizeTitle(s) {
     .replace(/[.,;:]+$/, '')
     .trim()
     .toLowerCase();
+}
+
+// A not-yet-ratified ID is absent from the index exactly like a typo is, so
+// review would otherwise report an allowed proposal as an unknown ID and send
+// the reader looking for a mistake that is not there.
+function displayTitle(principle, allowedUnknown) {
+  if (principle) return principle.title;
+  return allowedUnknown ? '*** PROPOSED — does not exist yet ***' : '*** UNKNOWN ID ***';
 }
 
 async function main() {
@@ -471,6 +509,7 @@ async function main() {
   const titled = [];
   const duplicatedNames = [];
   const ignoredFiles = [];
+  const malformedMarkers = [];
   for (const file of files) {
     const scanned = await scanFile(file);
     if (scanned.ignored) {
@@ -481,9 +520,21 @@ async function main() {
     links.push(...scanned.links);
     titled.push(...scanned.titled);
     duplicatedNames.push(...scanned.duplicated);
+    malformedMarkers.push(...scanned.malformed);
   }
 
-  const unknown = citations.filter((c) => !known.has(c.id));
+  if (malformedMarkers.length > 0) {
+    // Fatal. A marker the author believes is protecting something, which
+    // silently protects nothing, is worse than no marker at all.
+    console.error(`${malformedMarkers.length} malformed allow-unknown token(s):\n`);
+    for (const m of malformedMarkers) console.error(`  ${m.file}  ${m.token}`);
+    console.error('\nEach token must be one exact ID, such as ENG-NATIVE-001.');
+    console.error('Wildcards and ranges are not expanded.');
+    return 1;
+  }
+
+  const unknown = citations.filter((c) => !known.has(c.id) && !c.allowedUnknown);
+  const proposed = citations.filter((c) => !known.has(c.id) && c.allowedUnknown);
 
   // A link that names a real ID but points at the wrong file is worse than a
   // wrong ID: it looks authoritative and 404s. The area prefix does not follow
@@ -542,6 +593,7 @@ async function main() {
           badLinks,
           badAnchors,
           badTitles,
+          proposed,
         },
         null,
         2,
@@ -632,8 +684,11 @@ async function main() {
       );
       for (const id of ids) {
         const principle = known.get(id);
-        const title = principle ? principle.title : '*** UNKNOWN ID ***';
         const uses = byId.get(id);
+        const title = displayTitle(
+          principle,
+          uses.some((c) => c.allowedUnknown),
+        );
         console.log(`\n${id}  ${title}  (${uses.length} use${uses.length === 1 ? '' : 's'})`);
         if (principle?.statement) console.log(`  says: ${principle.statement}`);
         if (principle?.rationale) console.log(`  because: ${principle.rationale}`);
@@ -655,7 +710,7 @@ async function main() {
           console.log(`\n${c.file}`);
         }
         const principle = known.get(c.id);
-        const title = principle ? principle.title : '*** UNKNOWN ID ***';
+        const title = displayTitle(principle, c.allowedUnknown);
         const total = useCount.get(c.id);
         const nth = (seen.get(c.id) ?? 0) + 1;
         seen.set(c.id, nth);
@@ -724,8 +779,13 @@ async function main() {
     return 1;
   }
 
+  // Proposed IDs are excluded from both counts: "all IDs exist" must stay a
+  // claim about the catalog, and counting an ID that deliberately does not
+  // exist yet would make the pass line assert the opposite of what it says.
+  const real = citations.length - proposed.length;
+  const realIds = distinct.size - new Set(proposed.map((c) => c.id)).size;
   console.log(
-    `${citations.length} citation(s) across ${distinct.size} principle(s) in ` +
+    `${real} citation(s) across ${realIds} principle(s) in ` +
       `${files.length} file(s); all IDs exist` +
       (titled.length > 0 ? `, and ${titled.length} stated name(s) match` : '') +
       '.',
@@ -757,6 +817,16 @@ async function main() {
       (opts.links ? ', link paths, link anchors' : ' (link paths SKIPPED via --no-links)') +
       `. Index: ${opts.index}`,
   );
+  if (proposed.length > 0) {
+    // Announced unconditionally. An allowlist nobody is reminded of is how a
+    // temporary exception becomes permanent.
+    const ids = [...new Set(proposed.map((c) => c.id))].sort();
+    console.log(
+      `${proposed.length} citation(s) of ${ids.length} not-yet-ratified ID(s) ` +
+        `allowed by an explicit marker: ${ids.join(', ')}.`,
+    );
+    console.log('Remove each marker once the ID is Ratified, or the check stops guarding it.');
+  }
   if (!opts.review) {
     console.log(
       'Existence is not correctness — re-run with --review to check each ID ' +

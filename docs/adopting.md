@@ -6987,6 +6987,35 @@ whole scheme cannot survive: it transfers authorship of a rule to this repositor
 agreed to it, and the next reader treats it as ratified. Restated prose is recoverable; a false
 citation is not.
 
+### Citing an ID that does not exist yet
+
+<!-- check-citations: allow-unknown ENG-NATIVE-001 ENG-NATIVE-002 -->
+
+A proposal for a new principle has to name the IDs it proposes, and `check-citations` will fail it
+because those IDs are not in `index.json`. That is the checker working, not a bug — but an
+unfixable failure is how a team ends up deleting the check.
+
+Mark the file, naming each ID explicitly:
+
+```markdown
+<!-- check-citations: allow-unknown ENG-NATIVE-001 ENG-NATIVE-002 -->
+```
+
+The marker permits **exactly** the IDs it lists. Any other unknown ID in the same file still fails,
+so a typo one digit off from a proposed ID is still caught in the very file that has permission to
+name unknown IDs. Wildcards and ranges are rejected outright rather than expanded — a marker the
+author believes is protecting something, which silently protects nothing, is worse than no marker.
+
+A clean run still reports every exemption in use and tells you to remove it once the ID is
+Ratified. An allowlist nobody is reminded of is how a temporary exception becomes permanent.
+
+Use this for proposals and decision records only. It is not a way to cite a principle that was
+never ratified — see the paragraph above.
+
+A marker inside a fenced code block is inert, which is why the example above does not grant itself
+the exemption it describes. This page carries a real one, outside a fence, so that the two IDs it
+names in that example resolve.
+
 Two shapes that stay honest when nothing covers the subject:
 
 - **Name it as yours.** "Colocate tests … a libro convention; the obligation it serves is

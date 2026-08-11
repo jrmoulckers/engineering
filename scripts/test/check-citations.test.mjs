@@ -171,6 +171,108 @@ describe('check-citations', () => {
     });
   });
 
+  describe('allow-unknown marker', () => {
+    // A proposal names IDs that do not exist yet. The escape hatch that makes
+    // that possible is the most dangerous code in this file: if it is loose,
+    // every real miscitation can hide behind it. These tests exist to keep it
+    // narrow, and each one corresponds to a mutation that was run by hand.
+
+    test('permits exactly the IDs it names', () => {
+      const dir = fixture(
+        '<!-- check-citations: allow-unknown ENG-NATIVE-001 -->\n\nProposed `ENG-NATIVE-001`.\n',
+      );
+      try {
+        const { code, out } = run(dir);
+        assert.equal(code, 0);
+        assert.match(out, /not-yet-ratified/);
+        assert.match(out, /ENG-NATIVE-001/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test('still fails an unlisted ID in the same file', () => {
+      // The failure this must catch: a typo one digit off from an allowed ID,
+      // in the very file the author has permission to name unknown IDs in.
+      const dir = fixture(
+        '<!-- check-citations: allow-unknown ENG-NATIVE-001 -->\n\n' +
+          'Proposed `ENG-NATIVE-001` and typo `ENG-NATIVE-009`.\n',
+      );
+      try {
+        const { code, out } = run(dir);
+        assert.equal(code, 1);
+        assert.match(out, /ENG-NATIVE-009/);
+        assert.doesNotMatch(out, /unknown citation[\s\S]*ENG-NATIVE-001/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    for (const [label, marker] of [
+      ['wildcard', 'ENG-NATIVE-*'],
+      ['range', 'ENG-NATIVE-001..004'],
+      ['bare prefix', 'ENG-NATIVE'],
+    ]) {
+      test(`rejects a ${label} instead of expanding it`, () => {
+        const dir = fixture(
+          `<!-- check-citations: allow-unknown ${marker} -->\n\nProposed \`ENG-NATIVE-001\`.\n`,
+        );
+        try {
+          const { code, out } = run(dir);
+          assert.equal(code, 1, `a ${label} marker must not authorise anything`);
+          assert.match(out, /malformed allow-unknown token/);
+          assert.match(out, /Wildcards and ranges are not expanded/);
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      });
+    }
+
+    test('a marker inside a fenced code block is inert', () => {
+      // Documentation that explains the marker must not thereby grant itself
+      // the exemption it is describing.
+      const dir = fixture(
+        'Example:\n\n```markdown\n<!-- check-citations: allow-unknown ENG-NATIVE-001 -->\n```\n\n' +
+          'Proposed `ENG-NATIVE-001`.\n',
+      );
+      try {
+        const { code, out } = run(dir);
+        assert.equal(code, 1);
+        assert.match(out, /ENG-NATIVE-001/);
+        assert.doesNotMatch(out, /not-yet-ratified/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test('announces the exemption rather than passing silently', () => {
+      // An allowlist nobody is reminded of is how a temporary exception
+      // becomes permanent, so a clean run must still say it is in use.
+      const dir = fixture(
+        '<!-- check-citations: allow-unknown ENG-NATIVE-001 -->\n\nProposed `ENG-NATIVE-001`.\n',
+      );
+      try {
+        const { out } = run(dir);
+        assert.match(out, /Remove each marker once the ID is Ratified/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test('does not count a proposed ID as a satisfied citation', () => {
+      const dir = fixture(
+        '<!-- check-citations: allow-unknown ENG-NATIVE-001 -->\n\n' +
+          'Real `ENG-SEC-001` and proposed `ENG-NATIVE-001`.\n',
+      );
+      try {
+        const { out } = run(dir);
+        assert.match(out, /^1 citation\(s\) across 1 principle\(s\)/m);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   test('--review prints the real title beside a wrong-meaning citation', () => {
     // The defect this tool exists for: every miscitation seen during the
     // migration used a valid ID that meant something else, so the exit code
