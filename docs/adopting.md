@@ -590,8 +590,13 @@ Follow [practices/go.md](../practices/go.md) and fetch
 [`configs/golangci.yml`](../configs/golangci.yml):
 
 ```bash
-# Pin to a release tag; the newest is listed at
-# https://github.com/jrmoulckers/engineering/releases
+# Pin to a release tag. Resolve the newest deterministically — the tags
+# API does not order by version, and sorting lexically puts v0.9.0 above
+# v0.11.0:
+#
+#   git ls-remote --tags --refs https://github.com/jrmoulckers/engineering.git \
+#     | sed 's:.*refs/tags/::' | grep '^v' | sort -V | tail -1
+#
 ENGINEERING_REF=v0.2.3
 
 tmp=$(mktemp)
@@ -623,8 +628,16 @@ integrations work with no flags.
 consumer's build red with no change on their side, which is the same failure mode `GH-ACT-003`
 pins action SHAs to avoid.
 
-**`-f` is not optional.** Without it `curl` writes the error body to the output file and exits
-zero, so lint then runs against a config that is HTML. That passes, which is worse than failing.
+**`-f` is not optional — or capture the status instead.** Without `-f`, `curl` writes the error
+body to the output file and exits zero, so lint then runs against a config that is HTML. That
+passes, which is worse than failing. Capturing the status explicitly is strictly better where you
+control the script, because `-f` gives a non-zero exit but not the code, so a missing tag and an
+outage are indistinguishable — and a missing tag is the failure people actually hit:
+
+```bash
+code="$(curl -sSL -w '%{http_code}' -o "$tmp" "$url")"
+[ "$code" = 200 ] || { echo "$url returned HTTP $code; check ref '$ENGINEERING_REF' exists" >&2; exit 1; }
+```
 
 **Check the shape, not just the size.** `-f` catches a non-200 and `-s` catches a truncated
 transfer, but neither catches a **200 carrying the wrong body** — a redirect landing somewhere
