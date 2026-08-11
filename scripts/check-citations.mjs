@@ -34,6 +34,12 @@ const TITLED = /\b(ENG-[A-Z]+-\d{3})[`*_\]]*\s*\(([A-Z][^)/#\n]{2,59})\)/g;
 const ID_LINK = /\[([^\]]*?)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 const DEFAULT_INDEX =
   'https://raw.githubusercontent.com/jrmoulckers/engineering/main/principles/index.json';
+// Bumped whenever a check is added or its verdict changes. Printed on every
+// run: this script is fetched over the network and kept nowhere, so a stale
+// copy is otherwise indistinguishable from a current one — a consumer reported
+// a missing check that had shipped several releases earlier, having run an old
+// copy that could not tell them so.
+const TOOL_VERSION = '3';
 const TEXT_EXT = new Set(['.md', '.mdx', '.markdown', '.txt', '.yml', '.yaml', '.json']);
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', '.svelte-kit', 'vendor']);
 
@@ -50,6 +56,8 @@ function parseArgs(argv) {
       opts.links = false;
     } else if (arg === '--json') {
       opts.json = true;
+    } else if (arg === '--version' || arg === '-V') {
+      opts.version = true;
     } else if (arg === '--help' || arg === '-h') {
       opts.help = true;
     } else if (arg.startsWith('-')) {
@@ -76,6 +84,7 @@ Options:
                       authoritative and 404s, and the area prefix does not
                       follow the directory layout.
   --json              Machine-readable output.
+  -V, --version       Print the checker version and exit.
   -h, --help          Show this message.
 
 Exit codes: 0 = clean, 1 = unknown IDs or wrong link paths, 2 = tool error.`;
@@ -183,6 +192,10 @@ async function main() {
     console.log(USAGE);
     return 0;
   }
+  if (opts.version) {
+    console.log(TOOL_VERSION);
+    return 0;
+  }
 
   const known = await loadIndex(opts.index);
 
@@ -220,6 +233,9 @@ async function main() {
     console.log(
       JSON.stringify(
         {
+          checkerVersion: TOOL_VERSION,
+          checksRun: ['ids', 'statedNames', ...(opts.links ? ['linkPaths'] : [])],
+          index: opts.index,
           scanned: files.length,
           citations: citations.map((c) => ({
             ...c,
@@ -302,6 +318,11 @@ async function main() {
       `${files.length} file(s); all IDs exist` +
       (titled.length > 0 ? `, and ${titled.length} stated name(s) match` : '') +
       '.',
+  );
+  console.log(
+    `checker v${TOOL_VERSION}; checks run: IDs, stated names` +
+      (opts.links ? ', link paths' : ' (link paths SKIPPED via --no-links)') +
+      `. Index: ${opts.index}`,
   );
   if (!opts.review) {
     console.log(
