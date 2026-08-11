@@ -253,14 +253,28 @@ Put the blocking copy in a workflow with no `paths:` filter. If the same script 
 filtered lint workflow for fast feedback, that is fine — just do not let the filtered one be the
 only one.
 
-> **Unverified here, and worth confirming against your own branch protection before relying on
-> either reading.** The originating repository also described a required-status-check interaction:
-> a required check whose workflow is skipped by a path filter behaves differently from one that runs
-> and passes. This repository has no protected branch, so that behaviour could not be reproduced,
-> and the two plausible outcomes point opposite ways — the check never reports and the pull request
-> is blocked pending forever, or it is treated as satisfied and the gate is silently bypassed. The
-> recommendation above holds under either, which is why it is stated without depending on the
-> answer.
+> **Verified, and both plausible readings were right — for different mechanisms.** This was recorded
+> here as unresolved because this repository has no protected branch. It has since been measured
+> directly, and the outcome depends on _how_ the check does not run:
+>
+> | Mechanism                                   | Check run                     | Effect on a required check         |
+> | ------------------------------------------- | ----------------------------- | ---------------------------------- |
+> | `on.pull_request.paths` does not match      | **none created at all**       | stays pending — PR blocked forever |
+> | workflow triggers, job-level `if:` is false | created, conclusion `skipped` | treated as **success**             |
+>
+> So a path filter on a required check blocks rather than bypasses, and a skipped _job_ passes. The
+> two failure modes point in opposite directions, which is exactly why guessing between them was
+> unsafe.
+>
+> The general pattern that follows: **trigger across the full protected scope, decide applicability
+> inside the run, and gate the expensive job with `jobs.<job_id>.if`.** That keeps the check run
+> present and satisfied while skipping the cost.
+>
+> **Do not apply that pattern to this gate.** Skip-with-success is a cost optimisation, and it is
+> correct for builds and test matrices. A leak gate is a claim about what must never merge, and a
+> `skipped` conclusion reporting success is precisely the silent bypass this section exists to
+> prevent. The gate is a grep over changed files; it is cheap enough to simply always run. Reserve
+> the `if:` pattern for the jobs whose cost actually motivates it.
 
 **Also bound retention and audit content.** `ENG-OBS-005` requires retention follow a referenced
 obligation — cite the governing policy, do not invent a number here — and requires audit signals
