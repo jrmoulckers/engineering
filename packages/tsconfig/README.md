@@ -26,6 +26,10 @@ If you need `.ts` specifiers **and** emit, set `rewriteRelativeImportExtensions:
 is omitted here because it requires TypeScript 5.7, below which it is a hard `TS5023` error, and
 this package still supports `^5.5.0`.
 
+Both `node.json` and `vite-node.json` set `types: ["node"]`, so install `@types/node`. Without it
+the first run fails with `TS2688: Cannot find type definition file for 'node'`, which reads like a
+problem with the preset rather than a missing dev dependency.
+
 ```json
 {
   "extends": "@jrmoulckers/tsconfig/vite-app.json",
