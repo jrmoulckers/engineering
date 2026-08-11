@@ -46,6 +46,12 @@ const CITATION = /\bENG-[A-Z]+-\d{3}\b/g;
 const TITLED = /\b(ENG-[A-Z]+-\d{3})[`*_\]]*\s*\(([A-Z][^)/#\n]{2,59})\)/g;
 // A markdown link whose visible text names a principle ID.
 const ID_LINK = /\[([^\]]*?)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+// `ENG-OBS-001`–`ENG-OBS-007`, or the abbreviated `ENG-OBS-001`–`007`. A range
+// asserts something about every member while showing the reader only its
+// endpoints, so scanning literal IDs alone verifies two of seven and reports
+// success on the five it never looked at. Any dash, and backticks or emphasis
+// around either endpoint, since these are written in prose.
+const RANGE = /\b(ENG-([A-Z]+)-(\d{3}))\b[`*_]*\s*[–—-]\s*[`*_]*(?:ENG-([A-Z]+)-)?(\d{3})\b/g;
 const DEFAULT_INDEX =
   'https://raw.githubusercontent.com/jrmoulckers/engineering/main/principles/index.json';
 // Bumped whenever a check is added or its verdict changes. Printed on every
@@ -53,7 +59,7 @@ const DEFAULT_INDEX =
 // copy is otherwise indistinguishable from a current one — a consumer reported
 // a missing check that had shipped several releases earlier, having run an old
 // copy that could not tell them so.
-const TOOL_VERSION = '8';
+const TOOL_VERSION = '9';
 const TEXT_EXT = new Set(['.md', '.mdx', '.markdown', '.txt', '.yml', '.yaml', '.json']);
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', '.svelte-kit', 'vendor']);
 // Words that scope one ID against another. Their absence around adjacent IDs is
@@ -201,6 +207,32 @@ async function scanFile(file) {
       });
     }
 
+    // Expand ranges into the members they assert. The endpoints are already
+    // captured above as ordinary citations; only the interior is added here,
+    // marked so review can say where it came from. An interior ID that does
+    // not exist fails exactly like a literal one — a range is a claim about
+    // every member, so an absent member is an unknown ID.
+    for (const [, startId, area, startNum, endArea, endNum] of text.matchAll(RANGE)) {
+      if (endArea && endArea !== area) continue; // cross-area: not a range
+      const from = Number(startNum);
+      const to = Number(endNum);
+      if (!(to > from) || to - from > 50) continue;
+      const window = lines
+        .slice(Math.max(0, i - 2), i + 3)
+        .map((l, k) => ({ n: Math.max(0, i - 2) + k + 1, text: l }))
+        .filter((l) => l.text.trim() !== '');
+      for (let n = from + 1; n < to; n += 1) {
+        hits.push({
+          file,
+          line: i + 1,
+          id: `ENG-${area}-${String(n).padStart(3, '0')}`,
+          context: text.trim(),
+          window,
+          viaRange: `${startId}–${endArea ? `ENG-${endArea}-` : ''}${endNum}`,
+        });
+      }
+    }
+
     // A citation that also states the principle's name — `ENG-INT-001 (Thin
     // typed adapters)` or `ENG-INT-001 — Thin typed adapters` — makes a
     // semantic claim that can be checked mechanically. Every miscitation seen
@@ -272,7 +304,7 @@ async function main() {
       JSON.stringify(
         {
           checkerVersion: TOOL_VERSION,
-          checksRun: ['ids', 'statedNames', ...(opts.links ? ['linkPaths'] : [])],
+          checksRun: ['ids', 'statedNames', 'rangeMembers', ...(opts.links ? ['linkPaths'] : [])],
           index: opts.index,
           scanned: files.length,
           citations: citations.map((c) => ({
@@ -325,6 +357,11 @@ async function main() {
     const printBody = (c, principle) => {
       if (principle?.statement) {
         console.log(`         says: ${principle.statement}`);
+      }
+      if (c.viaRange) {
+        console.log(
+          `         via range ${c.viaRange} — the range asserts this, but the text never names it`,
+        );
       }
       if (c.barePair) {
         console.log('         note: adjacent IDs, no connective — does each one bind in full?');
@@ -426,7 +463,7 @@ async function main() {
       '.',
   );
   console.log(
-    `checker v${TOOL_VERSION}; checks run: IDs, stated names` +
+    `checker v${TOOL_VERSION}; checks run: IDs, stated names, range members` +
       (opts.links ? ', link paths' : ' (link paths SKIPPED via --no-links)') +
       `. Index: ${opts.index}`,
   );

@@ -1507,6 +1507,28 @@ whole failure mode: the same shortcut, one level down. No tool helps there. A fi
 is an artifact you have not read, and the fact that it arrived from an authority is precisely what
 makes it feel already-verified.
 
+**An empty area cannot be disagreed with, so "declines nothing" means less than it sounds.** One
+consumer evaluated all 66 principles individually and declined none — then pointed out that three of
+its four platforms are native and no principle addresses them at all. Silence there is not
+agreement; it is absence. When you report which principles you decline, say which areas had nothing
+to decline, or a reader will count an unwritten rule as an accepted one.
+
+the two you wrote.** `ENG-OBS-001`–`ENG-OBS-007` was scanned as two citations; the five in between
+were never resolved, never compared against anything, and counted toward a clean result. That is
+the worst possible shape for a blind spot: a range asserts something about **every** member while
+showing the reader only the endpoints, so it is exactly where a wrong-meaning citation survives
+longest — and `--review` looked exhaustive while omitting them. One consumer had two such ranges
+concealing five IDs, resolved all five by hand, and found them correct only because an adjacent
+gloss happened to list the titles in the right order.
+
+The checker now expands ranges within an area and treats an interior member exactly like a literal
+citation: it must exist, and `--review` prints it marked `via range` — _the range asserts this, but
+the text never names it_. A range whose interior does not exist now fails. Ranges spanning two
+different areas are left alone, since a dash between areas is prose rather than a range.
+
+**Prefer an enumerated, glossed list over a range** where the members matter. A range is compact for
+the author and lossy for the reader, who cannot tell whether you checked the interior or assumed it.
+
 **Wrap so a citation never sits alone on a line.** Keep the qualifying clause on the same line as
 the link. It is a one-line authoring convention that makes any line-oriented review of your file
 sound, and it costs nothing.
