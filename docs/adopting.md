@@ -1089,6 +1089,61 @@ emitting consumer with `TS5096` as shown above.
 State the delta in the PR description. "Adopted the shared base" hides a regression; "adopted
 the shared base; server moves to `node.json` to keep `.ts` specifiers working" does not.
 
+**On TypeScript 6, `baseUrl` stops the compiler before it checks anything — and the run looks
+clean.** This is the single most dangerous interaction with these presets, because it produces a
+success-shaped result rather than a failure. TS 6 promoted `baseUrl` from a deprecation warning to
+a hard error, and a config error aborts the run before any file is loaded:
+
+```
+tsconfig.json(2,24): error TS5101: Option 'baseUrl' is deprecated and will stop functioning in
+TypeScript 7.0. Specify compilerOption '"ignoreDeprecations": "6.0"' to silence this error.
+```
+
+Measured on TypeScript 6.0.3 against a file containing two blatant errors — a `string` assigned to
+`number`, and an unguarded index read. **Neither was reported.** Total output: one line, about the
+config. A consumer keeping the ordinary path-alias shape (`baseUrl` plus `paths`) therefore sees
+**one error and zero type diagnostics**, which reads as "essentially clean under the shared base"
+when in fact nothing was type-checked at all.
+
+**Do not take the compiler's own advice here.** `ignoreDeprecations: "6.0"` silences it on TS 6,
+but on TypeScript 5.5 the same line fails with `error TS5103: Invalid value for
+'--ignoreDeprecations'` — verified — which aborts the run in exactly the same way. Since these
+presets support `^5.5 || ^6 || ^7`, putting it in a shared base would trade a false clean on one
+half of the supported range for a false clean on the other. It is safe only in a consumer pinned
+to TS 6, and even then it defers work rather than doing it.
+
+**The fix is to drop `baseUrl` and make `paths` tsconfig-relative**, which is what TS 6 wants and
+what removes the deprecation instead of hiding it:
+
+```jsonc
+// before — aborts the run on TS 6
+{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"] } } }
+
+// after — checks files on 5.5, 6 and 7 alike
+{ "compilerOptions": { "paths": { "@/*": ["./src/*"] } } }
+```
+
+Both forms were verified to check files and report the two planted errors on 6.0.3.
+
+> **Whenever a type-check comes back clean or near-clean after a config change, prove it ran.**
+> Plant an obvious error — `const x: number = "s"` — and confirm it is reported. A count that
+> collapses to zero or one is far more often a config abort than a healthy codebase, and every
+> other signal here (exit code, output shape, brevity) looks the same in both cases. This is the
+> same family as an empty token that 401s and a truncated lint config that lints nothing: the
+> mechanism reports success-shaped output while doing no work.
+
+**`types` replaces, it does not merge.** `vite-app.json` sets `types: ["vite/client"]`, and TypeScript
+does not concatenate `types` across `extends` — a consumer inheriting it loses `node`,
+`vitest/globals`, `@testing-library/jest-dom` and anything else it relied on. Restate the full list,
+including `vite/client`:
+
+```jsonc
+{ "compilerOptions": { "types": ["vite/client", "node", "vitest/globals"] } }
+```
+
+Unlike the `baseUrl` case this one fails loudly — `TS2591: Cannot find name 'process'`, naming the
+fix — so it costs a confusing few minutes rather than a wrong conclusion.
+
 **Svelte repositories replacing `@tsconfig/svelte`:** use `vite-app.json` and drop `sourceMap`.
 `@tsconfig/svelte` sets it, explaining it is needed "to have warnings/errors of the Svelte
 compiler at the correct position" — a rationale that predates Svelte 5. Measured on svelte-check
@@ -1707,11 +1762,39 @@ Set against the earlier reports, the spread is the finding:
 | ---------- | ---------------------- | --------------- |
 | First      | 109                    | 19              |
 | Third      | 87                     | 1               |
+| Fourth     | 838                    | 0 found so far  |
 
 Same flag, same language, two orders of magnitude apart in yield. **So do not plan from either
 number.** "A three-figure count is not noise" is true, and its corollary is equally true: most of
 a given list may be compiler appeasement, and you cannot tell which case you are in without
 reading it. Triage the list. Production first, in file-sized batches.
+
+The fourth repository makes the point sharpest, and it is the reason a raw count must never be
+reported on its own. It measured **2,691 diagnostics — roughly 25× the first repository's 109** —
+and is almost certainly _less_ bug-dense: 69% were in tests, and a sample of every riskiest-code
+diagnostic in production found no active crash. Left as a bare number, that repository looks
+twenty-five times more alarming than the one with nineteen real bugs. Someone comparing the two
+would reasonably conclude the flag is unusable and switch it off, which is the outcome this whole
+section exists to prevent.
+
+### The discriminator: what is the index derived from?
+
+Counting diagnostics is the wrong axis. The useful question is where the index came from:
+
+> **The dangerous shape is a read indexed by something other than the collection's own bounds
+> check** — two collections zipped positionally, or collection `A` indexed by a value found in `B`.
+> A read indexed against its own `length` guard is noise.
+
+That single test explains every case reported so far. It is why nineteen of the first
+repository's findings were real: they were cross-collection reads, `allSettled` results zipped by
+position and `getAllKeys()` against `getAll()`. It is why the third repository's lone bug was real
+— a palette indexed by a position found in a _different_ palette. And it is why the fourth
+repository's 838 are mostly noise: `arr[i]` inside `for (i < arr.length)`, regex capture groups
+behind a match guard, destructuring a `split('|')` of a key the same function built two lines
+earlier. In-bounds by construction, unprovable to the compiler.
+
+Apply the test first and the four idioms below become a consequence of it rather than a list to
+memorize — each is a read indexed by its own bounds.
 
 The reason the ratio moves is that a large share of diagnostics come from idioms where the
 invariant is real and local but inexpressible to the checker:
