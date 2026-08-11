@@ -114,6 +114,17 @@ The Next preset does **not** pull in `eslint-plugin-react` or `eslint-plugin-jsx
 `reactConfig` if you want those; the hooks rules are included because losing them is a
 correctness regression, not a stylistic preference.
 
+## Type declarations
+
+Every entrypoint ships a hand-written `.d.ts` beside it, wired through the `exports` map, so
+consumers get option checking without a `@types` install — including repos that lint their own
+`eslint.config.js` under `checkJs`.
+
+The declarations deliberately do **not** reference `eslint` or `@types/eslint`, and `extend` is
+typed `unknown[]`. Config objects originating from two different `@types/eslint` copies are not
+mutually assignable, so a narrower type would make _correct_ configs fail to compile. Loose here
+is the accurate choice, not the lazy one.
+
 ## Base rules and why
 
 | Rule                                | Setting                     | Reason                                          |

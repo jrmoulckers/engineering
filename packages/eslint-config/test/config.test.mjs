@@ -226,6 +226,20 @@ describe('base strictTypeChecked (ENG-TEST-008)', () => {
 });
 
 describe('published package contents', () => {
+  /**
+   * Every file an export condition points at, whether the entry is a bare
+   * string or a conditions object. Missing the `types` condition here is how a
+   * declaration file silently stops being published.
+   */
+  function entrypointTargets(exports) {
+    const targets = [];
+    for (const entry of Object.values(exports)) {
+      const values = typeof entry === 'string' ? [entry] : Object.values(entry);
+      for (const value of values) targets.push(String(value).replace('./', ''));
+    }
+    return targets;
+  }
+
   // A module reachable from an entrypoint but absent from `files` is missing
   // only in the tarball, so every local gate passes and the failure appears at
   // the consumer as an unresolvable import. Walk the real import graph rather
@@ -235,7 +249,7 @@ describe('published package contents', () => {
     const pkg = JSON.parse(await readFile(new URL('package.json', dir), 'utf8'));
     const published = new Set(pkg.files);
 
-    const entrypoints = [...new Set(Object.values(pkg.exports))].map((p) => p.replace('./', ''));
+    const entrypoints = [...new Set(entrypointTargets(pkg.exports))];
     const seen = new Set();
     const queue = [...entrypoints];
 
@@ -250,15 +264,68 @@ describe('published package contents', () => {
       );
 
       const source = await readFile(new URL(name, dir), 'utf8');
-      for (const match of source.matchAll(/from\s+'\.\/([^']+)'/g)) queue.push(match[1]);
+      for (const match of source.matchAll(/from\s+'\.\/([^']+)'/g)) {
+        // A .d.ts importing './types.js' resolves to types.d.ts, not types.js:
+        // TypeScript keeps the runtime specifier and swaps the extension. Queue
+        // the file that actually has to be published.
+        queue.push(name.endsWith('.d.ts') ? match[1].replace(/\.js$/, '.d.ts') : match[1]);
+      }
     }
   });
 
   test('every entrypoint is listed in files', async () => {
     const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     const published = new Set(pkg.files);
-    for (const target of Object.values(pkg.exports)) {
-      assert.ok(published.has(target.replace('./', '')), `${target} is exported but not published`);
+    for (const target of entrypointTargets(pkg.exports)) {
+      assert.ok(published.has(target), `${target} is exported but not published`);
+    }
+  });
+});
+
+describe('shipped type declarations', () => {
+  const ENTRYPOINTS = ['base', 'svelte', 'react', 'next'];
+
+  test('every entrypoint has a declaration file beside it', async () => {
+    for (const name of ENTRYPOINTS) {
+      const source = await readFile(new URL(`../${name}.d.ts`, import.meta.url), 'utf8');
+      assert.ok(source.includes('export declare function'), `${name}.d.ts declares no function`);
+    }
+  });
+
+  test('exports map every entrypoint to its declaration', async () => {
+    const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    for (const [subpath, entry] of Object.entries(pkg.exports)) {
+      assert.equal(typeof entry, 'object', `${subpath} must use export conditions to carry types`);
+      assert.ok(entry.types, `${subpath} has no "types" condition`);
+      assert.ok(entry.types.endsWith('.d.ts'), `${subpath} types condition is not a .d.ts`);
+      // `types` must precede `default`: resolution takes the first match, so a
+      // `default` listed first shadows the declarations entirely.
+      assert.equal(Object.keys(entry)[0], 'types', `${subpath} lists "default" before "types"`);
+    }
+  });
+
+  test('extend stays loosely typed', async () => {
+    // Consumers pass entries built from their own plugins, carrying their own
+    // copy of @types/eslint. Config objects from two different copies are not
+    // mutually assignable, so narrowing this is what makes a *correct* config
+    // fail to compile. Verified end to end: a foreign-shaped entry assigns.
+    const source = await readFile(new URL('../types.d.ts', import.meta.url), 'utf8');
+    assert.match(source, /extend\?:\s*unknown\[\]/);
+  });
+
+  test('declarations do not depend on @types/eslint', async () => {
+    // Referencing it would reintroduce the version-skew problem these
+    // declarations exist to avoid, and pull a second copy into the consumer.
+    // Matched against import/reference syntax rather than the bare name, since
+    // the files discuss @types/eslint in prose precisely to explain the choice.
+    for (const name of [...ENTRYPOINTS, 'types']) {
+      const source = await readFile(new URL(`../${name}.d.ts`, import.meta.url), 'utf8');
+      assert.doesNotMatch(source, /from\s+'eslint'/, `${name}.d.ts imports from eslint`);
+      assert.doesNotMatch(
+        source,
+        /reference\s+types=|from\s+'@types\/eslint'/,
+        `${name}.d.ts references @types/eslint`,
+      );
     }
   });
 });
