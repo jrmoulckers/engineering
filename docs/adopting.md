@@ -70,11 +70,16 @@ Fetch the script once, then run it with the tag you want to pin:
 
 ```bash
 mkdir -p scripts
+
+# <latest-tag> is a placeholder, not a version. Pin the newest release:
+#   gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name
+REF=<latest-tag>
+
 curl -fsSL \
-  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.15.0/scripts/vendor-configs.mjs \
+  "https://raw.githubusercontent.com/jrmoulckers/engineering/${REF}/scripts/vendor-configs.mjs" \
   -o scripts/vendor-configs.mjs
 
-node scripts/vendor-configs.mjs v0.15.0
+node scripts/vendor-configs.mjs "$REF"
 ```
 
 Commit the fetched files, `engineering-configs.lock.json`, and the script. Refreshing is the same
@@ -106,6 +111,41 @@ and report success:
 
 Point it at a tag rather than a branch. A branch ref will resolve, but it re-points under you and
 the lock file then records a name rather than a state.
+
+#### Enforce the lock in CI, and warn about staleness without failing
+
+`--check` verifies the vendored tree still matches the lock, then reports whether a newer release
+exists. It takes no ref — the lock is the source of truth for what you pinned:
+
+```yaml
+- run: node scripts/vendor-configs.mjs --check
+```
+
+The two outcomes deliberately differ in severity:
+
+- **Drift fails.** A vendored file that was edited by hand, or has gone missing, is a local
+  integrity problem — the config no longer matches what the lock claims, so "verified at ref X"
+  stops meaning anything. Without this, vendoring quietly reintroduces the drift the registry
+  channel prevents, which is [ADR-0001](architecture/0001-two-channel-config-delivery.md)'s main
+  cost. This closes it.
+- **Staleness only warns**, and exits 0:
+
+  ```
+  Notice: pinned at v0.15.1; newest release is v0.15.2.
+  This is not a failure. Update deliberately when you choose to:
+    node scripts/vendor-configs.mjs v0.15.2
+  ```
+
+**Never make staleness fatal, and never resolve the newest tag at fetch time.** Both convert
+pinning from a decision into a default. If a tag pushed here could redden your build, the change
+arrives on whichever unrelated PR happens to be open, with nothing in your history explaining it —
+and the pressure is to bump the ref to get green rather than to accept the change on its merits.
+The property worth protecting is that when your lint result changes, `git log` says why. Make the
+pin easy to update and loud when it is stale; never automatic.
+
+A runner that is offline or rate-limited cannot tell you about staleness, so `--check` treats an
+unavailable answer as "fine" and stays silent. Drift is still checked, because that needs no
+network.
 
 ### Registry — for `eslint-config` only
 
@@ -746,14 +786,19 @@ Follow [practices/go.md](../practices/go.md) and fetch
 [`configs/golangci.yml`](../configs/golangci.yml):
 
 ```bash
-# Pin to a release tag. Resolve the newest deterministically — the tags
-# API does not order by version, and sorting lexically puts v0.9.0 above
-# v0.11.0:
+# Pin to a release tag. <latest-tag> is a placeholder, not a version — it will
+# not resolve, which is the point: a literal version copied out of a document is
+# stale one release later, and can be actively wrong. Resolve the newest:
+#
+#   gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name
+#
+# Without gh, sort by version — the tags API does not order by version, and
+# sorting lexically puts v0.9.0 above v0.11.0:
 #
 #   git ls-remote --tags --refs https://github.com/jrmoulckers/engineering.git \
 #     | sed 's:.*refs/tags/::' | grep '^v' | sort -V | tail -1
 #
-ENGINEERING_REF=v0.2.3
+ENGINEERING_REF=<latest-tag>
 
 tmp=$(mktemp)
 curl -fsSL --retry 3 \
@@ -768,9 +813,18 @@ grep -q '^linters:' "$tmp" || { echo "not a golangci config" >&2; exit 1; }
 mv "$tmp" .golangci.yml
 ```
 
-The tag shown is an example and will lag the current release, since writing a literal version
-into a document guarantees the document is stale one release later. Treat it as a knob to set,
-and pin to the newest tag when you adopt.
+The ref above is a placeholder that will visibly fail rather than a version that quietly lags.
+That is deliberate. A literal version written into a document does not merely go stale — it can
+go _wrong_: `v0.2.3` shipped a `configs/golangci.yml` comment telling consumers to **copy** the
+file, which a later release reversed to "fetch at a pinned tag". A consumer who
+copied the literal out of this guide would have adopted the behaviour the guide exists to
+prevent. A placeholder cannot do that, because it does not run.
+
+**Resolve the newest tag, but never resolve it at fetch time.** Pinning must stay an edit in your
+repository's history. If CI resolved `latest` on every run, a tag pushed here would change your
+lint rules with no commit on your side, surfacing on whichever unrelated PR happened to be open —
+and `git log` would no longer explain why a green PR went red. Make the pin easy to update and
+loud when it is stale; never make it automatic.
 
 Five details carry the weight here:
 
@@ -845,11 +899,13 @@ Run the checker over your repository before opening the PR. It needs no install 
 pinned `--index` URL is all it reads:
 
 ```bash
+REF=<latest-tag>   # gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name
+
 curl -fsSL -o /tmp/check-citations.mjs \
-  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.11/scripts/check-citations.mjs
+  "https://raw.githubusercontent.com/jrmoulckers/engineering/${REF}/scripts/check-citations.mjs"
 
 node /tmp/check-citations.mjs . --review \
-  --index https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.11/principles/index.json
+  --index "https://raw.githubusercontent.com/jrmoulckers/engineering/${REF}/principles/index.json"
 ```
 
 **Read the `--review` output; do not just check the exit code.** The exit code only catches an
