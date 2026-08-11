@@ -4,5 +4,3 @@
 # Git's automatic text detection leaves binary files byte-for-byte unchanged.
 * text=auto eol=lf
 # studio:base:end
-
-* text=auto eol=lf
