@@ -775,6 +775,19 @@ dependency onto a local checkout resolves to whatever is checked out, which is c
 the committed manifest still says `^0.1.0`. The gates pass locally and then install something
 older in CI. If you verified that way, re-check the range you actually committed.
 
+> **Sharper: the wrong range is not unverified, it is _unverifiable_ by that method.** A consumer
+> who had verified exactly this way drew the distinction, and it is the more useful statement. A
+> `file:` resolution **ignores the range entirely** — the specifier is never consulted, so it is
+> never exercised, so no amount of care in the local run can surface a wrong one. The two
+> disagreements cancel out visually: the source is current, the results are real, and the manifest
+> that would have contradicted them was never read.
+>
+> This matters because "re-run your gates after bumping" implies the gates could have caught it.
+> They could not. **The step that catches it is lockfile generation**, which resolves the range
+> against the registry — and for a repository blocked on package access, that is precisely the step
+> it cannot run. Treat a `file:`-verified adoption as carrying **one unvalidated field** into CI,
+> and re-read the range by eye against `versions.json` before the pull request opens.
+
 Peer dependencies are not bundled — install the ones your stack needs:
 
 | Stack   | Also install                                                           |
@@ -847,8 +860,38 @@ migrating, the `'detect'` line is usually the only thing you need to delete; kee
 > wrong reading here, because a declared `^9.7` cap makes "incompatible with 10" the obvious story
 > — but a peer range is an author's claim, not a test result.
 
-`.npmrc` has no Prettier parser. Add it to `.prettierignore`, or `format:check` fails on a file
-Prettier cannot parse.
+**`.npmrc` has no Prettier parser — but whether that breaks `format:check` depends on how your
+script targets files, not on `.npmrc` being present.** The advice previously given here — add it to
+`.prettierignore` — is a no-op for most repositories and insufficient for the rest. Measured on
+Prettier 3.9.6:
+
+| Invocation                | Result                                                           |
+| ------------------------- | ---------------------------------------------------------------- |
+| `prettier --check .`      | **passes** — `.npmrc` is silently skipped                        |
+| `prettier --check .npmrc` | fails — `No parser could be inferred`                            |
+| `prettier --check "**/*"` | fails on **every** unparseable file, `.npmrc` and binaries alike |
+
+Prettier skips files whose parser it cannot infer when the target is a **directory**, and errors
+only when a file is named explicitly or matched by an explicit glob. So:
+
+- If your script is `prettier --check .`, there is nothing to do. Adding `.npmrc` to
+  `.prettierignore` is an inert entry guarding a failure the repository cannot have.
+- If your script is `prettier --check "**/*"`, you were **already failing** on binary assets —
+  PNGs, `.wasm` — before `.npmrc` existed. Adding one entry does not fix that, and the honest fix
+  is to target the directory.
+
+> **The suggested fix creates the next instance of the failure it fixes.** Verified: adding a
+> `.prettierignore` containing `.npmrc` under a `**/*` glob removes the `.npmrc` error and
+> immediately produces `No parser could be inferred for file ".prettierignore"`, because
+> `.prettierignore` is itself extensionless and now matched by the glob. The error count does not
+> even drop. A fix that reproduces its own bug is a strong signal the diagnosis sat at the wrong
+> level, which it did: the fault is the glob, not any file it happens to name.
+
+This correction came from a consumer who **could not reproduce** the problem, ran all three
+invocations rather than reporting a null result, and declined to add the ignore entry on the
+grounds that it would be an inert line guarding an impossible failure. That is the right call for
+the right reason. A consumer who had simply applied the advice would have shipped the inert entry
+and confirmed nothing.
 
 ### Exclude files that are sealed or generated
 
