@@ -432,6 +432,14 @@ The tell for a 403 is that **metadata resolves and only the tarball download fai
 was authenticated successfully and rejected on authorization. No amount of token work fixes it.
 Diagnostic contributed by a consumer who chased the wrong one first.
 
+**The general shape, worth recognising before you debug any of them:** every credential failure on
+this path reports as _a bad credential_ when the cause is almost always a **missing, misrouted, or
+misclassified** one. An empty `NODE_AUTH_TOKEN` interpolates to nothing; a token bound to
+`npm.pkg.github.com` is simply not sent to another host; a fine-grained token is rejected where a
+classic one is required; an authorized-but-unprivileged token authenticates and then fails on the
+tarball. Four different causes, one misleading symptom. Check _which_ credential reached _which_
+host before changing the credential itself.
+
 ### Install
 
 ```bash
@@ -647,6 +655,31 @@ load-bearing.
 
 Delete only what the rule actually names, one at a time, and re-run. The rule is precise; the
 generalisation from its output is what goes wrong.
+
+### A clean `rules-of-hooks` run is not proof of absence
+
+`react-hooks/rules-of-hooks` detects a hook call it can see in a statement position. It does not
+see one nested inside a returned object literal. A repository with seven `try`/`catch` hook
+wrappers in a single file had **two** flagged, because the rule catches
+
+```js
+const { value } = useThing();
+```
+
+and misses
+
+```js
+return { value: useThing().value };
+```
+
+Both are conditional hook calls; only the first is reported. The two that did flag were genuine
+bugs, so the rule earned its place — but treat a zero count as "no violations of the shape this
+rule recognises", not as "no conditional hooks". If you are auditing a codebase for hook
+correctness rather than just gating new code, read the wrappers by hand.
+
+This generalises past this one rule. A lint gate reports the violations its rules are written to
+find, and adopting a stricter preset changes which shapes are visible, not whether the underlying
+defect exists. Reported by a consumer whose audit found the two the rule missed.
 
 ### Landing the first format pass
 
