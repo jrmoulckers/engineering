@@ -2,8 +2,6 @@
   "$comment": "Ratified principles with no implementing technique guide in practices/. Checked by scripts/check-coverage.mjs, which counts only the principle IDs named in a guide's section headings — a leading 'Implements' claim, a cross-reference, and a sentence stating a principle is NOT implemented all contain the ID, and none of them is an implementation. Fails if this list grows or names a principle that is now covered. Shrinking it is the point; adding to it needs a reason.",
   "uncovered": [
     "ENG-ARCH-003",
-    "ENG-DATA-002",
-    "ENG-DATA-003",
     "ENG-INT-004",
     "ENG-PERF-003",
     "ENG-PERF-004",

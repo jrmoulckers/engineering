@@ -1,7 +1,9 @@
 # Local-first sync
 
-Implements `ENG-LOCAL-001`–`ENG-LOCAL-004` and `ENG-DATA-001`–`ENG-DATA-003`. This guide adds no
-rules.
+Implements `ENG-LOCAL-001`–`ENG-LOCAL-004` and `ENG-DATA-001`. This guide adds no rules.
+
+`ENG-DATA-002` (versioned bounded data contracts) and `ENG-DATA-003` (minimized governed data) are
+implemented in [Event and data contracts](data-contracts.md).
 
 ## The device is the system of record (`ENG-LOCAL-001`)
 
