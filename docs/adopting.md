@@ -1152,6 +1152,25 @@ actually doing something before you act on it**; provenance makes a setting look
 (a third-party base that sets it deliberately, with a rationale) when only measurement can say
 whether it is.
 
+> **The justification comment is more durable than the setting.** A second consumer had not merely
+> inherited `sourceMap` — they had explicitly ported it into a new config with a comment restating
+> the upstream rationale, written by copying that rationale rather than testing it. Their own
+> assessment is the one to keep: an inherited default is invisible and gets re-derived whenever the
+> base changes, but **a hand-written line with a justification reads as deliberate and already
+> verified**, so the next reader preserves it out of respect for reasoning nobody ever checked.
+> When you port a setting out of a base you are replacing, port the measurement too, or drop the
+> comment and leave the setting bare.
+>
+> They also named the general class, and it is the most useful thing to come out of this:
+> **wrong-but-inert statements survive precisely because nothing contradicts them.** There is no
+> failing test to motivate removal and no symptom to trace, so the only pressure on them is someone
+> deciding to check. Three instances so far, in three different artifact types — a config flag with
+> a false rationale, a false claim that a principle area did not apply, and a summary line naming a
+> version many releases stale. The argument for removing any of them is not that they break
+> something; it is that a false statement nothing refutes is a standing invitation to preserve it.
+> Treat "this is harmless" as a reason to check it sooner, not later.
+
+**Diff the old base against the preset before deleting it, option by option**, and treat any
 option the preset lacks as a finding rather than an oversight. The presets are deliberately not
 supersets. A concrete case: a repository fixing a Node 24 `ERR_MODULE_NOT_FOUND` had added
 `allowImportingTsExtensions` to its own base; `base.json` does not set it, so a straight
@@ -1246,6 +1265,21 @@ inside `<script>` and for compiler warnings such as a11y and unused CSS. It coul
 worked regardless: `base.json` sets `noEmit`, so tsc writes no output and therefore no source
 maps. Porting the flag would imply a behaviour it does not provide. Vite build sourcemaps are a
 separate setting (`build.sourcemap` in `vite.config.ts`) and are unaffected.
+
+**Independently reproduced on a second toolchain.** A consumer declined to take the result on
+faith, correctly noting it came from a different repository on a different svelte-check patch. They
+re-measured on svelte-check 4.7.4 / svelte 5.56.8 / TypeScript 6.0.3, with a probe designed to
+expose mapping drift — a TS error in a `<script>` placed _below_ both markup and a `<style>` block:
+
+| Diagnostic             | `sourceMap: true` | `sourceMap: false` |
+| ---------------------- | ----------------- | ------------------ |
+| TS error in `<script>` | `14:9`            | `14:9`             |
+| a11y missing alt       | `2:1`             | `2:1`              |
+| unused CSS selector    | `8:3`             | `8:3`              |
+
+Byte-identical. Two toolchains, one mechanism explaining why it could not be otherwise. This is the
+standard to hold shared-repository measurements to: **re-measure on your own versions rather than
+adopting a number, especially when the conclusion is "delete this."**
 
 ### Scripts
 
