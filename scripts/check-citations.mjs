@@ -25,6 +25,11 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const CITATION = /\bENG-[A-Z]+-\d{3}\b/g;
+// `ENG-X-001 (Thin typed adapters)`. Parentheses only, and the content must
+// start with a capital — a title is a proper name. An em dash is ordinary prose
+// punctuation ("per ENG-SEC-008 — never a real record") and reading it as a
+// naming claim produced false positives, which is how a checker gets disabled.
+const TITLED = /\b(ENG-[A-Z]+-\d{3})[`*_\]]*\s*\(([A-Z][^)/#\n]{2,59})\)/g;
 // A markdown link whose visible text names a principle ID.
 const ID_LINK = /\[([^\]]*?)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 const DEFAULT_INDEX =
@@ -119,6 +124,7 @@ async function collectFiles(target) {
 async function scanFile(file) {
   const hits = [];
   const links = [];
+  const titled = [];
   const lines = (await readFile(file, 'utf8')).split(/\r?\n/);
   lines.forEach((text, i) => {
     for (const [, label, href] of text.matchAll(ID_LINK)) {
@@ -147,8 +153,28 @@ async function scanFile(file) {
           .filter((l) => l.text.trim() !== ''),
       });
     }
+
+    // A citation that also states the principle's name — `ENG-INT-001 (Thin
+    // typed adapters)` or `ENG-INT-001 — Thin typed adapters` — makes a
+    // semantic claim that can be checked mechanically. Every miscitation seen
+    // in this migration used a real ID that meant something else, which no
+    // existence check can catch; a stated title turns that into a diff.
+    for (const [, id, paren] of text.matchAll(TITLED)) {
+      titled.push({ file, line: i + 1, id, claimed: paren.trim() });
+    }
   });
-  return { hits, links };
+  return { hits, links, titled };
+}
+
+// Compare loosely: case, surrounding punctuation and internal whitespace are
+// presentation, not meaning. A backticked or bolded title is still the title.
+function normalizeTitle(s) {
+  return s
+    .replace(/[`*_]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[.,;:]+$/, '')
+    .trim()
+    .toLowerCase();
 }
 
 async function main() {
@@ -165,10 +191,12 @@ async function main() {
 
   const citations = [];
   const links = [];
+  const titled = [];
   for (const file of files) {
     const scanned = await scanFile(file);
     citations.push(...scanned.hits);
     links.push(...scanned.links);
+    titled.push(...scanned.titled);
   }
 
   const unknown = citations.filter((c) => !known.has(c.id));
@@ -183,6 +211,11 @@ async function main() {
         .filter((l) => !l.target.endsWith(l.want))
     : [];
 
+  const badTitles = titled
+    .filter((t) => known.has(t.id))
+    .map((t) => ({ ...t, want: known.get(t.id).title }))
+    .filter((t) => normalizeTitle(t.claimed) !== normalizeTitle(t.want));
+
   if (opts.json) {
     console.log(
       JSON.stringify(
@@ -194,12 +227,13 @@ async function main() {
           })),
           unknown,
           badLinks,
+          badTitles,
         },
         null,
         2,
       ),
     );
-    return unknown.length > 0 || badLinks.length > 0 ? 1 : 0;
+    return unknown.length > 0 || badLinks.length > 0 || badTitles.length > 0 ? 1 : 0;
   }
 
   if (citations.length === 0) {
@@ -246,9 +280,28 @@ async function main() {
   }
 
   const distinct = new Set(citations.map((c) => c.id));
+
+  if (badTitles.length > 0) {
+    console.error(`${badTitles.length} citation(s) state the wrong principle name:\n`);
+    for (const t of badTitles) {
+      console.error(`  ${t.file}:${t.line}  ${t.id}`);
+      console.error(`      claimed:  ${t.claimed}`);
+      console.error(`      actual:   ${t.want}`);
+    }
+    console.error(
+      '\nThe ID exists, so an existence check passes and the citation still\n' +
+        'misleads. Every miscitation in the seven-repo migration was this shape:\n' +
+        'a real ID standing for a different rule. Take the name from\n' +
+        'principles/index.json rather than from memory.',
+    );
+    return 1;
+  }
+
   console.log(
     `${citations.length} citation(s) across ${distinct.size} principle(s) in ` +
-      `${files.length} file(s); all IDs exist.`,
+      `${files.length} file(s); all IDs exist` +
+      (titled.length > 0 ? `, and ${titled.length} stated name(s) match` : '') +
+      '.',
   );
   if (!opts.review) {
     console.log(

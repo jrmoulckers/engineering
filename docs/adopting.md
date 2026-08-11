@@ -1125,6 +1125,46 @@ That asserts an equivalence the principle does not support. There is no ratified
 principle, so the fix is to state the accessibility rule as your own and cite `ENG-PERF-009`
 only for what it actually constrains.
 
+### Write the name next to the ID, and it gets checked
+
+`--review` is advisory: it prints the truth and trusts a human to read it. That is not enough,
+because the reviewer most likely to skip it is the one who wrote the citation from memory. So
+state the principle's name in parentheses and the checker verifies it for you:
+
+```md
+Adapters are required by [`ENG-INT-001` (Thin typed adapters)](../principles/platforms/integration-boundaries.md).
+```
+
+A wrong name now fails the build with a diff:
+
+```
+1 citation(s) state the wrong principle name:
+
+  docs/architecture.md:12  ENG-SEC-001
+      claimed:  Minimal directed boundaries
+      actual:   Secret lifecycle
+```
+
+This converts the only error class that survived every other check into a mechanical one.
+**Every miscitation in the seven-repo migration had the same shape** — a real ID, correctly
+formatted, resolving to a different rule. Existence checks pass, link checks pass, and the
+sentence still misleads.
+
+The name is optional; omitting it is not a failure. Add it wherever a citation carries weight —
+a principle named in an ADR, a `## Compliance` table, a rule you are asking another repo to
+follow. Only parenthesised text beginning with a capital is read as a name claim, so ordinary
+prose (`per ENG-SEC-008 — never a real record`) is untouched. That restraint is deliberate:
+an early version also parsed em-dashed text and produced a false positive on that exact line,
+and a checker that cries wolf is a checker somebody turns off.
+
+**Cite nothing rather than the nearest-sounding ID.** If no principle states the obligation,
+state it as your own rule. But check before concluding one is absent — read the **Statement**,
+not the title. `ENG-INT-001` is titled _Thin typed adapters_, which does not sound like a rule
+about framework-free domain logic; its Statement requires you to "isolate provider or framework
+behavior behind thin single-purpose adapters", which is exactly that rule seen from the other
+side. Titles are labels, not the obligation, and a search over titles alone will conclude a
+principle does not exist when it does.
+
 **Link paths are checked for you.** IDs and locations are independent, and the area prefix is not
 derivable from the ID: of eleven prefixes, only `ARCH` lives under a directory named after it.
 `ENG-INT-001` is under `principles/platforms/`, not `principles/architecture/`. A hand-written

@@ -197,4 +197,63 @@ describe('check-citations', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  // Every miscitation observed across the seven-repo migration used a real ID
+  // standing for a different rule, which existence and link checks both pass.
+  // Stating the name turns that semantic error into a mechanical one.
+  describe('stated principle names', () => {
+    test('accepts a name that matches the index', () => {
+      const dir = fixture('See `ENG-INT-001` (Thin typed adapters) for adapters.\n');
+      try {
+        const { code, out } = run(dir);
+        assert.equal(code, 0);
+        assert.match(out, /stated name\(s\) match/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test('fails on a real ID given another principle name', () => {
+      const dir = fixture('Secrets are `ENG-SEC-001` (Minimal directed boundaries).\n');
+      try {
+        const { code, out } = run(dir);
+        assert.equal(code, 1);
+        assert.match(out, /claimed:\s+Minimal directed boundaries/);
+        assert.match(out, /actual:\s+Secret lifecycle/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test('ignores case, backticks and trailing punctuation', () => {
+      const dir = fixture('Adapters: `ENG-INT-001` (**thin typed adapters**.)\n');
+      try {
+        assert.equal(run(dir).code, 0);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    // An earlier version read em-dashed prose as a name claim and failed on
+    // this exact line in practices/data-contracts.md. A checker that cries
+    // wolf is a checker somebody turns off, so only a parenthesised phrase
+    // beginning with a capital counts as a claim.
+    test('does not read prose after an ID as a name claim', () => {
+      const dir = fixture('Synthetic subject, per ENG-SEC-008 — never a real record.\n');
+      try {
+        assert.equal(run(dir).code, 0);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test('leaves a lowercase parenthetical aside alone', () => {
+      const dir = fixture('Erasure obligations `ENG-SEC-008` (see the table below).\n');
+      try {
+        assert.equal(run(dir).code, 0);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
 });
