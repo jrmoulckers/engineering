@@ -517,18 +517,31 @@ rather than trusting this table, which is a literal and therefore ages:
 npm view @jrmoulckers/tsconfig version --registry=https://npm.pkg.github.com
 ```
 
-**If that command fails for you, this table is your authority — not a git tag.** A consumer
-without `read:packages` gets `401`/`403` here, which is the same position as a repository whose
-access grant has not landed yet. The tempting fallback is to read
-`packages/<name>/package.json` at a tag, and it is wrong in a way that looks authoritative: it
-reports the source tree at that moment, not what is published. That failure has now happened
-repeatedly, in both directions — a consumer concluding a fix was missing when it had shipped
-several releases earlier, and Engineering citing a repository tag as though it were an
-installable version. **Both are the same mistake**, and the second one causes the first.
+**If that command fails for you, read [`versions.json`](../versions.json) at the repository
+root — not a git tag, and not `packages/<name>/package.json`.** A consumer without
+`read:packages` gets `401`/`403` here, which is the same position as a repository whose access
+grant has not landed yet. The tempting fallback is to read `packages/<name>/package.json` at a
+tag, and it is wrong in a way that looks authoritative: it reports the source tree at that
+moment, not what is published. That failure has now happened repeatedly, in both directions — a
+consumer concluding a fix was missing when it had shipped several releases earlier, and
+Engineering citing a repository tag as though it were an installable version. **Both are the same
+mistake**, and the second one causes the first.
 
-So: if you cannot query the registry, take versions from this table or from the release notes,
-and say in your report that you could not verify against the registry. That sentence is what
-lets the claim be checked rather than propagated.
+`versions.json` exists because that instinct — read the repository — is not going away, and
+three separate repositories acted on it after this section already told them not to. So the
+repository now answers correctly instead. It records the published version, the channel, the
+range to pin, and the peer ranges, and `npm run versions:check` fails CI if any of it drifts from
+the registry. It is therefore safe to read at a tag: every commit on `main` had it matching the
+registry at that time. A newer version may exist, but nothing it states will be wrong.
+
+That last distinction is the whole design. This table and the floor table are literals that age
+silently; `versions.json` is a literal that **cannot** age silently, because a check compares it
+to the registry rather than trusting it. Prefer it over any version number written in prose,
+including numbers written here.
+
+So: if you cannot query the registry, take versions from `versions.json`, and say in your report
+that you could not verify against the registry yourself. That sentence is what lets the claim be
+checked rather than propagated.
 
 If you are reporting a defect in a preset, **state the version you resolved, not the range you
 pinned.** Several reports have described behaviour fixed many releases earlier, because a `^0.1.0`
