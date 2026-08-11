@@ -660,7 +660,7 @@ file and move it into place only after every check passes, and add the destinati
 
 ## Citing principles
 
-Replace prose that restates a rule with a citation to its ID. Two things make a citation wrong
+Replace prose that restates a rule with a citation to its ID. Three things make a citation wrong
 rather than merely untidy.
 
 **Verify every ID against `principles/index.json`.** IDs are not guessable from the subject
@@ -712,6 +712,55 @@ accessibility away for performance, which is exactly what it says. Compare a wro
 That asserts an equivalence the principle does not support. There is no ratified accessibility
 principle, so the fix is to state the accessibility rule as your own and cite `ENG-PERF-009`
 only for what it actually constrains.
+
+**Resolve link paths from `index.json`, never by hand.** IDs and locations are independent: a
+correct ID says nothing about which file holds it, and the prefix is not derivable from the ID —
+`ENG-INT-005` and `ENG-DATA-001` both live under `principles/platforms/`, not under directories
+named for their prefix. A hand-written path produces a valid-looking citation with a dead link,
+and the ID checker passes because the ID is right. `index.json` carries a `source` field for each
+principle, so verify against it:
+
+```bash
+curl -fsSL -o /tmp/index.json \
+  https://raw.githubusercontent.com/jrmoulckers/engineering/v0.2.11/principles/index.json
+```
+
+```js
+// check-citation-paths.mjs — run: node check-citation-paths.mjs . /tmp/index.json
+import { readFileSync } from 'node:fs';
+import { globSync } from 'node:fs';
+
+const [dir = '.', indexPath = '/tmp/index.json'] = process.argv.slice(2);
+const byId = new Map(
+  JSON.parse(readFileSync(indexPath, 'utf8')).principles.map((p) => [p.id, p.source]),
+);
+
+let bad = 0;
+for (const file of globSync('**/*.md', {
+  cwd: dir,
+  exclude: (p) => p.includes('node_modules'),
+})) {
+  const text = readFileSync(`${dir}/${file}`, 'utf8');
+  // Markdown links whose text contains a principle ID.
+  for (const [, id, href] of text.matchAll(/\[[^\]]*?(ENG-[A-Z]+-\d+)[^\]]*?\]\(([^)]+)\)/g)) {
+    const want = byId.get(id);
+    if (!want) continue; // ID existence is the other checker's job.
+    const path = href.split('#')[0];
+    // Only links that aim at the principle source. A link whose text names an
+    // ID but points at a practice guide is citing the technique, not the
+    // principle, and is correct as written.
+    if (!path.includes('principles/')) continue;
+    if (!path.endsWith(want)) {
+      console.log(`${file}: ${id} -> ${href}\n  expected a path ending in ${want}`);
+      bad++;
+    }
+  }
+}
+process.exit(bad === 0 ? 0 : 1);
+```
+
+A consumer that skipped this wrote two wrong paths into a single new document while getting both
+IDs right, then caught them only by scripting the check.
 
 **If no principle covers it, cite nothing.** A near-miss citation is the one failure mode this
 whole scheme cannot survive: it transfers authorship of a rule to this repository, which never
