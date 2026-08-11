@@ -530,6 +530,31 @@ such an instruction will search, find nothing, and be left unable to distinguish
 instruction from their own oversight. Both of this migration's instances were caught only because
 the recipient reported the absence instead of assuming they had misread.
 
+**A measurement is evidence for the number, not for the cause.** The most expensive defect in this
+migration was self-inflicted and began with a correct report. A consumer measured 37 packages /
+6.2 MB of React and Next tooling arriving in a Svelte-only repository. We assigned it a cause —
+that `peerDependenciesMeta.optional` does not prevent installation — and on that basis moved five
+framework plugins into a bespoke `frameworkPlugins` field that npm ignores, published the mechanism
+on this page, and added a regression test asserting the plugins must never be peers.
+
+The premise was false. Optional peers are not auto-installed by npm 7, npm 11, pnpm 11, or pnpm
+with `auto-install-peers=true`; installing the real package at the very version the report was
+filed against yields zero framework plugins present. The change bought nothing and cost the version
+contract for three releases, during which the published ranges were documentation rather than
+constraints.
+
+Two things generalise. First, **the cause was never re-derived** — the number was checked and the
+explanation was not, and a plausible explanation for a real number is the easiest kind of error to
+ship. When you report a size or count, include the dependency path (`npm ls <pkg>`, `pnpm why
+<pkg>`); when you receive one, ask for it before designing against a mechanism.
+
+Second, and worse: **a wrong belief with a green check on it stops looking like a belief.** The
+regression test encoded the false invariant, passed on every run, and would have blocked the
+correct fix had it not been read closely. A test is an assertion about the world and inherits every
+error in the reasoning that produced it. When a test exists only to defend a conclusion rather than
+a behaviour, write the evidence for that conclusion into the test body, so the next reader can
+re-check the claim instead of trusting the check.
+
 **Route by scope. Never replace the default registry.** Setting
 `registry=https://npm.pkg.github.com/` wholesale, rather than scoping it, breaks `npm audit` /
 `pnpm audit` — GitHub Packages implements no advisory endpoint. Under npm the failure reads:
