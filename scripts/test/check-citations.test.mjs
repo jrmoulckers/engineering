@@ -304,3 +304,59 @@ describe('bare multi-citation annotation', () => {
     }
   });
 });
+
+describe('citation ranges', () => {
+  test('verifies the interior of a range, not just its endpoints', () => {
+    const dir = fixture('Observability: `ENG-OBS-001`–`ENG-OBS-007` (structured signals).\n');
+    try {
+      const out = run(dir, ['--review']).out;
+      for (const n of ['002', '003', '004', '005', '006']) {
+        assert.match(out, new RegExp(`ENG-OBS-${n}`), `range member ${n} not verified`);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('fails when a range names a principle that does not exist', () => {
+    const dir = fixture('Coverage of `ENG-OBS-005`–`ENG-OBS-009` is complete.\n');
+    try {
+      const res = run(dir);
+      assert.equal(res.code, 1);
+      assert.match(res.out, /ENG-OBS-00[89]/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('expands the abbreviated second endpoint', () => {
+    const dir = fixture('See `ENG-OBS-001`–`005` for the signal rules.\n');
+    try {
+      assert.match(run(dir, ['--review']).out, /ENG-OBS-003/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // A hyphen between two areas is prose, not a range. Expanding it would
+  // invent citations the author never made.
+  test('ignores a dash between different areas', () => {
+    const dir = fixture('Compare `ENG-OBS-001`–`ENG-SEC-004` on failure handling.\n');
+    try {
+      const res = run(dir, ['--review']);
+      assert.equal(res.code, 0);
+      assert.doesNotMatch(res.out, /via range/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('marks range members as inferred rather than written', () => {
+    const dir = fixture('Signals `ENG-OBS-001`–`ENG-OBS-003` apply.\n');
+    try {
+      assert.match(run(dir, ['--review']).out, /via range .*never names it/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
