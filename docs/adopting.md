@@ -1320,7 +1320,7 @@ Run the checker over your repository before opening the PR. It needs no install 
 pinned `--index` URL is all it reads:
 
 ```bash
-REF=<latest-tag>   # gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name
+REF="$(gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name)"
 
 curl -fsSL -o /tmp/check-citations.mjs \
   "https://raw.githubusercontent.com/jrmoulckers/engineering/${REF}/scripts/check-citations.mjs"
@@ -1328,6 +1328,19 @@ curl -fsSL -o /tmp/check-citations.mjs \
 node /tmp/check-citations.mjs . --review \
   --index "https://raw.githubusercontent.com/jrmoulckers/engineering/${REF}/principles/index.json"
 ```
+
+**Re-resolve `REF` each time; do not sort tags yourself.** Resolve it from the releases API, as
+above. A pinned ref you wrote down once is a snapshot, and this repository has shipped many
+releases in a day. Lexical tag sorting is also wrong here — `v0.2.9` sorts _after_ `v0.2.11`, and
+`v0.2.11` is a different and much older release than `v0.21.1`, which is one transposed character
+away. A consumer pinned at `v0.2.11` spent two rounds reporting features as missing that had
+shipped in the twenty releases since.
+
+**If the run prints no version line at all, you are older than `v0.21.1`.** This is the one
+staleness the version line cannot report, because a copy that predates it has nothing to print —
+so the _absence_ is the signal. There is no version to compare, no list of checks, and no
+indication that either is missing. Treat a silent summary as a stale copy and re-fetch before
+concluding anything about your repository.
 
 **That recipe is for a local pre-PR run, not for CI.** A consumer declined to wire it into their
 workflow and was right to: `curl | node` from a tag, inside a job holding a token, is a
@@ -1570,6 +1583,18 @@ Two shapes that stay honest when nothing covers the subject:
 - **Record it as a decision.** A constraint with no principle behind it is an ADR, and
   `ENG-ARCH-003` is what requires you to write one before treating it as durable. Cite
   `ENG-ARCH-003` for the _recording_, not for the constraint.
+
+**Cite `ENG-ARCH-003` only if you actually keep ADRs.** It is the construction most likely to be
+misused, precisely because it is available to any repository that writes anything down. A consumer
+worked through all three shapes above looking for one that fit, and rejected this one on the
+grounds that their repository has no `docs/architecture/` and no ADRs anywhere — so citing it would
+assert a practice they do not follow. That is aspiration dressed as compliance, and it is worse
+than silence, because the citation now reads as evidence that the obligation is discharged.
+
+Their broader conclusion is the right default: **"no change" is a legitimate result.** Adding an ID
+because a construction _permits_ one is the same failure as adding one because it sounds right.
+The same repository also declined to manufacture a case for the other two shapes, and reported that
+instead. If none of the three fit, cite nothing and say so.
 
 **State a boundary by file kind, not by directory, and grep before you assert it.** Framework
 isolation is the case where this bites. `ENG-INT-001` requires framework behaviour to sit behind
