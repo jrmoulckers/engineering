@@ -646,6 +646,27 @@ If you are reporting a defect in a preset, **state the version you resolved, not
 pinned.** Several reports have described behaviour fixed many releases earlier, because a `^0.1.0`
 range held the install at `0.1.x` while the report was written against current documentation.
 
+**`versions.json` cannot be found by the tags most likely to need it.** It is newer than much of
+what consumers are pinned to, so a repository old enough to be reading `packages/*/package.json`
+at a tag is usually too old to contain the file that would have told it not to. One repository
+read `packages/eslint-config/package.json` at `v0.2.8` and reported `eslint: ^9.0.0` as too narrow.
+That read was _correct for that tag_ — the package was `0.2.1` there — but the published version
+was `0.10.0`, which had widened it to `^9.0.0 || ^10.0.0` along with the two other ranges the same
+report asked for. So the check is not "does the repository say the range is narrow", it is **"am I
+reading a tag old enough that this file predates the answer?"** If `versions.json` is absent from
+the tree you are reading, that absence is itself the finding: resolve a newer ref before reporting
+anything about versions.
+
+**In any document that states a version twice, the summary is the copy that goes stale.** A
+consumer found their own `AGENTS.md` saying the shared packages were "all pinned at `v0.1.0`"
+thirty lines above adoption guidance that correctly said `^0.2.1` — the detail had been revised
+three times and the summary line never re-read, because nobody re-reads the summary while editing
+the section it summarizes. The failure is not cosmetic: `0.1.0` was not installable in that
+repository at all, and the one-line summary is the first thing every reader hits. Either state the
+version once and link to it, or point both places at `versions.json`. This is the same failure as
+acting on a compressed summary instead of the artifact, committed at authoring time rather than at
+reading time.
+
 **Check the registry, not a git tag.** A repository tag and a package version are different
 numbers and move independently: this repository was at `v0.2.5` while `@jrmoulckers/tsconfig` was
 at `0.2.0`, and is at `v0.15.x` while that package is at `0.4.0`. Reading
@@ -1452,6 +1473,15 @@ Two things caused it, and both are worth avoiding:
 - **Generalizing from an unverified flag.** The false conviction was then written into this guide
   as an observed pattern and broadcast to other repositories, one of which spent a full audit
   looking for a defect that never existed. A wrong finding propagates exactly like a right one.
+
+**None of that is an argument for not challenging.** The repository that was wrongly convicted made
+the point better than I can: the retraction is what surfaced the `--review` context hole, and the
+grep they ran to answer the challenge found a real version inconsistency in their own `AGENTS.md`.
+A wrong challenge that gets **checked against the artifact** is still productive; the cost lands
+only when the challenge is checked against nothing and then relayed onward. So the rule is not
+"flag less", it is **flag freely, verify before you generalize, and never broadcast an unverified
+flag** — which is also the argument for keeping `--review` cheap enough that checking is the easy
+path.
 
 **Wrap so a citation never sits alone on a line.** Keep the qualifying clause on the same line as
 the link. It is a one-line authoring convention that makes any line-oriented review of your file
