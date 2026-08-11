@@ -1,0 +1,65 @@
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const manifest = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../../versions.json', import.meta.url)), 'utf8'),
+);
+
+// Three separate repositories reported being blocked on all three packages when
+// only one is installed from a registry. Each time, the correction existed in
+// docs/adopting.md — and each time it did not reach them, because a consumer
+// reads prose at the ref they pinned while versions.json is read from main.
+//
+// So the meaning of `channel` lives in versions.json next to the value it
+// explains. These tests keep it there and keep it true.
+describe('versions.json channels are self-describing', () => {
+  test('every package channel is defined in the channels legend', () => {
+    const defined = Object.keys(manifest.channels ?? {});
+    assert.ok(defined.length > 0, 'versions.json must carry a channels legend');
+
+    for (const [name, entry] of Object.entries(manifest.packages)) {
+      assert.ok(
+        defined.includes(entry.channel),
+        `${name} declares channel "${entry.channel}", which the legend does not define — ` +
+          `a consumer reading this file cannot resolve what it obligates them to do`,
+      );
+    }
+  });
+
+  test('each channel states whether it requires registry auth', () => {
+    for (const [channel, spec] of Object.entries(manifest.channels)) {
+      assert.equal(
+        typeof spec.requiresRegistryAuth,
+        'boolean',
+        `channel "${channel}" must answer requiresRegistryAuth as a boolean — this is the ` +
+          `single question consumers have got wrong, so it cannot be left to prose`,
+      );
+      assert.ok(
+        typeof spec.summary === 'string' && spec.summary.length > 0,
+        `channel "${channel}" needs a summary`,
+      );
+    }
+  });
+
+  test('at least one channel needs no registry auth, and it is reachable while blocked', () => {
+    // The point of recording this is that a repository waiting on package
+    // access can still adopt everything in a tokenless channel. If that stops
+    // being true the guidance sent to blocked consumers becomes wrong.
+    const tokenless = Object.entries(manifest.channels).filter(
+      ([, spec]) => spec.requiresRegistryAuth === false,
+    );
+    assert.ok(
+      tokenless.length > 0,
+      'no tokenless channel exists; blocked consumers can no longer make progress',
+    );
+
+    const names = new Set(tokenless.map(([channel]) => channel));
+    const reachable = Object.entries(manifest.packages).filter(([, e]) => names.has(e.channel));
+    assert.ok(
+      reachable.length > 0,
+      'a tokenless channel is defined but no package uses it, so the legend misleads',
+    );
+  });
+});

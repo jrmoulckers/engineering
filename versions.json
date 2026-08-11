@@ -19,8 +19,36 @@
     "check will fail the PR, correctly, because the version named here would not yet exist.",
     "The order is: merge the code with this file untouched, push the tag so publish.yml runs,",
     "then open a follow-up that updates this file to match. Between those two steps this file",
-    "is behind, which is the safe direction: every version named here still resolves."
+    "is behind, which is the safe direction: every version named here still resolves.",
+    "",
+    "Read \"channels\" below before reporting that you are blocked on package access. Three",
+    "separate repositories have reported being blocked on all three packages when only one",
+    "of them is installed from the registry at all. That fact was documented in",
+    "docs/adopting.md each time, but a consumer reads the docs at the ref they pinned, while",
+    "this file is read from main -- so the meaning of \"channel\" lives here, next to the",
+    "value it explains, rather than only in prose that goes stale in the reader's checkout."
   ],
+  "channels": {
+    "registry": {
+      "summary": "Installed from GitHub Packages. Requires a token.",
+      "requiresRegistryAuth": true,
+      "notes": [
+        "Add it to package.json and install it. GitHub Packages authenticates every read,",
+        "including reads of a public package, so contributors and CI both need a classic PAT",
+        "with read:packages. Package visibility affects authorization, not authentication."
+      ]
+    },
+    "vendored": {
+      "summary": "Copied into your repository at a ref. No token, no registry, no visibility dependency.",
+      "requiresRegistryAuth": false,
+      "notes": [
+        "Never published. Do not add it to package.json and do not wait on package access to",
+        "adopt it -- copy the file from this repository at a tag and record which tag you used.",
+        "If you are blocked on registry access, everything in this channel is still available",
+        "to you today."
+      ]
+    }
+  },
   "registry": "https://npm.pkg.github.com",
   "packages": {
     "@jrmoulckers/eslint-config": {
