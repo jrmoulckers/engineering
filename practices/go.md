@@ -243,6 +243,19 @@ while discarding exactly as much. A check that a rename satisfies cannot be the 
 rule up. `check-type-assertions` stays on: a failed assertion panics, and no comment makes that
 recoverable.
 
+**If you cannot write the comment, that is the finding.** The requirement is a forcing function, and
+its most useful output is sometimes that the discard should not exist. A consumer hit this on a
+pre-existing `_ = filepath.WalkDir(...)`: attempting to justify it surfaced that the intended
+behaviour was "a missing or unreadable artwork directory means zero artwork" — a real decision that
+had never been stated anywhere. They expressed it in code instead, returning `fs.SkipDir` on the
+error path and checking the walk's result. The intent became asserted rather than assumed.
+
+Note what that example is not. They were pinned to an old revision where `check-blank` was still on,
+so the rule they were satisfying had already been withdrawn — yet the outcome was still an
+improvement. That is evidence for the comment requirement, not for the lint option: the constraint
+that produced the better code was _having to state the reason_, which review imposes on every
+discard, including the two-line spelling `check-blank` cannot see.
+
 ### Sanitizing wrapped errors without defeating `errorlint`
 
 `errorlint` flags `fmt.Errorf("%w: %v", ErrSentinel, err)`, and the flag is usually right — the

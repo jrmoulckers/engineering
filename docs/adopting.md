@@ -862,6 +862,27 @@ missing entry point or an unpublished directory fails the way it would in CI. Th
 narrower than "packing is a trap" — it is that the packed tree can be stale, and that **neither**
 local method consults your declared range.
 
+**The general rule, which is not npm-specific: verify against the resolved artifact, not a
+convenient local stand-in.** This framing came from the one consumer with no npm surface at all,
+and it is better than the packaging-flavoured version above because it survives a change of
+channel. The failure has the same shape everywhere it appears:
+
+| Channel           | The convenient stand-in                                       | What CI actually resolves               |
+| ----------------- | ------------------------------------------------------------- | --------------------------------------- |
+| npm packages      | a `link:`/`file:` checkout, or a stale pack                   | the tarball your declared range selects |
+| fetched Go config | golangci-lint's built-in defaults, when the fetch has not run | the pinned `configs/golangci.yml`       |
+| vendored files    | the copy in your tree                                         | the copy at the ref you recorded        |
+
+The Go instance is worth stating because the mechanism is completely different and the symptom is
+identical: golangci-lint does not error on a missing config, it silently falls back to its defaults.
+A contributor who has not run the fetch loses `nilerr`, `errorlint`, `revive`, `misspell` and
+`unconvert`, gets a **clean local run**, and is red in CI with no local reproduction. In the rebase
+that surfaced this, a `nilerr` violation would have shipped for exactly that reason.
+
+Because the mechanisms differ, a fix for one does not fix the other — the shared discipline is the
+question, not the remedy: **is the thing I just verified the thing that will be installed?** Ask it
+before believing a green local run, on any channel, including ones added later.
+
 **Byte-identical source across versions still does not license carrying a result forward.** This is
 the part worth internalising, and it comes from that consumer being unusually precise about scope.
 They noted their verification covered only the files their repository actually imports, diffed
