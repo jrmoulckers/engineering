@@ -1265,6 +1265,13 @@ assumed present at an index that the type system could not prove:
 
 Those are latent crashes, not style. The flag did not create them; it revealed them.
 
+A third shape is worth naming because it does **not** crash. A router matching
+`/^\d{4}$/.test(segs[1])` against a possibly-absent segment does not throw — `.test()` coerces
+`undefined` to the string `"undefined"`, which simply fails the match. The result is a silently
+wrong route rather than an error, so it survives every test that does not specifically exercise the
+short path. **Not every finding is a latent crash; some are permanently wrong answers**, and those
+are the ones no amount of runtime testing was ever going to surface.
+
 A second repository reproduced the pattern at larger scale: **152 errors, every one from
 `noUncheckedIndexedAccess`** — 12 in production source, 140 in test files that index immediately
 after their own `toHaveLength` assertion. That distribution is the useful part to plan around:
@@ -1279,6 +1286,30 @@ the friction is concentrated where the risk is lowest. A test that has just asse
 `toHaveLength(3)` genuinely knows index `0` exists, so `!` there is a statement of fact rather
 than a suppression. The same `!` in production code is the bug being re-hidden. Budget for the
 test churn separately so it does not disguise the small number of real fixes.
+
+**The test carve-out is conditional on the assertion that justifies it, and nothing enforces
+that.** `expect(r).toHaveLength(2)` followed by `r[0]!.name` is sound only because of the line
+above it. Delete or weaken that line later — narrow the case, change the fixture, split the test —
+and the `!` stays behind, now asserting something no longer established. The test still fails, but
+as a `TypeError: Cannot read properties of undefined` at an arbitrary line instead of a named
+assertion failure. So the cost of a stale `!` in tests is not a hidden production bug; it is a
+worse diagnostic at the moment you most need a good one.
+
+Two things follow. First, if you are adding these in bulk, **verify the tail rather than the
+sample** — "every one of them follows a length assertion" is exactly the claim that is true of the
+twenty you looked at and false of the hundred you did not. Second, prefer a helper where the
+guard is not literally the previous line:
+
+```ts
+function assertDefined<T>(v: T | undefined, what: string): T {
+  if (v === undefined) throw new Error(`expected ${what} to be defined`);
+  return v;
+}
+```
+
+It costs one line, survives edits to the surrounding test, and fails with a sentence instead of a
+stack trace. Bulk-converting an existing, genuinely-guarded set of assertions to it is not worth
+the churn — this is guidance for what you write next.
 
 So treat the burst as a one-time debt payment. Fix at the call site — add the guard, narrow the
 type, handle the absent case. Do **not** widen with `!` or `as` in production code, and do not
