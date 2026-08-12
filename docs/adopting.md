@@ -1013,11 +1013,65 @@ at startup in about a second. Match this table exactly, per callee you call:
 | `reusable-change-detection` | `contents: read`                                                      |
 
 A caller with **no** `permissions:` block does **not** escape this. Omitting the block inherits the
-repository default, and the restricted default (`read`) supplies only `contents` and `packages` —
-below what `reusable-ci-lint` and `reusable-deploy-pages` declare. Measured both ways on a
-repository with that default: no block `startup_failure`s against a callee needing
-`pull-requests: read`; an explicit block granting it succeeds. **Writing the block down is what
-lets you fix this, not what causes it.**
+repository default. Measured both ways on a repository with the restricted default: no block
+`startup_failure`s against a callee needing `pull-requests: read`; an explicit block granting it
+succeeds. **Writing the block down is what lets you fix this, not what causes it.**
+
+**What the restricted default actually grants was worth measuring rather than reasoning about.** A
+consumer stopped taking my word for it — and stopped taking GitHub's docs for it — and read the
+group Actions already prints at job setup:
+
+```text
+##[group]GITHUB_TOKEN Permissions
+Contents: read
+Metadata: read
+Packages: read
+```
+
+Reproduced here. That is the whole grant: `{contents, metadata, packages}: read`. This document
+previously said "only `contents` and `packages`", which was asserted rather than measured and
+missed `metadata`. The measurement gives a sharper rule than the table:
+
+> Under a restricted default, a caller may omit `permissions:` **only if** the callee needs nothing
+> outside `{contents, metadata, packages}: read`.
+
+Applied to the current backbone, that is **8 of 10 reusable workflows covered by omission**, and
+exactly two that are not:
+
+| Callee                  | Needs beyond the default    |
+| ----------------------- | --------------------------- |
+| `reusable-ci-lint`      | `pull-requests: read`       |
+| `reusable-deploy-pages` | `id-token`/`pages`: `write` |
+
+Note which scope is _not_ at risk. `packages: read` — the scope this entire adoption is about — is
+granted by default, so the failure mode people brace for is the one that cannot happen. And
+`id-token: write` is a **write** scope, which a restricted default cannot supply under any
+circumstance, so `reusable-deploy-pages` is unreachable without an explicit block.
+
+**`permissions: {}` is not deny-all.** Measured in the same run: a job declaring an empty
+permissions map still gets `Metadata: read`. Metadata cannot be dropped. Repositories that write
+`{}` at the top level and describe it as deny-all are describing something the platform does not
+implement — harmless in itself, but it means "we grant nothing globally" is not a safe premise to
+reason from.
+
+**And do not respond to this failure by deleting the `permissions:` block.** The framing above —
+that the failure appears only once you write the block down — invites exactly that, and for the two
+callees where it matters, deleting the block reproduces an **identical** `startup_failure`. The
+correct diagnosis then looks disproven, which is the same hour spent a second time. A consumer
+whose 31 workflows all declare blocks flagged this; the escape hatch is not available to them at
+all, and creating it deliberately would be the wrong move.
+
+```bash
+gh api repos/OWNER/REPO/actions/permissions/workflow --jq .default_workflow_permissions
+```
+
+**The migration order that looks safest can be the one that is guaranteed to fail.** The same
+consumer had chosen `deploy-pages.yml` to migrate first, on sound grounds: smallest workflow, not a
+required check, contained blast radius. It is also the single worst case in the table — the only
+callee needing a **write** scope, failing as an unreadable `startup_failure` that names neither
+`id-token` nor `pages`. "Smallest and least critical" and "needs the most unusual scope" are
+independent axes, and ordering a migration by the first tells you nothing about the second. Check
+the declaration before picking the pilot.
 
 Two details in that table are easy to lose. `reusable-deploy-pages` declares its permissions
 across **two jobs** — `contents`/`packages` on one, `pages`/`id-token` on the other — so the union
@@ -1031,6 +1085,15 @@ pinned SHA, so no single-file linter can see it. One consequence follows directl
 expecting — **it can break with no local change.** A callee that adds a declared scope invalidates
 every caller pinned to the new SHA, so the failure arrives attached to a re-pin and looks like the
 re-pin caused it.
+
+**A linter passing is silence, and silence is not a measurement.** `actionlint` clearing both files
+is the same shape as two other checks this document has had to retract: a `grep -c` returning `0`,
+and a coverage ratchet that counted only header IDs. In each case a check ran, said nothing, and
+the nothing was read as evidence. The remedy here is unusually cheap, because the platform already
+prints the answer — one throwaway workflow with no `permissions:` block, and the
+`GITHUB_TOKEN Permissions` group states the grant outright. **Prefer the signal that names a value
+over the check that declines to complain**, especially when the check has no way to see the thing
+you are asking about.
 
 The token is resolved as
 `inputs.registry-url != '' && (secrets.NODE_AUTH_TOKEN || github.token) || ''`, so it is only
