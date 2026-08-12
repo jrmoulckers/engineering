@@ -48,7 +48,21 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // sharpest case, because the script a consumer runs is the one from their pinned
 // ref. A fix to the tool only reaches them when they re-vendor, using the tool
 // that does not yet contain the fix.
-const FETCHED_PATHS = ['scripts/vendor-configs.mjs', 'configs/', 'practices/', 'principles/'];
+//
+// `docs/` was missing here at first, and the omission was found by this check
+// reporting "no unreleased consumer-visible changes" across two commits that
+// both edited `docs/adopting.md`. That file is the consumer contract: repos cite
+// it by section at a pinned ref, so a correction landed there is exactly as
+// unreachable as a correction landed in `configs/`. Documentation is fetched
+// content, not commentary about fetched content, and the same goes for the ADRs
+// under `docs/architecture/` that consumers are told to cite.
+const FETCHED_PATHS = [
+  'scripts/vendor-configs.mjs',
+  'configs/',
+  'practices/',
+  'principles/',
+  'docs/',
+];
 
 function git(...args) {
   return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
