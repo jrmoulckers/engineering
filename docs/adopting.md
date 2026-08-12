@@ -599,14 +599,40 @@ steps:
 > ```
 >
 > Verified `read` on three repositories here. So the "permissive write-all default" argument does
-> not hold, but the conclusion survives for a better reason — and the better reason is the useful
-> part. GitHub labels that default _"Read repository contents **and packages** permissions"_: the
-> default set **includes** `packages: read`. A caller with no explicit block is not lucky, it is
-> inheriting a **superset** of what the callees declare.
+> not hold. **The conclusion drawn from that — that a caller with no block inherits a superset and
+> is therefore immune — is also wrong, and this guide shipped it. Retracted, with a measurement.**
 >
-> Which inverts the intuition: **the more precisely you scope, the more likely you fall below a
-> callee's declaration.** "No block is safe" invites the reader to assume a narrower block is also
-> safe. It is the narrowing that is dangerous.
+> The reasoning was that GitHub labels the restricted default _"Read repository contents **and
+> packages** permissions"_, so a no-block caller must already cover what the callees declare. That
+> holds only while every callee declares nothing beyond `contents` and `packages`. A consumer
+> pointed out that two of them do — `reusable-ci-lint` adds `pull-requests: read`, and
+> `reusable-deploy-pages` adds `id-token: write`, which **no** default grants — and predicted that
+> a no-block caller would fail identically. They could not test it; their pushes were blocked. So
+> it was tested here, on a public repository with `default_workflow_permissions: read`:
+>
+> | Caller                                               | Callee declares              | Result                |
+> | ---------------------------------------------------- | ---------------------------- | --------------------- |
+> | **no `permissions:` block**                          | `contents` + `pull-requests` | **`startup_failure`** |
+> | explicit block granting `contents` + `pull-requests` | same callee, same commit     | **success**           |
+>
+> One variable, one commit, same repository, same default. The run with no block produced the
+> familiar shape: **`jobs: 0`, no logs, no annotations, nothing to read.**
+>
+> So the guidance inverts. **Writing the block down is not what bites you — it is what lets you fix
+> it.** A repository on the restricted default calling `reusable-ci-lint` fails whether or not it
+> has a block, and if it has been told "no block is immune" it has been pointed away from the only
+> available remedy. The rule is the one already stated below: compute the block as the union of
+> what every callee declares. There is no exemption for omitting it.
+>
+> Note where the prediction came from. The two workflows that break the carve-out are exactly the
+> two whose declarations exceed `contents` + `packages` — which is the same predicate as the trap
+> itself, not a coincidence. Check your own default before assuming anything:
+>
+> ```bash
+> gh api repos/OWNER/REPO/actions/permissions/workflow --jq .default_workflow_permissions
+> # "read"  => you have contents + packages only; anything more needs an explicit block
+> # "write" => broader, but still nothing for id-token
+> ```
 >
 > **The necessary condition is a job-level `uses:` calling a reusable workflow — not a step-level
 > action.** A Go consumer confirmed they cannot have this trap at all: their only `uses:` entries
