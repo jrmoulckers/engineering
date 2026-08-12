@@ -2307,6 +2307,44 @@ error in the reasoning that produced it. When a test exists only to defend a con
 a behaviour, write the evidence for that conclusion into the test body, so the next reader can
 re-check the claim instead of trusting the check.
 
+#### `react/*` rules remain after the React plugin is removed. That is correct.
+
+A Svelte-only consumer upgraded past the framework-plugin removal and diffed the **effective config**
+rather than trusting a green `lint`, which is the right instinct — dropping a plugin could silently
+drop rules:
+
+|                    | before | after   |
+| ------------------ | ------ | ------- |
+| total rules        | 295    | **295** |
+| active (non-`off`) | 81     | **81**  |
+| `react/*` keys     | 16     | **16**  |
+| `svelte/*` keys    | 26     | **26**  |
+
+The sixteen `react/*` keys survive because they do not come from `eslint-plugin-react` at all. They
+come from **`eslint-config-prettier`**, which lists them at severity `off` to disable stylistic
+React rules that would fight the formatter. Verified independently here: `eslint-config-prettier`
+exposes exactly sixteen `react/*` keys and every one is `off`.
+
+So **"react rules are still present after the plugin was removed" is expected, not a regression.**
+A rule at `off` needs no plugin: nothing resolves the `react/` prefix unless a rule is enabled. If
+you are auditing a removal, count **active** rules, not keys — a key count cannot distinguish a rule
+that runs from a rule that exists only to be silenced.
+
+#### Measure dependency savings in a real repository, not an empty one
+
+The same removal was measured here at **75 MB → 36.6 MB (−38.4 MB)** and by that consumer at
+**186.6 MB → 168.2 MB (−18.4 MB)**. Both are correct. The difference is the method: measuring in an
+empty scratch package charges the removed toolchain for its entire transitive closure, whereas in a
+real application much of that closure is already installed for other reasons and is not freed.
+
+Quote the smaller, real-repository figure. A consumer who measures −18 MB against a published −38 MB
+will reasonably conclude the fix half-failed.
+
+And do not lead with the megabytes. The defect was that a Svelte-only repository resolved
+`eslint-plugin-react` and `@next/eslint-plugin-next` — **packages it never imports, inside its lint
+toolchain**, in the layer that exists so each repository need not make that choice. That is
+supply-chain surface and lockfile content nobody can justify on review. The size is the symptom.
+
 **Route by scope. Never replace the default registry.** <a id="the-npmrc-scope-trap-measured"></a>Setting
 `registry=https://npm.pkg.github.com/` wholesale, rather than scoping it, breaks `npm audit` /
 `pnpm audit` — GitHub Packages implements no advisory endpoint. Under npm the failure reads:
