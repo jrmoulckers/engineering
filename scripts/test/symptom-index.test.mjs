@@ -55,3 +55,37 @@ describe('symptom index', () => {
     assert.deepEqual(vague, [], `these index terms are too short to locate a section: ${vague}`);
   });
 });
+
+// A reader who pins this document to the ref their vendored configs name gets frozen
+// advice, and frozen advice is worse than absent advice because it still asserts what
+// was later retracted. One consumer's copy at their pinned tag was 1,118 lines against
+// 6,106, and the missing part was where a defect got found -- their copy still called
+// that defect intentional. The instruction to read at `main` therefore has to survive
+// in the first screen of the file, before any content a reader might act on.
+describe('currency banner', () => {
+  const banner = guide.slice(0, guide.indexOf('## Start here'));
+
+  it('tells the reader which ref to read, before any guidance', () => {
+    assert.match(
+      banner,
+      /read this document at `main`/i,
+      'the guide must open by telling the reader not to read it at their pinned ref',
+    );
+  });
+
+  it('points at the section that explains why', () => {
+    assert.match(banner, /Pin the configs\. Do not pin the guidance\./);
+    assert.ok(
+      guide.includes('#### Pin the configs. Do not pin the guidance.'),
+      'the banner links a section heading that does not exist',
+    );
+  });
+
+  it('distinguishes the two artefacts rather than banning pinning outright', () => {
+    // Pinning vendored configs is correct and this repository requires it. A banner
+    // read as "do not pin" would push a consumer to unpin the one thing that should
+    // be pinned, which is a worse outcome than the staleness it prevents.
+    assert.match(banner, /configuration/i);
+    assert.match(banner, /guidance/i);
+  });
+});
