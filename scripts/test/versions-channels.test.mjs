@@ -94,17 +94,34 @@ describe('versions.json channels are self-describing', () => {
 });
 
 // Every package here is below 1.0, where npm's caret pins the MINOR: ^0.2.0
-// means >=0.2.0 <0.3.0 and silently refuses 0.12.0. Two repositories have
+// means >=0.2.0 <0.3.0 and silently refuses 0.12.0.
+//
+// This suite used to FORBID the caret, for that reason: two repositories had
 // adopted a caret-rewritten range and received an old package whose known bugs
-// they then reported as current. The recorded value has to stay safe to paste.
+// they then reported as current. It now requires the caret instead.
+//
+// The reversal is deliberate and docket supplied the argument. Stranding on an
+// old minor and auto-adopting a new one are both silent, but they are not
+// symmetric: stranding fails safe (you keep building against known code, and a
+// fix stays upstream until you act), while auto-adoption fails unsafe (a
+// working build breaks with no local cause). eslint-config@0.9.0 removed five
+// peer dependencies and 0.16.0 restored them -- breaking changes in minors, on
+// a 0.x package, which is exactly where convention puts them. A wide range
+// admits those sight-unseen.
+//
+// The real cure for stranding was never a wider range, it was telling the
+// consumer -- which check-pins now does WITHOUT failing their build. So the
+// caret is safe to paste precisely because a notice, not a range, closes the
+// gap it leaves.
 describe('recorded ranges are safe to copy literally', () => {
-  test('no range uses a caret or tilde', () => {
+  test('every range is a caret, so a 0.x minor cannot arrive unreviewed', () => {
     for (const [name, entry] of Object.entries(manifest.packages)) {
-      assert.doesNotMatch(
+      assert.match(
         entry.range,
-        /[\^~]/,
-        `${name} records range "${entry.range}" — caret/tilde on a 0.x version pins the ` +
-          `minor, so this would exclude later fixes. Write an explicit >= / < pair.`,
+        /^\^\d+\.\d+\.\d+$/,
+        `${name} records range "${entry.range}". On a 0.x package a minor may break; ` +
+          `record ^${entry.version} so patches ride along and minors stay a decision. ` +
+          `check-pins reports the stranding this creates, and exits 0 doing it.`,
       );
     }
   });
@@ -113,16 +130,41 @@ describe('recorded ranges are safe to copy literally', () => {
     // A range that excludes the version published beside it would send every
     // consumer to something older than what this file claims is current.
     for (const [name, entry] of Object.entries(manifest.packages)) {
-      const lower = entry.range.match(/>=\s*([\d.]+)/)?.[1];
-      assert.ok(lower, `${name}: range "${entry.range}" has no >= lower bound`);
+      const lower = entry.range.match(/^\^([\d.]+)$/)?.[1];
+      assert.ok(lower, `${name}: range "${entry.range}" is not a plain caret`);
       assert.equal(
         lower,
         entry.version,
-        `${name}: range lower bound ${lower} does not match published version ${entry.version}`,
+        `${name}: range base ${lower} does not match published version ${entry.version}`,
+      );
+    }
+  });
+
+  test('the recorded caret does not admit the next minor', () => {
+    // The invariant that replaced "no carets" needs teeth of its own, or this
+    // suite would pass on a range that merely looks like a caret.
+    for (const [name, entry] of Object.entries(manifest.packages)) {
+      const [major, minor] = entry.version.split('.').map(Number);
+      const nextMinor = major === 0 ? `0.${minor + 1}.0` : `${major + 1}.0.0`;
+      assert.ok(
+        !satisfiesCaret(nextMinor, entry.range),
+        `${name}: range "${entry.range}" admits ${nextMinor}, which may carry a breaking change`,
       );
     }
   });
 });
+
+/** Minimal 0.x-aware caret test, so this suite needs no resolver dependency. */
+function satisfiesCaret(version, range) {
+  const m = range.match(/^\^(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) return false;
+  const [, bMaj, bMin, bPat] = m.map(Number);
+  const [vMaj, vMin, vPat] = version.split('.').map(Number);
+  if (bMaj === 0) {
+    return vMaj === 0 && vMin === bMin && vPat >= bPat;
+  }
+  return vMaj === bMaj && (vMin > bMin || (vMin === bMin && vPat >= bPat));
+}
 
 // docs/adopting.md printed a range literal that disagreed with versions.json
 // twice, and each time the surrounding prose warned the reader that the table

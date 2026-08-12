@@ -14,7 +14,26 @@
 // out why their package looks old.
 //
 // Usage:
-//   node check-pins.mjs [path-to-package.json] [--versions <file-or-url>]
+//   node check-pins.mjs [path-to-package.json] [--versions <file-or-url>] [--strict]
+//
+// Exit codes are split by a single question: can an action taken in THIS
+// repository, with no change in the consumer's tree, turn the result red?
+//
+//   STALE   yes.  Publishing a new version strands every consumer whose range
+//                 cannot reach it. Making that fatal means an upstream release
+//                 reddens whatever unrelated PR happens to be open in a
+//                 downstream repo, with nothing in that repo's history to
+//                 explain it -- and the pressure becomes bump-to-green rather
+//                 than accept-on-merit. So staleness reports and exits 0.
+//                 --strict opts back in, for a fleet audit run here.
+//   unknown no.   A range this script cannot parse got there by a consumer
+//                 edit, and no publish can introduce one. Stays fatal.
+//   read    no.   Same reasoning. Stays exit 2.
+//
+// docket raised this: the vendored channel's staleness notice was already
+// warn-only by deliberate design, while this one -- the registry channel's
+// equivalent -- was fatal. Two notices for the same class of event should not
+// disagree about whether it is an error.
 //   curl -fsSL <raw-url>/scripts/check-pins.mjs | node - ./package.json
 
 import { readFileSync } from 'node:fs';
@@ -23,6 +42,7 @@ const DEFAULT_VERSIONS =
   'https://raw.githubusercontent.com/jrmoulckers/engineering/main/versions.json';
 
 const argv = process.argv.slice(2);
+const strict = argv.includes('--strict');
 const versionsAt = argv.includes('--versions')
   ? argv[argv.indexOf('--versions') + 1]
   : DEFAULT_VERSIONS;
@@ -150,10 +170,19 @@ function report(versions) {
       `\n${stale} range(s) exclude the published version. For a 0.x version a caret pins the` +
         ` MINOR, so ^0.2.0 means >=0.2.0 <0.3.0 and silently refuses everything after it.`,
     );
+    console.log(
+      strict
+        ? `Exiting 1 because --strict was passed.`
+        : `This is a notice, not a failure: exiting 0 so that a release here cannot redden` +
+            ` an unrelated pull request there. Bumping the pin stays your decision. Pass` +
+            ` --strict to make staleness fatal.`,
+    );
   }
   if (unknown > 0) {
     console.log(`\n${unknown} range(s) were not evaluated. Unrecognised is not the same as fine.`);
   }
 
-  process.exitCode = stale > 0 || unknown > 0 ? 1 : 0;
+  // Deliberately NOT symmetric with `stale`. See the header: `unknown` cannot be
+  // introduced by a publish here, only by an edit there, so it stays fatal.
+  process.exitCode = unknown > 0 || (strict && stale > 0) ? 1 : 0;
 }
