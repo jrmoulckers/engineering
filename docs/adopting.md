@@ -29,6 +29,7 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | `TS7016` on a config file after enabling `checkJs`          | `Precondition 1: the config file must be`                |
 | Type declarations appear to do nothing                      | `Precondition 2:`                                        |
 | A valid, documented option is rejected as unknown           | `silently overrides the package's shipped types`         |
+| A citation link works but lands at the top of the file      | `cannot 404, so retitling a heading`                     |
 | `pnpm` refuses a just-published version                     | `minimumReleaseAgeExclude`                               |
 | `TS5097` / `TS5096` on `.ts` import specifiers              | `allowImportingTsExtensions`                             |
 | Lint is green but you suspect coverage shrank               | `set of files linted, in both directions`                |
@@ -3372,6 +3373,35 @@ gate you have never seen fail is a gate you have not yet tested.
 > The general shape is one this migration keeps producing: a symptom that names a cause. A 404
 > names a path, a stack trace names the frame that threw, and a `startup_failure` names nothing at
 > all — in none of those cases is the named thing reliably the cause.
+
+### A citation's `#fragment` cannot 404, so retitling a heading breaks it silently
+
+> A wrong path 404s and someone notices. **A wrong fragment does not.**
+> `principles/assurance/security-and-privacy.md#secret-lifecycle` serves `200` whether or not that
+> heading exists — the browser simply lands at the top of the file. So a citation degrades from
+> _this specific rule_ to _this file, somewhere_, and there is no error anywhere to observe.
+>
+> This matters because the failure is caused by an edit **in this repository**, to a file the
+> citing repo does not own. Retitling a principle heading breaks every citation of it across the
+> fleet, at the moment of the retitle, with nothing reporting it. The consumer who raised it had
+> verified all 11 of their own anchors by hand — the correct response, and not one that scales.
+>
+> `check-citations.mjs` now validates fragments as well as paths (`checks run: ... link anchors`).
+> It resolves tag-pinned URLs back onto the local checkout, because consumers cite absolute URLs
+> rather than relative paths — checking only relative links would have passed everything while
+> inspecting nothing, which is the same silent-degradation shape the check exists to catch.
+>
+> Two things worth knowing about what it reports:
+>
+> - It validates against **your checkout**, not against the ref the URL pins. A citation pinned at
+>   an old tag is checked against today's headings, so a failure tells you the anchor a re-pin
+>   would land on. That is the question worth answering, since a stale pin gets read when it moves.
+> - A near miss prints a `did you mean:` suggestion, because the common cause is a heading that was
+>   reworded rather than removed, and the replacement is usually one edit away.
+>
+> The generalisable rule, which is not specific to citations: **when a reference can be wrong
+> without producing an error, the check has to be run by the side that can break it.** A path is
+> validated by the reader's toolchain for free. A fragment never is.
 
 > **The sharpest case is a file you own that contains a region you don't — and whole-file
 > exclusion is the expensive answer to it.** A consumer hit this when `main` grew a synced

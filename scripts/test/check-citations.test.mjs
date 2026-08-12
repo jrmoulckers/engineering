@@ -360,3 +360,106 @@ describe('citation ranges', () => {
     }
   });
 });
+
+// A fragment cannot 404: the file serves 200 and the reader silently lands at
+// the top. Retitling a heading breaks every citation of it with no error
+// anywhere, which is why these assert resolved behaviour rather than shape.
+describe('citation link anchors (ENG-DOC-004)', () => {
+  const SEC =
+    'https://github.com/jrmoulckers/engineering/blob/v0.2.3/principles/assurance/security-and-privacy.md';
+
+  test('accepts a fragment that names a real heading', () => {
+    const dir = fixture(`See [\`ENG-SEC-001\`](${SEC}#secret-lifecycle).\n`);
+    try {
+      assert.equal(run(dir).code, 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('fails on a fragment that names no heading, and suggests the near miss', () => {
+    const dir = fixture(`See [\`ENG-SEC-001\`](${SEC}#secret-lifecycles).\n`);
+    try {
+      const { code, out } = run(dir);
+      assert.equal(code, 1);
+      assert.match(out, /heading that does not exist/);
+      assert.match(out, /did you mean: secret-lifecycle/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // The check resolves tag-pinned URLs onto the local checkout. Consumers cite
+  // absolute URLs, never relative paths, so without this the feature would pass
+  // everything while inspecting nothing — the exact silent-degradation shape it
+  // exists to catch.
+  test('resolves a tag-pinned URL rather than skipping it as remote', () => {
+    const dir = fixture(`See [\`ENG-SEC-001\`](${SEC}#not-a-heading).\n`);
+    try {
+      assert.equal(run(dir).code, 1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('leaves another repository alone', () => {
+    const other =
+      'https://github.com/other/repo/blob/main/principles/assurance/security-and-privacy.md';
+    const dir = fixture(`See [\`ENG-SEC-001\`](${other}#not-a-heading).\n`);
+    try {
+      assert.equal(run(dir).code, 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a heading inside a fenced block is code, not an anchor', async () => {
+    const { readHeadingSlugs } = await import('../check-citations.mjs');
+    const dir = mkdtempSync(path.join(tmpdir(), 'slugs-'));
+    const file = path.join(dir, 'F.md');
+    try {
+      writeFileSync(
+        file,
+        ['# Real heading', '', '```sh', '# Not a heading, a shell comment', '```', ''].join('\n'),
+        'utf8',
+      );
+      const slugs = await readHeadingSlugs(file);
+      assert.ok(slugs.has('real-heading'));
+      assert.equal(slugs.has('not-a-heading-a-shell-comment'), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('slugs match GitHub for inline markdown and duplicate headings', async () => {
+    const { readHeadingSlugs } = await import('../check-citations.mjs');
+    const dir = mkdtempSync(path.join(tmpdir(), 'slugs-'));
+    const file = path.join(dir, 'F.md');
+    try {
+      writeFileSync(
+        file,
+        ['## The `typeAware` flag', '## Least authority', '## Least authority', ''].join('\n'),
+        'utf8',
+      );
+      const slugs = await readHeadingSlugs(file);
+      // Backticks are stripped, not slugified into the anchor.
+      assert.ok(slugs.has('the-typeaware-flag'));
+      // GitHub disambiguates a repeat with -1, so both must resolve.
+      assert.ok(slugs.has('least-authority'));
+      assert.ok(slugs.has('least-authority-1'));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('reports the anchor check in --json checksRun', () => {
+    const dir = fixture(`See [\`ENG-SEC-001\`](${SEC}#secret-lifecycle).\n`);
+    try {
+      const parsed = JSON.parse(run(dir, ['--json']).out);
+      assert.ok(parsed.checksRun.includes('linkAnchors'));
+      assert.deepEqual(parsed.badAnchors, []);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
