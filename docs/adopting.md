@@ -1429,10 +1429,39 @@ defect exists. Reported by a consumer whose audit found the two the rule missed.
 ### Landing the first format pass
 
 Markdown formatting uses `proseWrap: 'preserve'`, so adopting this config **does not reflow your
-prose**. There is no mechanical markdown commit to land and no large diff to review.
+prose**. Paragraph line breaks are left exactly as authored.
 
-The `.md` override narrows `printWidth` to 96, which affects only constructs Prettier does
-reformat — tables, lists, code fences. Paragraph line breaks are left exactly as authored.
+**It does not follow that there is nothing to reformat.** `preserve` cancels the _rewrap_, not
+the _reformat_ — and the difference is the whole first commit. Expect `prettier --check` on
+Markdown to fail after adopting, and expect a real diff. A repository told "nothing to reformat"
+that then sees `format:check` go red will reasonably suspect its wiring, when what it is looking
+at is tables and code fences.
+
+Measured on a repository that had staged the reflow under `always` and re-ran it under
+`preserve`, against a clean tree to rule out residue from its own commit:
+
+| Regime              | Lines changed |
+| ------------------- | ------------- |
+| `always`            | 1,126         |
+| `preserve`          | **575**       |
+| of which prose flow | **0**         |
+
+The surviving 575 fell into three categories, none of them prose:
+
+- **Table padding** (~354). The `.md` override narrows `printWidth` to 96, and Prettier still
+  pads pipe tables into aligned columns.
+- **Embedded code in fences** (~170). Prettier formats fenced code inside Markdown, so
+  `singleQuote: true` rewrites quotes in a fenced YAML or JSON block. A docs-heavy repository
+  that documents configuration in fences sees this most.
+- **Emphasis normalisation** (48). `*works*` becomes `_works_`.
+
+Reproduced here from scratch on a 16-line file: all three fire, and the line count is byte-identical
+before and after. That last part is the check to run — if every file's line count is unchanged, no
+authored break moved, and the diff really is confined to the categories above.
+
+The practical consequence is the opposite of the rewrap's. The residual diff is mechanical,
+low-risk, and worth landing in one commit; the rewrap was neither. **Same command, opposite
+advice** — which is why the two need separating before anyone runs it.
 
 > **"Does not reflow your prose" is true at the moment you switch, and progressively less true
 > afterwards. Expect a mixed corpus, and do not "fix" it.** `preserve` does not merely permit
