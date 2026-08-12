@@ -1787,6 +1787,22 @@ Anything printed is a synced path your ignore list does not cover. A new extensi
 learns to parse can move a file from inert to exposed without anything in your repository
 changing, which is the case a fixed list cannot anticipate.
 
+**That check has a blind spot, and another consumer named it: it enumerates the manifest you have
+today, and the manifest grows.** They added `.github/copilot-instructions.md` to their ignore list
+for a file that **does not exist in their repository** — purely because sync may deliver it later.
+That is not over-caution. When a canon sync lands, it arrives as someone else's unrelated pull
+request going red on files they never touched, which is the worst possible moment to diagnose the
+cause. One consumer had exactly that: a sync landed 55 files and turned `format:check` red on
+branches that touched none of them.
+
+So list the paths sync **may** deliver, not the paths present today. Listing a path that does not
+exist costs nothing — Prettier ignores entries that match nothing — and removes the ambush. A
+repository that copies the recipe by inspecting its own tree has snapshotted its current state and
+will be bitten by the next sync that adds a file.
+
+The two checks are complements, not alternatives: the manifest scan catches paths you have and
+forgot; the full recipe catches paths you do not have yet.
+
 > **These exclusions are permanent, and `proseWrap: 'preserve'` does not retire them.**
 > `prettier-config@0.2.0` stopped Prettier rewrapping prose, and it is natural to read that as
 > making synced files safe to format again — the two changes arrive close together. They are
