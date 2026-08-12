@@ -1669,6 +1669,25 @@ range form, not evidence of a well-maintained manifest.** If you find yourself e
 hand more than once, the fix is not a faster edit — it is `>=x.y.z <1.0.0`, after which `npm
 update` crosses minors on its own and the floor table stops being something you have to be told.
 
+**And the convergence is the publisher's fault, not the consumers'.** Five of seven repositories
+independently arrived at `^0.8.0` while the floor was `0.15.0`. Five separate teams, each doing
+careful verification, each landing on the same wrong pin is not five mistakes — it is one, upstream
+of all of them. The cause is how releases were announced here: a note saying "type declarations
+shipped in `0.8.0`" reliably produces `^0.8.0` in a manifest, because the version named in the
+announcement is the version the reader pins, and a caret then freezes it there.
+
+So an announcement must name **the floor**, not the version that introduced the change, and must
+give the specifier rather than the number:
+
+```diff
+- Type declarations shipped in 0.8.0.
++ Type declarations shipped in 0.8.0. The floor is 0.15.0 — set
++ "@jrmoulckers/eslint-config": ">=0.15.0 <1.0.0".
+```
+
+If you are reading a release note from this repository that names a version without naming the
+current floor, treat the version as trivia and check `versions.json` before editing anything.
+
 **Verifying the behaviour does not verify the version, and this is the way the caret survives a
 careful adoption.** One repository adopted `@jrmoulckers/prettier-config@^0.2.0` and checked it
 properly — not package metadata but the _effective resolved config_: `proseWrap: preserve` and
