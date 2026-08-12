@@ -947,6 +947,29 @@ instances in which **a missing thing presents as a passing one**.
 > and capability is invisible to any test written against the features you already use. Before
 > concluding two versions agree, diff the **release notes** for new options, then re-run the
 > comparison passing each one.
+>
+> **There is a third axis, and the same repository hit it next: the _endpoints_ go stale too.**
+> They later reported `0.3.0 → 0.4.0` across the same six file classes — zero lost, zero gained,
+> zero option differences — while the package was at `0.13.0`. The measurement was correct and
+> answered a question nobody had. Re-run to current on a `.svelte` file, active rules only:
+>
+> | interval         | active on `.svelte` | added | removed |
+> | ---------------- | ------------------- | ----- | ------- |
+> | `0.3.0 → 0.4.0`  | 94 → 94             | 0     | 0       |
+> | `0.4.0 → 0.13.0` | 94 → **80**         | **4** | **18**  |
+>
+> The 18 are core rules TypeScript already enforces — `no-undef`, `no-dupe-keys`,
+> `constructor-super`, `no-const-assign` — switched off on `.svelte` by applying
+> `typescript-eslint`'s `eslint-recommended` layer there, which previously reached only `.ts`. The
+> 4 added are its replacements: `no-var`, `prefer-const`, `prefer-rest-params`, `prefer-spread`.
+> That is the intended correction, not a loss, but it is a **22-rule change to the exact file class
+> the diff reported as identical.**
+>
+> So a differential test has three ways to read zero while missing everything: the **surface** you
+> invoked, the **options** that did not exist yet, and the **interval** you chose. The first two are
+> subtle. The third is just arithmetic — `npm view <pkg> version` before you pick the endpoints — and
+> it is the one that has now cost the most effort here, because the rigour of the method makes the
+> result feel conclusive. **Diff to `latest`, not to the next version after yours.**
 
 > **A stale pin hides the fix for the bug you are about to report.** The sharpest instance so far:
 > a Svelte repository held `prettier-config` at `^0.2.0` deliberately, and in the same message
