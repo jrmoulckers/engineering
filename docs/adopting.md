@@ -1481,12 +1481,20 @@ steps:
 > `permissions: {}` at _workflow_ level so that every job must declare its own — the strictest
 > posture available, and the one this guide recommends. An empty block grants nothing, so it is
 > the most efficient possible way to reach `startup_failure`: every scope any callee requests is
-> already denied. Meanwhile a repository that declared nothing at all inherits a permissive
-> default and sails through.
+> already denied.
 >
-> So the population most exposed to this trap is **the population that followed the stricter
-> advice**, and "you are fine if you have no block" is close to backwards for a fleet that has
-> been told to write one. Least privilege and this failure mode are not in tension — the fix is
+> **The sentence that used to follow said a repository declaring nothing "inherits a permissive
+> default and sails through". That is wrong and it is retracted** — it is the same carve-out
+> already retracted with a measurement above, which survived here because the retraction was
+> written against the heading rather than against every occurrence of the claim. A block-less
+> caller inherits `default_workflow_permissions`, and that was measured at **`read` on all seven
+> repositories in this fleet** — `contents` + `packages` only. So a block-less caller is still
+> short `pull-requests: read` for `reusable-ci-lint` and `id-token: write` for
+> `reusable-deploy-pages`, and fails identically.
+>
+> What survives is the narrower and still-useful half: `permissions: {}` reaches the failure
+> **faster and more completely**, because it denies even `contents`. That is a difference in
+> breadth, not in kind. Least privilege and this failure mode are not in tension — the fix is
 > per-job `packages: read` on the callers that need it, not a looser ceiling — but the ordering
 > matters: tighten the block and add the scope in the same change, or the tightening is what
 > takes the pipeline down.
@@ -1570,7 +1578,42 @@ steps:
 > not anything in this document.** That reasoning holds without reading annotations or timings, and
 > it is worth applying before any of the tables above — it is also the check that stops a permission
 > conclusion drawn during a billing outage from being believed. Keep one such job in your workflow
-> if you can; it doubles as a control.>
+> if you can; it doubles as a control.
+>
+> **Correlate on whether jobs were scheduled, not on whether the run passed.** The caution above —
+> that the visibility correlation is "suggestive, not decisive" because a public repository can
+> fail for an ordinary reason — is an artefact of correlating the wrong field. Re-measured across
+> all eight repositories in this fleet on the run-level question _were any steps ever created_:
+>
+> | Visibility  | Repositories                                  | Jobs with `steps > 0` |
+> | ----------- | --------------------------------------------- | --------------------- |
+> | **private** | cartridge, docket, libro, game-library        | **0, every run**      |
+> | **public**  | score-king, jrm-recipes, engineering, finance | **non-zero**          |
+>
+> Eight for eight, no exceptions. An ordinary `exit code 1` on a public repository has `steps > 0`,
+> so it no longer breaks the correlation — which is what makes the steps-based form decisive where
+> the pass/fail form was not. One apparent counterexample resolved on inspection: a public run with
+> `steps = 0` throughout had `conclusion: skipped`, its jobs held back by `if:` conditions rather
+> than never scheduled. **Check `conclusion` before counting a run as evidence.**
+>
+> The full three-case test, in one command per case:
+>
+> ```bash
+> gh api "repos/OWNER/REPO/actions/runs/$run/jobs" --jq '.total_count'
+> gh api "repos/OWNER/REPO/actions/runs/$run/jobs" \
+>   --jq '[.jobs[] | select((.steps|length) > 0)] | length'
+> ```
+>
+> | `total_count` | jobs with steps | Cause                                                    |
+> | ------------- | --------------- | -------------------------------------------------------- |
+> | `0`           | —               | caller grant below callee — never admitted               |
+> | `> 0`         | **`0`**         | billing / spending limit — admitted, no runner allocated |
+> | `> 0`         | `> 0`           | an ordinary failure — **read the logs, they exist**      |
+>
+> The third row is the one the two-case framing omits, and omitting it is how a normal red build
+> gets escalated as an outage. Note also that the second row's jobs report `runner_name: ""` — a
+> job that was never assigned a runner, which is the mechanism stated directly rather than inferred.
+>
 > Prefer the annotation regardless. It states the cause outright, and neither counting exercise has
 > to be interpreted.
 >
