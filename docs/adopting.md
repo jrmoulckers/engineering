@@ -40,6 +40,7 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | Type declarations appear to do nothing                       | `Precondition 2:`                                        |
 | A valid, documented option is rejected as unknown            | `silently overrides the package's shipped types`         |
 | Unsure whether the advice you are reading is still current   | `Pin the configs. Do not pin the guidance.`              |
+| About to recommend a workflow re-pin to another repository   | `Never recommend a re-pin without checking`              |
 | A citation link works but lands at the top of the file       | `cannot 404, so retitling a heading`                     |
 | Unsure which version of a package is actually installable    | `a repository counter, not a package version`            |
 | A "bogus option" check says a typed package has no types     | `does not work on every package`                         |
@@ -2525,6 +2526,64 @@ state rather than being forgetful. **Repetition of a correction is itself the si
 consumers raised the same shape in the same week — one about a pinned SHA re-derived instead of
 re-read, one about this flag — and in both cases the fix was to re-read the other repository at
 send time rather than to reword the sentence.
+
+#### Never recommend a re-pin without checking `behind_by` first
+
+A recommendation derived from a stale premise is the hardest defect to catch by reading, because
+**nothing in the argument signals it**. One consumer received five consecutive re-pin
+recommendations, each internally sound, each derived from a state of their repository 14–19 commits
+out of date. The fifth would have removed an input they pass — GitHub rejects an undeclared `with:`
+input outright, so following it would have turned a green job red.
+
+The reasoning was right every time and the premise was wrong every time. That combination is
+undetectable from inside the argument, so the defence has to be mechanical and has to run before
+the message is written:
+
+```bash
+npm run repin:check -- --repo owner/name --propose <sha>
+```
+
+It reads the consumer's **actual** pins, compares each against the proposal, and refuses the
+recommendation on either of two grounds:
+
+```
+compare 4162bad...6fc65a9  ahead_by=14 behind_by=0  -> backwards
+
+Do not send this recommendation:
+  - Their pin 6fc65a9 is a strict descendant of your proposal 4162bad.
+  - reusable-perf-budget.yml at 4162bad does not declare: exclude-glob.
+```
+
+**`behind_by === 0` is the field that matters**, because it fires without the sender already
+suspecting the answer. A file-list or blob comparison does not have that property: it tells you
+_that_ two refs differ, not which direction the consumer would travel. Direction is the whole
+question.
+
+The second check is independent and catches the expensive half. A re-pin that is merely backwards
+costs review time; a re-pin that drops a declared input costs a build. Enumerate what the caller
+passes and confirm the proposed ref declares all of it.
+
+> **A consumer's default branch is not their state.** `gh api .../contents/<path>` with no `ref`
+> returns the default branch, which is the wrong branch for any repository mid-adoption. Pass
+> `--ref`, or read the branch the work is actually on.
+
+#### Put a negative control on every fleet-wide comparison
+
+Two of three failure modes in a fleet comparison return a **confident wrong answer that agrees with
+your prior**, which is the combination least likely to be questioned:
+
+- **Comparing two failures reads as a match.** Per-file `contents` calls that all 404 yield equal
+  error strings, and an equality test over them reports every file identical.
+- **On PowerShell, variables are case-insensitive.** A hashtable `$A` silently clobbers a ref
+  variable `$a`, so both sides of the comparison query the same wrong ref — and agree.
+
+Both produced `same=True` across the board. Both were caught only by a control: two files **known**
+to differ, at the same refs, required to return `False`. When the control returned `True` the run
+was invalid on its face, regardless of how plausible the rows looked.
+
+Without it the report would have read "all four callees identical, the bump is a no-op" with four
+corroborating rows — and would have missed the input that made the bump build-breaking. **Publish
+no fleet-wide figure that was not accompanied by a control that failed.**
 
 #### The repos that push back are not the problem
 
