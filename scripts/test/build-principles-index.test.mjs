@@ -1,3 +1,4 @@
+// citations-check: ignore-file -- builds deliberately-invalid citation fixtures.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
