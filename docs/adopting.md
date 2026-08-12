@@ -233,7 +233,7 @@ files are written **byte-identical** to source with no generated header, and a r
 different ref reports how many files actually changed:
 
 ```
-Vendored 10 file(s) from jrmoulckers/engineering@v0.115.0 into config/engineering/
+Vendored 11 file(s) from jrmoulckers/engineering@v0.115.0 into config/engineering/
 Ref moved v0.112.0 -> v0.115.0; 0 file(s) changed content.
 ```
 
@@ -245,6 +245,82 @@ files by hand.
 A file the previous lock never recorded is reported as **newly tracked**, not as changed. Counting
 it as changed would overstate the diff exactly when `--dest` or `--set` moved, which is when the
 number is read most closely.
+
+#### Vendoring copies files, not the package around them
+
+The `prettier` set writes an extra `package.json` containing exactly `{ "type": "module" }`, so
+that set emits **five** files rather than four. It is not padding, and it is the least obvious
+failure in this document.
+
+The published package declares `"type": "module"`. Vendoring copies the config files and leaves
+that declaration behind, so in a consumer whose root `package.json` has **no `type` field** the
+vendored files are nominally CommonJS — and `export default` is a syntax error. Node ≥22.7 hides
+this by retrying a failed CommonJS parse as ESM, and says so:
+
+```
+[MODULE_TYPELESS_PACKAGE_JSON] Warning: … doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected.
+```
+
+**On a runtime without that fallback it is a hard `SyntaxError`, raised at the tool** — Prettier,
+ESLint, whatever loaded the config — far from the vendoring step that caused it, and with a message
+that says nothing about vendoring.
+
+Three things make this worth stating rather than just fixing:
+
+- **It is invisible to the hash check.** Every vendored file can be byte-identical to upstream and
+  individually correct, the lock can verify clean, and the result still does not load. Hashes
+  answer "are these the right bytes", never "is this a loadable package".
+- **The marker is inside the lock.** A consumer who fixes this by hand — the natural response — puts
+  a file next to the vendored tree that nothing hashes, nothing checks, and a repo-wide format or a
+  stale-file cleanup can silently change or remove.
+- **The declared type is verified against the ref at vendor time**, not trusted. A marker that
+  confidently states the _wrong_ module type is worse than no marker, because it overrides the
+  runtime's own detection: it converts a runtime that would have coped into one that cannot.
+
+A JSON-only set like `tsconfig` gets no marker; JSON has no module semantics.
+
+#### A key-by-key config comparison scores structural additions as zero
+
+A consumer compared their `.prettierrc.json` against the shared config key by key, found all seven
+scalars byte-equivalent, and recorded the adoption as a **verified zero-file no-op**. Adopting it
+for real changed **5 files and 48 lines**.
+
+The shared config carries an eighth thing no key comparison looks at: an `overrides` block setting
+`printWidth: 96` for `*.md`. They had no markdown override at all, so markdown moved 100 → 96.
+
+`overrides`, `ignores`, and file globs are all invisible to a comparison that walks top-level keys,
+and this is the same blind spot as [the preset linting a different set of files than yours
+did](#the-preset-lints-a-different-set-of-files-than-yours-did), one level up.
+`prettier.resolveConfig()` per file type answers it directly, and so does a real run.
+
+The general rule, which cost two consumers separately:
+
+> **A simulated invocation is not evidence about the gate.** Measure through the command CI actually
+> runs, after wiring — not through a reconstruction of what you believe it will do.
+
+Their result is also a clean demonstration that `proseWrap: 'preserve'` does what it claims: of
+those 48 lines, **all 48 were fenced code blocks. Not one line of prose moved, and no table moved.**
+The width change is live for fences and tables and inert for prose.
+
+**One wiring trap, which will hit every consumer that has one:** a `.prettierrc.json` **outranks**
+the `prettier` field in `package.json`. Leave the old file in place and the repository looks adopted
+while the previous config is silently still in force — and the gate stays green, because the old
+config also passes. Delete it in the same change.
+
+#### Vendor in the change that adopts, not before it
+
+ADR-0001 says which packages are vendored. It does not say _when_, and the obvious reading — fetch
+both sets at once, since the token barrier is gone — is wrong.
+
+A vendored config that nothing `extends` extends nothing: it fails no gate, is exercised by no CI,
+and drifts against upstream invisibly. Worse, `--check` will happily report it clean forever, which
+reads as coverage.
+
+One consumer deliberately vendored `prettier` and **not** `tsconfig`, because their tsconfig
+adoption is deferred on evidence (2,691 diagnostics) and removing the _access_ barrier does not
+remove the _migration_ cost. That is the correct call. Vendor a set in the pull request that starts
+using it.
 
 #### The lock covers the script too
 
@@ -506,7 +582,7 @@ drift detection silently switched off, is the exact failure the lock exists to p
 Vendoring now names them rather than dropping them:
 
 ```
-warning: 10 file(s) from the previous run are no longer tracked:
+warning: 11 file(s) from the previous run are no longer tracked:
   config/engineering/tsconfig/base.json
   ...
 Delete them, or re-run without --dest/--set so one run covers everything you vendor.
@@ -4216,6 +4292,34 @@ you gained. A count alone cannot distinguish "84 and 84" from "84 and 84 with tw
 compare the sets and not their sizes. Discount any scratch config you wrote to disk to run the
 comparison — that shows up as a spurious one-file delta and has already sent one consumer chasing
 it.
+
+it.
+
+**Selection and configuration are two separate comparisons, and a repository can pass the first
+while failing the second.** One consumer's config already selected `scripts/**/*.mjs` via a
+top-level `**/*.mjs` pattern, so the file-set comparison above came out clean — and their tooling
+block still configured those files wrongly, in two ways a rule diff scores as zero because both are
+`languageOptions`:
+
+- **An asymmetric glob.** The block listed `tools/**/*.js`, `tools/**/*.mjs`, and `scripts/**/*.js`
+  — but not `scripts/**/*.mjs`. Invisible until the first such file existed, which is exactly when
+  it appeared: adding `scripts/vendor-configs.mjs` produced **8 `no-undef` errors** that CI caught
+  and their local run did not.
+- **A hand-maintained globals list, which drifts from the runtime.** `fetch` has been a Node global
+  since 18 and was absent, as were `URL`, `TextEncoder`, and `structuredClone`. Each one fails the
+  same way, one at a time, on first use — years apart, each looking like an isolated mistake.
+
+`toolingFiles` plus `globals.node` makes both of these **unrepresentable** rather than merely fixed.
+That is the argument for adopting the preset that no rule-by-rule comparison can produce, because
+the rules were never the difference.
+
+The same consumer supplied the discipline that caught it, having skipped it themselves first:
+
+> I ran `format:check` and not `npx eslint .`, reasoning that a Prettier-config change cannot affect
+> ESLint. True of the config; false of the commit.
+
+**Run the whole gate, not the part that seems relevant.** What is under review is the commit, not
+the change you have in mind.
 
 ### Do not bulk-remove `svelte-ignore` comments
 
