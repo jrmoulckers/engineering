@@ -81,6 +81,23 @@ function fail(message, hint) {
   throw new VendorError(message, hint);
 }
 
+/**
+ * Lock keys are always forward-slashed so a tree vendored on Windows and one
+ * vendored on Linux produce the same lock, and `--check` matches either way.
+ */
+function lockKey(path) {
+  return path.split('\\').join('/');
+}
+
+async function exists(path) {
+  try {
+    await readFile(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function parseArgs(argv) {
   const positional = [];
   const flags = {};
@@ -291,10 +308,7 @@ async function main() {
     fetchedAt: new Date().toISOString(),
     refresh: `node scripts/vendor-configs.mjs <newer-ref>`,
     files: Object.fromEntries(
-      staged.map((item) => [
-        item.dest.split('\\').join('/'),
-        { source: item.path, sha256: sha256(item.text) },
-      ]),
+      staged.map((item) => [lockKey(item.dest), { source: item.path, sha256: sha256(item.text) }]),
     ),
   };
 
@@ -309,13 +323,40 @@ async function main() {
 
   process.stdout.write(`Vendored ${staged.length} file(s) from ${REPO}@${ref} into ${dest}/\n`);
   if (previous && previous.ref !== ref) {
-    const changed = staged.filter(
-      (item) => previous.files?.[item.dest.split('\\').join('/')]?.sha256 !== sha256(item.text),
+    // A file the previous lock never recorded is new, not changed. Counting it
+    // as changed overstates the diff exactly when the dest or set moved, which
+    // is when the number is read most closely.
+    const known = staged.filter((item) => previous.files?.[lockKey(item.dest)]);
+    const changed = known.filter(
+      (item) => previous.files[lockKey(item.dest)].sha256 !== sha256(item.text),
     );
+    const added = staged.length - known.length;
     process.stdout.write(
-      `Ref moved ${previous.ref} -> ${ref}; ${changed.length} file(s) changed content.\n`,
+      `Ref moved ${previous.ref} -> ${ref}; ${changed.length} file(s) changed content` +
+        `${added > 0 ? `, ${added} newly tracked` : ''}.\n`,
     );
   }
+
+  // The lock replaces rather than merges, so files from a previous run at a
+  // different --dest or --set stop being tracked. They stay on disk, and
+  // --check then passes while covering none of them.
+  if (previous) {
+    const stale = Object.keys(previous.files ?? {}).filter((key) => !lock.files[key]);
+    const orphans = [];
+    for (const key of stale) {
+      if (await exists(key)) orphans.push(key);
+    }
+    if (orphans.length > 0) {
+      process.stderr.write(
+        `\nwarning: ${orphans.length} file(s) from the previous run are no longer tracked:\n` +
+          `  ${orphans.join('\n  ')}\n` +
+          `The lock records only this run, so --check no longer covers them and drift in\n` +
+          `them is undetectable. Delete them, or re-run without --dest/--set so one run\n` +
+          `covers everything you vendor.\n`,
+      );
+    }
+  }
+
   process.stdout.write(`Recorded ref and SHA-256 of each file in ${LOCK}. Commit both.\n`);
 }
 

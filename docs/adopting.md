@@ -193,6 +193,14 @@ error: .../packages/prettier-config/index.d.ts returned HTTP 404
        Declarations ship from v0.112.0 onward. Ref 'v0.15.1' predates them; vendor a newer tag.
 ```
 
+One consumer reached `v0.15.1` and then `v0.15.2` from an illustrative snippet in this guide, both
+below the floor, and lost a build to it. **Every ref in this document is an example, not a
+recommendation.** Resolve the tag rather than copying one:
+
+```bash
+gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name
+```
+
 The declarations are not cosmetic for a vendoring consumer, and the precondition is the opposite of
 the one most people assume. **The trigger is `allowJs: false`, not `checkJs`** — and `allowJs` is
 false by default, which `@jrmoulckers/tsconfig` leaves alone. Measured both ways on a vendored tree:
@@ -214,9 +222,18 @@ files are written **byte-identical** to source with no generated header, and a r
 different ref reports how many files actually changed:
 
 ```
-Vendored 8 file(s) from jrmoulckers/engineering@v0.15.0 into config/engineering/
-Ref moved v0.14.0 -> v0.15.0; 2 file(s) changed content.
+Vendored 10 file(s) from jrmoulckers/engineering@v0.115.0 into config/engineering/
+Ref moved v0.112.0 -> v0.115.0; 0 file(s) changed content.
 ```
+
+That `0` is real output, not a placeholder: no vendored file has changed content since the
+`v0.112.0` floor. It is the number worth having — it says a refresh across three releases was safe
+without reading a diff, and it is the same question a Go consumer had to answer by hashing nine
+files by hand.
+
+A file the previous lock never recorded is reported as **newly tracked**, not as changed. Counting
+it as changed would overstate the diff exactly when `--dest` or `--set` moved, which is when the
+number is read most closely.
 
 Because the files are byte-identical, `git diff` after a refresh shows upstream's change and
 nothing else, and local drift shows up as a diff against the recorded hash.
@@ -252,11 +269,10 @@ The two outcomes deliberately differ in severity:
   channel prevents, which is [ADR-0001](architecture/0001-two-channel-config-delivery.md)'s main
   cost. This closes it.
 - **Staleness only warns**, and exits 0:
-
   ```
-  Notice: pinned at v0.15.1; newest release is v0.15.2.
+  Notice: pinned at v0.114.0; newest release is v0.115.0.
   This is not a failure. Update deliberately when you choose to:
-    node scripts/vendor-configs.mjs v0.15.2
+    node scripts/vendor-configs.mjs v0.115.0
   ```
 
 **Never make staleness fatal, and never resolve the newest tag at fetch time.** Both convert
@@ -269,6 +285,26 @@ pin easy to update and loud when it is stale; never automatic.
 A runner that is offline or rate-limited cannot tell you about staleness, so `--check` treats an
 unavailable answer as "fine" and stays silent. Drift is still checked, because that needs no
 network.
+
+#### Vendor everything in one run, or the lock stops covering what you moved
+
+The lock records **one run**. It replaces rather than merges, so if you change `--dest` or `--set`,
+the files from the previous run stay on disk and stop being tracked — and `--check` then reports
+success while covering none of them. A config still referenced by a `tsconfig.json` `extends`, with
+drift detection silently switched off, is the exact failure the lock exists to prevent.
+
+Vendoring now names them rather than dropping them:
+
+```
+warning: 10 file(s) from the previous run are no longer tracked:
+  config/engineering/tsconfig/base.json
+  ...
+Delete them, or re-run without --dest/--set so one run covers everything you vendor.
+```
+
+It is a warning, not a failure, because vendoring two sets to two directories is legitimate — but
+if you do that, only the last run is covered, and you should treat the earlier tree as unmanaged.
+The safe default is a single run with a single `--dest`.
 
 ### Registry — for `eslint-config` only
 
