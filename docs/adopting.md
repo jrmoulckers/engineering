@@ -489,6 +489,34 @@ Chaining it ahead of lint short-circuits: under drift it exits 1 before ESLint r
 error you see is the real one rather than a hundred confusing rule failures from a half-reverted
 config. If your CI calls a shared workflow with a `lint-command` input, put the chain there.
 
+**The script you run is the script from your pinned ref, so tool fixes arrive last.** This is the
+one bootstrapping property of vendoring, and it is easy to trip over: `scripts/vendor-configs.mjs`
+is itself vendored, so a fix to the checker only reaches you when you re-vendor — using the copy
+that does not yet contain the fix. An adopter reported that the script was not covered by its own
+lock. It had been for some time on `main`, and their report was still **correct**, because at the
+ref they had pinned the feature did not exist. Both statements are true at once, which is exactly
+what makes this confusing to argue about.
+
+The rule that resolves it: **check a claim against the ref you are pinned to, not against `main`.**
+Reading `main` answers a question nobody asked — including for the maintainer here, who "verified"
+that feature against a working tree the reporter could not obtain.
+
+To pick up a tool fix without re-vendoring in the dark, refresh the script first, then re-run it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jrmoulckers/engineering/<newer-ref>/scripts/vendor-configs.mjs \
+  -o scripts/vendor-configs.mjs
+node scripts/vendor-configs.mjs <newer-ref>
+```
+
+**And "merged" is not "shipped".** Packages publish on a tag and refs resolve to tags, so a fix
+merged to `main` reaches nobody until a release is cut. That step was missed here for **30
+consecutive commits**, during which each fix was reported to seven repositories as shipped — while
+the newest release consumers could resolve did not contain any of them. If a fix you were told
+about is not present at the newest release, it is not yet real; `npm run release:check` in this
+repository now fails on a package change that no tag could publish, and reports unreleased changes
+to everything else consumers fetch at a ref.
+
 **Never make staleness fatal, and never resolve the newest tag at fetch time.** Both convert
 pinning from a decision into a default. If a tag pushed here could redden your build, the change
 arrives on whichever unrelated PR happens to be open, with nothing in your history explaining it —
