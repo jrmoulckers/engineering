@@ -2468,11 +2468,11 @@ The trap is that this repeats at every minor. `^0.3.0` locks you out of `0.4.0` 
 again one release later and has no signal. Pin with an explicit upper bound instead, which tracks
 every minor until the first stable major:
 
-| Package                        | Range             | Floor is set by                                                       |
-| ------------------------------ | ----------------- | --------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `>=0.17.0 <1.0.0` | Tooling globs cover every test/config/script suffix, and are exported |
-| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`     |
-| `@jrmoulckers/prettier-config` | `>=0.5.0 <1.0.0`  | Type declarations, so `checkJs` consumers can adopt at all            |
+| Package                        | Range     | Floor is set by                                                       |
+| ------------------------------ | --------- | --------------------------------------------------------------------- |
+| `@jrmoulckers/eslint-config`   | `^0.17.0` | Tooling globs cover every test/config/script suffix, and are exported |
+| `@jrmoulckers/tsconfig`        | `^0.4.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`     |
+| `@jrmoulckers/prettier-config` | `^0.5.0`  | Type declarations, so `checkJs` consumers can adopt at all            |
 
 The floors say what each version _added_, so they only rise when something is genuinely required.
 The ranges keep you current without editing the manifest. Confirm what is actually published
@@ -2506,7 +2506,7 @@ give the specifier rather than the number:
 ```diff
 - Type declarations shipped in 0.8.0.
 + Type declarations shipped in 0.8.0. The floor is 0.15.0 — set
-+ "@jrmoulckers/eslint-config": ">=0.17.0 <1.0.0".
++ "@jrmoulckers/eslint-config": "^0.17.0".
 ```
 
 If you are reading a release note from this repository that names a version without naming the
@@ -2534,7 +2534,7 @@ version recorded in `versions.json`, and exits non-zero if any range cannot reac
 
 ```
   STALE    @jrmoulckers/eslint-config    ^0.3.0  CANNOT reach 0.17.0
-                                         use: >=0.17.0 <1.0.0
+                                         use: ^0.17.0
 ```
 
 Two properties are deliberate, and both exist because this guide has repeatedly caught its own
@@ -3395,28 +3395,57 @@ This is the same shape as two other traps in this guide — a clean `rules-of-ho
 lab-only performance channel. In each, a tool reports nothing and the absence is read as
 correctness when it only means the check was never made.
 
-### A committed lockfile is what makes a wide range safe
+### Take patches automatically; take minors as a decision
+
+**This reverses guidance given here earlier, and the counter-example is one of our own releases.**
 
 A consumer widened `^0.8.0` to `>=0.8.0 <1.0.0` so that an eventual `0.9.0` would be reachable
-without a hand edit nobody would be prompted to make. That is the right call **for them**, and the
-reason is not the range — it is that they commit `package-lock.json` and CI runs `npm ci`. CI
-resolves the locked version and nothing else, so a publish here cannot redden a PR that did not
-touch the lockfile. The range governs what `npm update` may _reach_, not what CI _resolves_.
+without a hand edit nobody would be prompted to make. The stranding was real — eight releases went
+by unreachable. But the remedy was wrong, and `eslint-config@0.9.0` is the proof:
 
-Invert either half and the same range becomes a liability. Without a committed lockfile — or with
-an install command that re-resolves — a wide range on a **lint config** means a minor published
-here adds rules to somebody else's unrelated PR, hours after it was opened, with no local change.
-That is the precise failure this repository refuses to cause elsewhere: `--check` warns on
-staleness rather than failing, so that a tag pushed here can never redden a consumer's build. A
-range wide enough to auto-adopt rules gives that property away one layer down, where this
-repository cannot protect it.
+| Package version | What changed                                                |
+| --------------- | ----------------------------------------------------------- |
+| `0.9.0`         | **removed** five framework peer dependencies                |
+| `0.16.0`        | **restored** all five                                       |
+| `0.9.0`→ later  | added a `frameworkPlugins` discovery field, then dropped it |
 
-So the guidance is conditional, not universal:
+Three consumer-visible changes, all shipped in minors, on a `0.x` package where that is exactly
+where convention puts them. A `>=0.9.0 <1.0.0` range accepts every one of them sight-unseen. Our
+own release history is the argument against our own recommendation.
 
-| Your setup                                      | Recommended range                                    |
-| ----------------------------------------------- | ---------------------------------------------------- |
-| Lockfile committed, CI runs `npm ci`/`--frozen` | wide (`>=0.8.0 <1.0.0`) — upgrades stay deliberate   |
-| No lockfile, or CI re-resolves                  | pin exactly, and bump in a change that runs the gate |
+Read against what this repository already says about `--check`:
+
+> if an upstream tag could redden your build, the change arrives on whichever unrelated PR is open
+> with nothing in your history explaining it, and the pressure becomes bump-to-green rather than
+> accept-on-merit. Pinning has to stay a decision.
+
+A wide range _is_ an upstream tag reddening a build with nothing local to explain it. Worse than a
+lint failure, in the `0.9.0` case: a consumer who had not declared the framework plugin themselves
+got a **config-load abort**, so there is no lint output at all to read while hunting a cause in a
+diff that contains none.
+
+**The two failure modes are both silent, and they are not symmetric.**
+
+|                               | How it fails                                            | Cost                                    |
+| ----------------------------- | ------------------------------------------------------- | --------------------------------------- |
+| Range too narrow (stranding)  | **safe** — you keep building against known code         | a fix stays upstream-only until you act |
+| Range too wide (auto-upgrade) | **unsafe** — a working build breaks with no local cause | debugging a diff that cannot explain it |
+
+Stranding is recoverable at leisure. Auto-upgrade is an outage you did not schedule. So the answer
+to stranding was never a wider range — it was **telling you**, which is what `pins:check` now does
+without failing your build. That gives you the reachability you wanted and keeps the decision.
+
+So the recommendation is uniform, and it is the caret:
+
+| Your setup                     | Recommended range                                      |
+| ------------------------------ | ------------------------------------------------------ |
+| Any                            | `^0.17.0` — admits **patches only** on a `0.x` package |
+| No lockfile, or CI re-resolves | same, and consider pinning exactly                     |
+
+A committed lockfile plus `npm ci` still matters — it means CI resolves the locked version and a
+publish here cannot reach it. But that limits the _blast radius_ of a wide range; it does not make
+one correct, because `npm install`, a dependency addition, and any lockfile regeneration all
+re-resolve and will take the newest thing the range admits.
 
 Note also that these are **floors, not the published set**. Version tables in this guide name the
 minimum that carries a given fix; a consumer found a `0.2.1` that no table here had ever mentioned.

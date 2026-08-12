@@ -12,11 +12,11 @@ const VERSIONS = fileURLToPath(new URL('../../versions.json', import.meta.url));
 const dir = mkdtempSync(join(tmpdir(), 'check-pins-'));
 
 /** Run the real script against a synthetic package.json and versions manifest. */
-function run(deps, versions = VERSIONS) {
+function run(deps, versions = VERSIONS, extra = []) {
   const pkg = join(dir, 'package.json');
   writeFileSync(pkg, JSON.stringify({ name: 'probe', devDependencies: deps }));
   try {
-    const stdout = execFileSync(process.execPath, [SCRIPT, pkg, '--versions', versions], {
+    const stdout = execFileSync(process.execPath, [SCRIPT, pkg, '--versions', versions, ...extra], {
       encoding: 'utf8',
     });
     return { code: 0, stdout };
@@ -24,6 +24,12 @@ function run(deps, versions = VERSIONS) {
     return { code: err.status, stdout: `${err.stdout ?? ''}${err.stderr ?? ''}` };
   }
 }
+
+// Staleness exits 0 by default (see the script header). That makes exit code a
+// useless discriminator for any test whose subject is "did this range reach the
+// version" -- such a test would pass whether or not the range was admitted.
+// Every assertion below that cares about reachability therefore runs --strict.
+const STRICT = ['--strict'];
 
 function manifest(name, packages) {
   const file = join(dir, name);
@@ -37,11 +43,20 @@ function manifest(name, packages) {
 // release their own caret excluded. Nothing in npm reports this, so the check
 // has to, and these tests are what keep it able to.
 describe('check-pins detects ranges that cannot reach the published version', () => {
-  test('a 0.x caret below the floor is reported stale, not ok', () => {
+  test('a 0.x caret below the floor is reported stale, but does NOT fail the build', () => {
     const { code, stdout } = run({ '@jrmoulckers/eslint-config': '^0.3.0' });
-    assert.equal(code, 1, 'a range that excludes the published version must fail');
+    assert.equal(code, 0, 'a publish here must not be able to redden a consumer build');
     assert.match(stdout, /STALE\s+@jrmoulckers\/eslint-config/);
     assert.doesNotMatch(stdout, /^\s*ok\s/m);
+    // Exit 0 with a finding is indistinguishable from exit 0 with none unless
+    // the run says which it was.
+    assert.match(stdout, /This is a notice, not a failure/);
+  });
+
+  test('--strict makes the same stale range fatal', () => {
+    const { code, stdout } = run({ '@jrmoulckers/eslint-config': '^0.3.0' }, VERSIONS, STRICT);
+    assert.equal(code, 1, '--strict must restore the fatal behaviour for a fleet audit');
+    assert.match(stdout, /Exiting 1 because --strict was passed/);
   });
 
   test('the recommended replacement range it prints actually reaches the version', () => {
@@ -50,10 +65,28 @@ describe('check-pins detects ranges that cannot reach the published version', ()
     assert.ok(suggested, 'a stale row must carry a replacement range');
 
     // Advice that is never executed is advice that is never checked. Feed the
-    // suggestion back through the checker and require it to pass.
-    const fixed = run({ '@jrmoulckers/eslint-config': suggested });
+    // suggestion back through the checker and require it to pass -- under
+    // --strict, or a suggestion that does NOT reach the version would still
+    // exit 0 and this test would assert nothing.
+    const fixed = run({ '@jrmoulckers/eslint-config': suggested }, VERSIONS, STRICT);
     assert.equal(fixed.code, 0, `the suggested range ${suggested} does not itself pass`);
     assert.match(fixed.stdout, /ok\s+@jrmoulckers\/eslint-config/);
+  });
+
+  test('the range it recommends admits patches but not the next minor', () => {
+    const versions = manifest('caret.json', {
+      '@jrmoulckers/tsconfig': { version: '0.4.0', range: '^0.4.0' },
+    });
+    // The whole point of the reversal: patches ride along, minors are a decision.
+    assert.equal(run({ '@jrmoulckers/tsconfig': '^0.4.0' }, versions, STRICT).code, 0);
+    const next = manifest('caret-next.json', {
+      '@jrmoulckers/tsconfig': { version: '0.5.0', range: '^0.5.0' },
+    });
+    assert.equal(
+      run({ '@jrmoulckers/tsconfig': '^0.4.0' }, next, STRICT).code,
+      1,
+      'a caret must not silently admit the next 0.x minor',
+    );
   });
 
   test('a range that does reach the published version passes', () => {
@@ -85,17 +118,17 @@ describe('check-pins detects ranges that cannot reach the published version', ()
     const versions = manifest('sentinel.json', {
       '@jrmoulckers/tsconfig': { version: '9.9.9', range: '>=9.9.9 <10.0.0' },
     });
-    const { code, stdout } = run({ '@jrmoulckers/tsconfig': '^0.4.0' }, versions);
+    const { code, stdout } = run({ '@jrmoulckers/tsconfig': '^0.4.0' }, versions, STRICT);
     assert.equal(code, 1);
     assert.match(stdout, /CANNOT reach 9\.9\.9/, 'the supplied manifest was not the one read');
   });
 
   test('0.x caret semantics: the minor is pinned, so 0.3.0 cannot reach 0.4.0', () => {
     const versions = manifest('minor.json', {
-      '@jrmoulckers/tsconfig': { version: '0.4.0', range: '>=0.4.0 <1.0.0' },
+      '@jrmoulckers/tsconfig': { version: '0.4.0', range: '^0.4.0' },
     });
-    assert.equal(run({ '@jrmoulckers/tsconfig': '^0.3.0' }, versions).code, 1);
-    assert.equal(run({ '@jrmoulckers/tsconfig': '^0.4.0' }, versions).code, 0);
+    assert.equal(run({ '@jrmoulckers/tsconfig': '^0.3.0' }, versions, STRICT).code, 1);
+    assert.equal(run({ '@jrmoulckers/tsconfig': '^0.4.0' }, versions, STRICT).code, 0);
   });
 
   test('every package in versions.json is reachable by its own recommended range', () => {
@@ -113,7 +146,7 @@ describe('check-pins detects ranges that cannot reach the published version', ()
     assert.ok(names.length >= 3, 'expected the three published packages to be recorded');
 
     const deps = Object.fromEntries(names.map((n) => [n, packages[n].range]));
-    const { code, stdout } = run(deps);
+    const { code, stdout } = run(deps, VERSIONS, STRICT);
     assert.equal(
       code,
       0,
