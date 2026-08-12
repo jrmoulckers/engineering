@@ -111,3 +111,50 @@ test('the shared React layer ships in the package tarball', async () => {
       'tarball would omit it and every consumer would fail at config load.',
   );
 });
+
+// A Svelte-only consumer removed the React plugins and found sixteen `react/*`
+// keys still in the effective config. That reads as a failed removal, and it is
+// not: the keys come from `eslint-config-prettier`, which lists them at `off` to
+// stop stylistic React rules fighting the formatter. A rule at `off` needs no
+// plugin, because nothing resolves the `react/` prefix unless it is enabled.
+//
+// Pinned here because the docs now tell consumers this is expected. If the
+// premise ever changes, the doc becomes wrong advice about a real regression --
+// which is worse than having said nothing.
+test('react/* keys in a Svelte config come from prettier at off, not from the plugin', async () => {
+  const prettier = (await import('eslint-config-prettier')).default;
+  const rules = prettier.rules ?? prettier;
+  const reactKeys = Object.keys(rules).filter((k) => k.startsWith('react/'));
+
+  assert.equal(
+    reactKeys.length,
+    16,
+    'adopting.md states eslint-config-prettier supplies exactly 16 react/* keys',
+  );
+  for (const key of reactKeys) {
+    assert.equal(
+      rules[key],
+      'off',
+      `${key} is not "off". The documented claim is that these keys are inert, so a ` +
+        'consumer auditing a plugin removal can ignore them. An enabled rule would need ' +
+        'the plugin and would fail config load.',
+    );
+  }
+});
+
+test('the svelte preset enables no react/* rule, so the plugin is genuinely unused', async () => {
+  const { svelteConfig } = await import('../../packages/eslint-config/svelte.js');
+  const active = svelteConfig()
+    .flatMap((block) => Object.entries(block.rules ?? {}))
+    .filter(([name, level]) => name.startsWith('react/'))
+    .filter(([, level]) => {
+      const severity = Array.isArray(level) ? level[0] : level;
+      return severity !== 'off' && severity !== 0;
+    });
+
+  assert.deepEqual(
+    active.map(([name]) => name),
+    [],
+    'a Svelte consumer would need eslint-plugin-react installed to load this config',
+  );
+});
