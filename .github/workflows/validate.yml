@@ -78,6 +78,8 @@ jobs:
         run: npm run principles:check
       - name: Check that no principle silently loses its implementing guide
         run: npm run coverage:check
+      - name: Check that no practice section is written twice in two files
+        run: npm run docs:overlap
       - name: Verify published versions match what this repository advertises
         run: npm run versions:check
         env:
