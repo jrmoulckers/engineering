@@ -216,4 +216,55 @@ describe('documented ranges match versions.json', () => {
     );
     void bare;
   });
+
+  // eslint-config 0.9.0 through 0.11.0 declare the five framework plugins in a
+  // bespoke `frameworkPlugins` key that no package manager reads, while react.js,
+  // next.js and hooks.js still import them at module scope. Installing one of
+  // those versions exits 0, skips ~90 packages, warns about nothing, and fails at
+  // first lint with ERR_MODULE_NOT_FOUND. 0.12.0 restored the declarations.
+  //
+  // A consumer found this by asking npm what our own recommended range resolved
+  // to. Nothing stopped us publishing it, and nothing stopped us recommending a
+  // range that selected it, so the guard is mechanical rather than editorial.
+  test('no recorded version falls in a known-broken window', () => {
+    const BROKEN = {
+      '@jrmoulckers/eslint-config': {
+        from: '0.9.0',
+        to: '0.12.0',
+        why: 'framework plugins declared in a field no package manager reads; fails at first lint',
+      },
+    };
+
+    const cmp = (a, b) => {
+      const pa = a.split('.').map(Number);
+      const pb = b.split('.').map(Number);
+      for (let i = 0; i < 3; i += 1) {
+        if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
+      }
+      return 0;
+    };
+
+    for (const [name, window] of Object.entries(BROKEN)) {
+      const entry = manifest.packages[name];
+      assert.ok(entry, `${name} must be recorded in versions.json`);
+      const broken = cmp(entry.version, window.from) >= 0 && cmp(entry.version, window.to) < 0;
+      assert.ok(
+        !broken,
+        `versions.json records ${name}@${entry.version}, inside the known-broken window ` +
+          `[${window.from}, ${window.to}): ${window.why}. Consumers paste this value verbatim.`,
+      );
+
+      // The recorded range must not admit the window either -- recording a good
+      // version behind a range that reaches a broken one is the same defect with
+      // an extra step, and it is how this shipped in the first place.
+      const floor = /(\d+\.\d+\.\d+)/.exec(entry.range ?? '')?.[1];
+      if (floor && entry.range.startsWith('>=')) {
+        assert.ok(
+          cmp(floor, window.to) >= 0,
+          `${name} records range "${entry.range}", whose floor ${floor} admits the broken ` +
+            `window [${window.from}, ${window.to}) -- a resolver may select one of those`,
+        );
+      }
+    }
+  });
 });
