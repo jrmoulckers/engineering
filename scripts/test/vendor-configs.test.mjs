@@ -1080,3 +1080,103 @@ describe('vendor time records and compares the tool', { skip: OFFLINE }, () => {
     }
   });
 });
+
+describe('the staleness notice reports how big the gap is', { skip: OFFLINE }, () => {
+  // Four repositories read "you vendored v0.15.4; the newest release is
+  // v0.115.0" and stayed put. `15.4` and `115.0` read as neighbours, and the
+  // notice's own "this is a valid choice" made a 116-release gap sound
+  // deliberate. A count cannot be misread that way.
+  async function withApi(handler, body) {
+    const server = createServer(handler);
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const dir = workspace();
+    try {
+      await body((args) => runAsyncIn(dir, args, { VENDOR_API_BASE: base }));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+
+  function api(latest, tags) {
+    return (req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify(
+          req.url.includes('releases/latest')
+            ? { tag_name: latest }
+            : tags.map((tag_name) => ({ tag_name })),
+        ),
+      );
+    };
+  }
+
+  test('counts the releases between the pin and the newest', async () => {
+    const tags = ['v0.115.0', 'v0.114.0', 'v0.113.0', 'v0.15.4'];
+    await withApi(api('v0.115.0', tags), async (exec) => {
+      const { code, out } = await exec(['v0.15.4', '--set', 'tsconfig']);
+      assert.equal(code, 0);
+      assert.match(out, /the newest release is v0\.115\.0, 3 release\(s\) newer/);
+    });
+  });
+
+  // A full page means the total is unknown, and understating a gap is the
+  // failure being fixed -- so it reports a floor rather than a wrong total.
+  test('reports a floor when a full page comes back', async () => {
+    const tags = Array.from({ length: 100 }, (_, i) => `v0.${i + 20}.0`);
+    await withApi(api('v0.119.0', tags), async (exec) => {
+      const { code, out } = await exec(['v0.15.4', '--set', 'tsconfig']);
+      assert.equal(code, 0);
+      assert.match(out, /at least 100 release\(s\) newer/);
+    });
+  });
+
+  // No number is better than a wrong one, and this must never redden a build.
+  test('says nothing about the count when the lookup fails', async () => {
+    const handler = (req, res) => {
+      if (req.url.includes('releases/latest')) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ tag_name: 'v0.115.0' }));
+        return;
+      }
+      res.writeHead(403).end('{}');
+    };
+    await withApi(handler, async (exec) => {
+      const { code, out } = await exec(['v0.15.4', '--set', 'tsconfig']);
+      assert.equal(code, 0);
+      assert.match(out, /the newest release is v0\.115\.0\./);
+      assert.doesNotMatch(out, /release\(s\) newer/);
+    });
+  });
+
+  // A 200 carrying the wrong shape is the quiet failure: `{"message": ...}`
+  // has no length to count, and treating it as zero would print a confident
+  // "up to date" built from an error body.
+  test('says nothing about the count when the body is not a list', async () => {
+    const handler = (req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify(
+          req.url.includes('releases/latest') ? { tag_name: 'v0.115.0' } : { message: 'nope' },
+        ),
+      );
+    };
+    await withApi(handler, async (exec) => {
+      const { code, out } = await exec(['v0.15.4', '--set', 'tsconfig']);
+      assert.equal(code, 0);
+      assert.match(out, /the newest release is v0\.115\.0\./);
+      assert.doesNotMatch(out, /release\(s\) newer/);
+    });
+  });
+
+  test('--check reports the gap too, not only vendor time', async () => {
+    const tags = ['v0.115.0', 'v0.114.0', 'v0.15.4'];
+    await withApi(api('v0.115.0', tags), async (exec) => {
+      assert.equal((await exec(['v0.15.4', '--set', 'tsconfig'])).code, 0);
+      const { code, out } = await exec(['--check']);
+      assert.equal(code, 0);
+      assert.match(out, /2 release\(s\) newer/);
+    });
+  });
+});
