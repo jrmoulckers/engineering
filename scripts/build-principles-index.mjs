@@ -24,6 +24,18 @@ const FIELDS = {
   Evidence: 'evidence',
 };
 
+// Fields that belong in a principle block but are deliberately not indexed.
+// They exist so that an unrecognised field can be treated as an error rather
+// than silently dropped: without this list every typo and every invented field
+// would parse, build clean, and simply not be there. `Scope:` was proposed by
+// an adopter and discarded without a word by exactly that path.
+const UNINDEXED_FIELDS = new Set([
+  'Owner and ratification',
+  'Handoff',
+  'Legacy inputs',
+  'Legacy input scope',
+]);
+
 async function markdownFiles(dir) {
   const found = [];
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -39,6 +51,7 @@ async function markdownFiles(dir) {
 
 function parsePrinciples(text, sourcePath) {
   const principles = [];
+  const unknown = [];
   // A principle is an `## ` heading followed by a `- Field: value` list.
   const sections = text.split(/^## /m).slice(1);
 
@@ -52,8 +65,10 @@ function parsePrinciples(text, sourcePath) {
     for (const line of lines.slice(1)) {
       const match = /^- ([^:]+):\s*(.*)$/.exec(line);
       if (match) {
-        open = FIELDS[match[1]] ?? null;
+        const name = match[1];
+        open = FIELDS[name] ?? null;
         if (open) record[open] = match[2].trim();
+        else if (!UNINDEXED_FIELDS.has(name)) unknown.push({ title, name });
         continue;
       }
 
@@ -71,17 +86,29 @@ function parsePrinciples(text, sourcePath) {
     if (record.id) principles.push(record);
   }
 
-  return principles;
+  return { principles, unknown };
 }
 
 async function build() {
   const files = (await markdownFiles(principlesDir)).sort();
   const principles = [];
+  const unrecognised = [];
 
   for (const file of files) {
     const text = await readFile(file, 'utf8');
     const sourcePath = relative(repoRoot, file).split(sep).join('/');
-    principles.push(...parsePrinciples(text, sourcePath));
+    const parsed = parsePrinciples(text, sourcePath);
+    principles.push(...parsed.principles);
+    for (const u of parsed.unknown) unrecognised.push(`${sourcePath} (${u.title}): ${u.name}`);
+  }
+
+  // Fatal, not a warning. An unrecognised field is indistinguishable from one
+  // that works until somebody queries the index and finds nothing there.
+  if (unrecognised.length > 0) {
+    throw new Error(
+      `Unrecognised principle field(s):\n  ${unrecognised.join('\n  ')}\n` +
+        'Add the field to FIELDS to index it, or to UNINDEXED_FIELDS if it is deliberately not indexed.',
+    );
   }
 
   principles.sort((a, b) => a.id.localeCompare(b.id));

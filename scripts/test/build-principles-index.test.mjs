@@ -28,7 +28,7 @@ const WRAPPED = `# Area
 `;
 
 test('parses a single-line principle', () => {
-  const [p] = parsePrinciples(UNWRAPPED, 'principles/x.md');
+  const [p] = parsePrinciples(UNWRAPPED, 'principles/x.md').principles;
   assert.equal(p.id, 'ENG-API-001');
   assert.equal(p.title, 'Typed versioned APIs');
   assert.equal(
@@ -38,8 +38,8 @@ test('parses a single-line principle', () => {
 });
 
 test('a wrapped field keeps its full value, not just the first line', () => {
-  const [wrapped] = parsePrinciples(WRAPPED, 'principles/x.md');
-  const [flat] = parsePrinciples(UNWRAPPED, 'principles/x.md');
+  const [wrapped] = parsePrinciples(WRAPPED, 'principles/x.md').principles;
+  const [flat] = parsePrinciples(UNWRAPPED, 'principles/x.md').principles;
 
   // The regression: continuation lines were dropped, silently truncating the
   // statement at the wrap column. Reflowing a file must not change meaning.
@@ -48,7 +48,7 @@ test('a wrapped field keeps its full value, not just the first line', () => {
 });
 
 test('a continuation does not leak into the following field', () => {
-  const [p] = parsePrinciples(WRAPPED, 'principles/x.md');
+  const [p] = parsePrinciples(WRAPPED, 'principles/x.md').principles;
   assert.equal(p.rationale, 'Trust-boundary validation lets clients evolve.');
   assert.equal(p.evidence, 'Contract tests cover accepted and rejected payloads.');
 });
@@ -62,7 +62,7 @@ test('a blank line closes an open field', () => {
 
   Loose prose that is not part of the list.
 `;
-  const [p] = parsePrinciples(source, 'principles/x.md');
+  const [p] = parsePrinciples(source, 'principles/x.md').principles;
   assert.equal(p.statement, 'First line continued here.');
 });
 
@@ -74,7 +74,7 @@ test('unknown fields are ignored and do not capture continuations', () => {
   that wraps onto a second line.
 - Statement: Real statement.
 `;
-  const [p] = parsePrinciples(source, 'principles/x.md');
+  const [p] = parsePrinciples(source, 'principles/x.md').principles;
   assert.equal(p.statement, 'Real statement.');
   assert.equal(p.note, undefined);
 });
@@ -89,7 +89,46 @@ Some prose with no fields.
 - ID: ENG-X-002
 - Statement: Kept.
 `;
-  const parsed = parsePrinciples(source, 'principles/x.md');
+  const parsed = parsePrinciples(source, 'principles/x.md').principles;
   assert.equal(parsed.length, 1);
   assert.equal(parsed[0].id, 'ENG-X-002');
+});
+
+test('an unrecognised field is reported, not silently dropped', () => {
+  // A `Scope:` field was proposed by an adopter, added to a principle, and
+  // vanished without a word: the index built clean and simply did not have it.
+  // A field that does nothing is worse than one that is rejected, because the
+  // author believes it took effect.
+  const source = `
+## Local durable ownership
+
+- ID: ENG-X-003
+- Statement: Kept.
+- Scope: products whose device store is the system of record
+`;
+  const { principles, unknown } = parsePrinciples(source, 'principles/x.md');
+  assert.equal(principles.length, 1, 'the principle itself still parses');
+  assert.deepEqual(
+    unknown.map((u) => u.name),
+    ['Scope'],
+    'the unrecognised field must be named so the author can see it did nothing',
+  );
+});
+
+test('fields that are deliberately not indexed are not reported as unknown', () => {
+  // Without this the guard would fire on every real principle at once, and the
+  // fix would be to delete the guard.
+  const source = `
+## Local durable ownership
+
+- ID: ENG-X-004
+- Statement: Kept.
+- Owner and ratification: Engineering owns this.
+- Handoff: Reference Product.
+- Legacy inputs: \`studio-legacy:local-first:1\`
+- Legacy input scope: narrow
+`;
+  const { principles, unknown } = parsePrinciples(source, 'principles/x.md');
+  assert.equal(principles.length, 1);
+  assert.deepEqual(unknown, []);
 });
