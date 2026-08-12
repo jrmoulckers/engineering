@@ -310,6 +310,72 @@ async function releaseGap(ref) {
  * build pressures the next person into bumping the ref without deciding to
  * accept the change, which is the property pinning exists to protect.
  */
+/**
+ * How many of the vendored files would actually change at `ref`.
+ *
+ * The notice used to fire whenever a tag advanced. A tag advances for docs, ADRs
+ * and CI edits that touch nothing any consumer vendors: one adopter measured six
+ * consecutive releases across which 0 of their 8 files changed, and was told they
+ * were stale at every one. A signal that always fires stops being read, and the
+ * habituated ignore then covers the release that mattered — so a notice that
+ * cries wolf is worse than no notice at all.
+ *
+ * Two properties this must hold, both learned the hard way:
+ *
+ *   1. Silence must mean "compared, and nothing differs" — never "the comparison
+ *      failed". A check whose failure mode is silence reads as success, which is
+ *      the exact defect this repository has now found three times in its own
+ *      verifying machinery. Any unreachable file yields `unknown`, and an unknown
+ *      result speaks.
+ *   2. Comparing only the files already vendored cannot see a file *added*
+ *      upstream: all N existing files match, and the consumer is silently missing
+ *      the new one. The set of files is defined by the script, so the script is
+ *      compared too — if it changed at `ref`, the file set may have changed, and
+ *      that is reported as a reason to look rather than a count.
+ */
+async function changedAtRef(ref, lock, entries) {
+  let changed = 0;
+  let compared = 0;
+
+  for (const [, meta] of entries) {
+    const source = typeof meta?.source === 'string' ? meta.source : null;
+    if (source === null || typeof meta?.sha256 !== 'string') return { unknown: true };
+
+    // A derived marker has no file of its own upstream. Its source key names the
+    // field it came from, so recompute it from that field rather than trying to
+    // fetch a path that does not exist.
+    const derived = source.endsWith('#type');
+    const path = derived ? source.slice(0, -'#type'.length) : source;
+
+    const text = await fetchFile(ref, path, false).catch(() => null);
+    if (text === null) return { unknown: true };
+
+    let candidate = text;
+    if (derived) {
+      let type;
+      try {
+        type = JSON.parse(text).type;
+      } catch {
+        return { unknown: true };
+      }
+      candidate = `${JSON.stringify({ type }, null, 2)}\n`;
+    }
+
+    compared += 1;
+    if (sha256(candidate) !== meta.sha256) changed += 1;
+  }
+
+  let toolChanged = false;
+  if (typeof lock.tool?.sha256 === 'string') {
+    const source = typeof lock.tool.source === 'string' ? lock.tool.source : lock.tool.path;
+    const text = await fetchFile(ref, source, false).catch(() => null);
+    if (text === null) return { unknown: true };
+    toolChanged = sha256(text) !== lock.tool.sha256;
+  }
+
+  return { changed, compared, toolChanged };
+}
+
 async function check() {
   let raw;
   try {
@@ -424,13 +490,40 @@ async function check() {
   process.stdout.write(`${entries.length} vendored file(s) match ${LOCK} at ${lock.ref}.\n`);
 
   const latest = await latestRef();
-  if (isNewerRef(latest, lock.ref)) {
+  if (!isNewerRef(latest, lock.ref)) return;
+
+  // What a consumer can act on is "my rules would change", not "a tag moved".
+  const gap = await gapPhrase(lock.ref);
+  const result = await changedAtRef(latest, lock, entries);
+
+  if (result.unknown) {
     process.stdout.write(
-      `\nNotice: pinned at ${lock.ref}; newest release is ${latest}${await gapPhrase(lock.ref)}.\n` +
+      `\nNotice: pinned at ${lock.ref}; newest release is ${latest}${gap}.\n` +
+        `Could not compare contents at ${latest}, so whether your config would change\n` +
+        `is unknown — this notice is not evidence that it would.\n` +
         `This is not a failure. Update deliberately when you choose to:\n` +
         `  node scripts/vendor-configs.mjs ${latest}\n`,
     );
+    return;
   }
+
+  // Nothing you vendor differs, and the script that decides what you vendor is
+  // unchanged too, so there is nothing to say. Staying quiet here is the point:
+  // it is what keeps the notice worth reading on the release that does matter.
+  if (result.changed === 0 && !result.toolChanged) return;
+
+  const detail = result.toolChanged
+    ? `${result.changed} of ${result.compared} vendored file(s) differ, and the vendoring ` +
+      `script itself has changed —\nso the set of files may have changed too, which comparing ` +
+      `your existing files cannot detect`
+    : `${result.changed} of ${result.compared} vendored file(s) would change`;
+
+  process.stdout.write(
+    `\nNotice: pinned at ${lock.ref}; newest release is ${latest}${gap}.\n` +
+      `${detail}.\n` +
+      `This is not a failure. Update deliberately when you choose to:\n` +
+      `  node scripts/vendor-configs.mjs ${latest}\n`,
+  );
 }
 
 /**
@@ -744,6 +837,13 @@ async function toolEntry(ref) {
  * cheaply, and four repositories vendored a ref far behind latest without
  * anything saying so. Same contract as --check: a newer release is
  * information, never a failure.
+ *
+ * This one stays tag-only, unlike --check, and the difference is deliberate.
+ * --check runs on every CI build, so a notice that fires across releases which
+ * change nothing you vendor is seen hundreds of times and learned as noise.
+ * This runs once, in a session where a human has just typed a ref by hand and
+ * is positioned to correct it — which is exactly when knowing a newer release
+ * exists is worth an interruption, whatever its contents.
  */
 async function reportStaleness(ref) {
   const latest = await latestRef();
