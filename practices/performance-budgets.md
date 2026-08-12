@@ -48,16 +48,26 @@ function attributes cost to the function you already suspected, which is why the
 for a profiler and a reproducible recipe instead.
 
 Use the profiler that ships with the platform. A cross-platform wrapper reports its own overhead
-as application cost:
+as application cost. Every stack needs **both** columns: a lab profiler to attribute cost, and a
+field channel to know the cost is real.
 
-| Stack             | Tool                                                                    | Capture                                         |
-| ----------------- | ----------------------------------------------------------------------- | ----------------------------------------------- |
-| Web (main thread) | Chrome DevTools Performance                                             | Record interaction, export the `.json` trace    |
-| Node              | Built-in `node --cpu-prof`, or `--heap-prof` for allocation             | Load the `.cpuprofile` in DevTools              |
-| Go                | `pprof` (`go test -cpuprofile`, or `net/http/pprof` for a live service) | `go tool pprof -http=: cpu.prof`                |
-| JVM / Kotlin      | Async-profiler, or JFR for a long-running service                       | Flame graph from the `.jfr` or collapsed stacks |
-| Android           | Android Studio CPU Profiler (system trace for jank)                     | Perfetto trace                                  |
-| Apple platforms   | Instruments — Time Profiler, Allocations for memory                     | `.trace` bundle                                 |
+| Stack             | Lab profiler                                                            | Capture                                         | Field channel                                          |
+| ----------------- | ----------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------ |
+| Web (main thread) | Chrome DevTools Performance                                             | Record interaction, export the `.json` trace    | RUM via `web-vitals`; CrUX for field percentiles       |
+| Node              | Built-in `node --cpu-prof`, or `--heap-prof` for allocation             | Load the `.cpuprofile` in DevTools              | Event-loop and GC metrics exported continuously        |
+| Go                | `pprof` (`go test -cpuprofile`, or `net/http/pprof` for a live service) | `go tool pprof -http=: cpu.prof`                | `runtime/metrics` scraped from the running service     |
+| JVM / Kotlin      | Async-profiler, or JFR for a long-running service                       | Flame graph from the `.jfr` or collapsed stacks | JFR left recording in production, sampled continuously |
+| Android           | Android Studio CPU Profiler (system trace for jank)                     | Perfetto trace                                  | Play vitals and `JankStats` from real installs         |
+| Apple platforms   | Instruments — Time Profiler, Allocations for memory                     | `.trace` bundle                                 | MetricKit `MXMetricPayload` from shipping builds       |
+
+**The field column is part of the instrument choice, not a later concern.** A lab-only setup
+satisfies the letter of `ENG-PERF-007` while missing the regressions it exists to catch, because
+the regression that matters is the one that appears only on hardware nobody develops on. The lab
+answers _why_; the field answers _whether_, and _for whom_. Gating on a profile produces a check
+that fails on an unrelated machine — a profile is a diagnosis, never a threshold. Diagnosing from
+field metrics produces a guess — a p95 says a regression exists and who it reached, not which call
+is responsible. A blank in that column is a visible gap; [Native profiling](native-profiling.md)
+develops the split for stacks where lab and field differ in hardware rather than in load.
 
 **Record a recipe, not a conclusion.** `ENG-PERF-007`'s evidence clause is the demanding half: a
 profile is only useful later if someone else can re-capture it. Retain the workload, tool and
