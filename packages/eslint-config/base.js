@@ -26,8 +26,13 @@ import { sharedIgnores, toolingFiles } from './ignores.js';
  * @param {Record<string, unknown>} [options.rules] Rule overrides applied last.
  * @param {import('eslint').Linter.Config[]} [options.extend] Extra flat-config entries appended last.
  * @param {boolean} [options.typeAware] Supply type information so type-aware rules can run.
- * @param {boolean} [options.strictTypeChecked] Layer the type-checked and stylistic-type-checked
- *   rule sets. Implies `typeAware`.
+ * @param {boolean} [options.typeChecked] Layer `recommendedTypeChecked` — the correctness half.
+ *   Implies `typeAware`.
+ * @param {boolean} [options.stylisticTypeChecked] Layer `stylisticTypeChecked` — the house-style
+ *   half (`consistent-type-definitions`, `array-type`). Implies `typeAware`. Kept separate because
+ *   a measured consumer found 95% of the combined findings came from this set alone.
+ * @param {boolean} [options.strictTypeChecked] Deprecated alias for `typeChecked` +
+ *   `stylisticTypeChecked` together. Retained so existing callers do not change behaviour.
  * @param {string[]} [options.untypedFiles] Extra globs for files a TypeScript project never
  *   covers. Type-aware rules are disabled for them, after `extend`. Presets pass their own
  *   file types here; `.svelte` is not a TypeScript project member even when its script block is.
@@ -40,11 +45,21 @@ export function base(options = {}) {
     rules = {},
     extend = [],
     typeAware = false,
+    typeChecked = false,
+    stylisticTypeChecked = false,
     strictTypeChecked = false,
     untypedFiles = [],
   } = options;
 
-  const wantsTypeInformation = typeAware || strictTypeChecked;
+  // `strictTypeChecked` predates the split and meant both halves at once. A
+  // consumer measured 466 findings from it, of which 444 were stylistic and
+  // 405 came from `consistent-type-definitions` alone — so the price of
+  // adopting type *safety* was being set by a house-style preference. The two
+  // are separable now; the old flag still turns on both.
+  const wantsCorrectness = typeChecked || strictTypeChecked;
+  const wantsStylistic = stylisticTypeChecked || strictTypeChecked;
+
+  const wantsTypeInformation = typeAware || wantsCorrectness || wantsStylistic;
 
   const globalSets = {
     browser: { ...globals.browser },
@@ -55,9 +70,11 @@ export function base(options = {}) {
   return tseslint.config(
     { ignores: [...sharedIgnores, ...ignores] },
     js.configs.recommended,
-    ...(strictTypeChecked
-      ? [...tseslint.configs.recommendedTypeChecked, ...tseslint.configs.stylisticTypeChecked]
-      : tseslint.configs.recommended),
+    // `stylisticTypeChecked` does not contain the recommended rules, so the
+    // recommended layer must be present in every combination. Selecting only
+    // the stylistic set would otherwise silently drop base coverage.
+    ...(wantsCorrectness ? tseslint.configs.recommendedTypeChecked : tseslint.configs.recommended),
+    ...(wantsStylistic ? tseslint.configs.stylisticTypeChecked : []),
     prettier,
     {
       languageOptions: {
@@ -77,7 +94,7 @@ export function base(options = {}) {
         // A swallowed rejection hides the failure it was supposed to surface.
         // Type-aware, so it can only be enabled once a project is available.
         'no-return-await': 'off',
-        ...(strictTypeChecked ? {} : { '@typescript-eslint/no-floating-promises': 'off' }),
+        ...(wantsCorrectness ? {} : { '@typescript-eslint/no-floating-promises': 'off' }),
         ...rules,
       },
     },

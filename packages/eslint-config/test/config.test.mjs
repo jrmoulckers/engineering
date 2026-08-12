@@ -214,6 +214,12 @@ describe('base strictTypeChecked (ENG-TEST-008)', () => {
     '@typescript-eslint/no-floating-promises',
   ];
 
+  // The two rules a consumer measured as 93% of the combined finding count.
+  const STYLISTIC_RULES = [
+    '@typescript-eslint/consistent-type-definitions',
+    '@typescript-eslint/array-type',
+  ];
+
   /** Resolve a rule and the project-service setting for one file path. */
   function resolveFor(config, filePath) {
     const matches = (glob) => {
@@ -276,6 +282,55 @@ describe('base strictTypeChecked (ENG-TEST-008)', () => {
   test('strictTypeChecked implies type information without also passing typeAware', () => {
     const { projectService } = resolveFor(base({ strictTypeChecked: true }), 'src/a.ts');
     assert.equal(projectService, true);
+  });
+
+  // A consumer measured 466 findings from `strictTypeChecked`, of which 444
+  // were stylistic and 405 came from `consistent-type-definitions` alone. The
+  // price of adopting type safety was set by a house-style preference, and no
+  // combination of the existing flags could separate them.
+  test('typeChecked layers the correctness half without the stylistic half', () => {
+    const { rules, projectService } = resolveFor(base({ typeChecked: true }), 'src/a.ts');
+    assert.equal(projectService, true);
+    for (const rule of STRICT_RULES) assert.ok(enabled(rules[rule]), `${rule} missing`);
+    for (const rule of STYLISTIC_RULES)
+      assert.ok(!enabled(rules[rule]), `${rule} leaked into typeChecked`);
+  });
+
+  test('stylisticTypeChecked layers the stylistic half without the correctness half', () => {
+    const { rules } = resolveFor(base({ stylisticTypeChecked: true }), 'src/a.ts');
+    for (const rule of STYLISTIC_RULES) assert.ok(enabled(rules[rule]), `${rule} missing`);
+    assert.ok(!enabled(rules['@typescript-eslint/no-floating-promises']));
+  });
+
+  // `stylisticTypeChecked` does not contain the recommended rules. Selecting it
+  // alone must not cost the base layer — a silent coverage drop that a rule
+  // count would show as an increase.
+  test('the recommended layer survives every combination of the type-checked flags', () => {
+    for (const options of [
+      {},
+      { typeChecked: true },
+      { stylisticTypeChecked: true },
+      { typeChecked: true, stylisticTypeChecked: true },
+    ]) {
+      const { rules } = resolveFor(base(options), 'src/a.ts');
+      assert.ok(
+        enabled(rules['@typescript-eslint/no-unused-vars']),
+        `recommended layer dropped for ${JSON.stringify(options)}`,
+      );
+    }
+  });
+
+  test('strictTypeChecked stays an exact alias for both halves together', () => {
+    const legacy = resolveFor(base({ strictTypeChecked: true }), 'src/a.ts').rules;
+    const split = resolveFor(
+      base({ typeChecked: true, stylisticTypeChecked: true }),
+      'src/a.ts',
+    ).rules;
+    const names = new Set([...Object.keys(legacy), ...Object.keys(split)]);
+    const differing = [...names].filter(
+      (n) => JSON.stringify(legacy[n]) !== JSON.stringify(split[n]),
+    );
+    assert.deepEqual(differing, [], 'the deprecated alias changed behaviour');
   });
 
   test('untypedFiles disables the type-aware rules for globs base cannot know about', () => {

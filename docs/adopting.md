@@ -17,6 +17,7 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | What you are seeing                                         | Search for                                               |
 | ----------------------------------------------------------- | -------------------------------------------------------- |
 | CI fails instantly, no logs, `startup_failure`              | `read the annotation, do not infer`                      |
+| `strictTypeChecked` produced hundreds of findings           | `billing you for two unrelated`                          |
 | `401` on install from Vercel/Netlify/Fly but CI is green    | `applies to GitHub Actions only`                         |
 | A red check you already know about hides a new failure      | `has stopped being a check`                              |
 | Wondering if an extra `permissions:` scope is harmful       | `Under-granting kills the run`                           |
@@ -2207,6 +2208,42 @@ instances in which **a missing thing presents as a passing one**.
 > type-aware rules absent — names the information rather than the rule set. Passing
 > `strictTypeChecked: true` restores them, and works on every preset, since each forwards unknown
 > options to `base()`.
+>
+> **As of `0.16.0` there is a third knob, because the second one was billing you for two unrelated
+> things.** The same consumer measured what `strictTypeChecked` actually costs on a 208-file app:
+> **466 findings**, of which `consistent-type-definitions` — `interface` versus `type` — was 405,
+> and stylistic rules in total were **444, or 95%**. The correctness rules the opt-in exists for
+> contributed 22, and the headline ones contributed **zero**: the entire unsafe family,
+> `no-floating-promises` and `await-thenable` were all clean.
+>
+> They then did the step that makes the zero worth anything. **A rule that is absent and a rule that
+> is clean are indistinguishable in a finding count**, so they confirmed with `--print-config` that
+> all seven resolve to severity `2` under that config. Enabled and genuinely quiet — which is the
+> same control this guide asks for after a `grep -c` returns `0`.
+>
+> The conclusion is a design defect, not a preference: **the price of adopting type safety was set
+> by a house-style rule that has nothing to do with type safety**, and no combination of the
+> existing flags could separate them. `typeAware: true` alone supplies information but layers no
+> rule sets, so it resolves to the baseline count — verified, not assumed. The three reachable
+> states were: no type rules, or all 43 including the restyle.
+>
+> | Flag                   | Layers                                 |
+> | ---------------------- | -------------------------------------- |
+> | `typeChecked`          | `recommendedTypeChecked` — correctness |
+> | `stylisticTypeChecked` | `stylisticTypeChecked` — house style   |
+> | `strictTypeChecked`    | both, unchanged — **deprecated alias** |
+>
+> Take the 22-finding correctness win now and schedule the 444-finding restyle independently, or
+> decline it. Upgrading changes nothing on its own: a test asserts the resolved config under
+> `strictTypeChecked: true` is **byte-identical** to passing both new flags — measured at 0 differing
+> rules across 111 active.
+>
+> One trap found while implementing it, worth stating because it is this guide's own recurring
+> shape. `stylisticTypeChecked` does **not** contain the recommended rules, so selecting only the
+> stylistic half drops the base layer entirely — a silent coverage loss that a rule _count_ reports
+> as an **increase**, since the stylistic set is larger than what it displaces. The first
+> implementation had exactly that bug. It is pinned now by a test asserting the recommended layer
+> survives all four combinations.
 >
 > The direction repeats this repository's earlier case with a better instrument. Then, behavioural
 > verification passed because a stale version behaves correctly. Now, a configuration diff read

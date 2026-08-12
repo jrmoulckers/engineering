@@ -62,14 +62,54 @@ Opting in is cheap. One consumer measured the full cost of turning it on across
 a large app at **13 mechanical violations**; the unsafe family reported zero.
 
 ```js
-export default base({ strictTypeChecked: true });
+export default base({ typeChecked: true });
 ```
 
-`strictTypeChecked` implies `typeAware`, supplies a project service to
-TypeScript files, and turns type-aware rules back **off** for JavaScript,
-config files, scripts and tests, so files outside your project cannot abort the
-run. Use `typeAware: true` alone if you want type information available without
-the type-checked rule sets.
+`typeChecked` implies `typeAware`, supplies a project service to TypeScript
+files, and turns type-aware rules back **off** for JavaScript, config files,
+scripts and tests, so files outside your project cannot abort the run. Use
+`typeAware: true` alone if you want type information available without the
+type-checked rule sets.
+
+### The correctness half and the house-style half are separate flags
+
+They were one flag until `0.16.0`, and a consumer measured what that cost.
+Running the combined set over a 208-file app produced **466 findings**:
+
+| Rule                          | Findings | Kind            |
+| ----------------------------- | -------- | --------------- |
+| `consistent-type-definitions` | 405      | style           |
+| `array-type`                  | 28       | style           |
+| `no-empty-function`           | 10       | style           |
+| `no-inferrable-types`         | 1        | style           |
+| `require-await`               | 20       | **correctness** |
+| `unbound-method`              | 2        | **correctness** |
+
+**444 of 466 — 95% — were stylistic**, and `interface`-versus-`type` alone was
+87% of the total. Meanwhile the rules the opt-in exists for reported **nothing**:
+the whole unsafe family, `no-floating-promises` and `await-thenable` were all
+clean. They confirmed that zero was not vacuous by checking with
+`--print-config` that all seven resolve to severity `2` — a rule that is absent
+and a rule that is clean look identical in a finding count.
+
+So the price of adopting type _safety_ was being set by a house-style
+preference, and no combination of flags could separate them. Now:
+
+| Flag                   | Layers                                             |
+| ---------------------- | -------------------------------------------------- |
+| `typeChecked`          | `recommendedTypeChecked` — the correctness half    |
+| `stylisticTypeChecked` | `stylisticTypeChecked` — `interface` vs `type` etc |
+| `strictTypeChecked`    | both, unchanged — **deprecated alias**             |
+
+Take the correctness win now and schedule the restyle separately, or decline it:
+
+```js
+export default base({ typeChecked: true }); // 22 findings, not 466
+```
+
+`strictTypeChecked` still turns on both and is pinned by a test asserting the
+resolved config is **byte-identical** to passing the two new flags together, so
+upgrading changes nothing until you choose to split them.
 
 ### Take `no-floating-promises` without taking the rest
 
