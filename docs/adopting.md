@@ -932,6 +932,18 @@ steps:
 > Prefer the annotation regardless. It states the cause outright, and neither counting exercise has
 > to be interpreted.
 >
+> **The two signatures have now been observed with the confound removed.** The table above pairs a
+> permission failure and a billing failure measured on different repositories, which leaves open the
+> objection that the difference tracks the repository rather than the cause. A public repository
+> settles it: billing does not apply, because Actions minutes are free on public repositories, so
+> any `startup_failure` there is necessarily not the billing hold. One such run reports **`0` jobs**
+> and `"billable": {}` — the permission signature exactly, on a repository where the billing
+> explanation is excluded by construction, and during the same outage window in which every private
+> repository was showing the other signature. The discriminator separates causes, not repositories.
+>
+> That is also the control that a private repository cannot supply while the hold is in force, which
+> is the point of the next paragraph.
+>
 > **A control run is only valid if it ran in the same platform state as the test, and this outage
 > has already voided one.** The standard control for "did my change break CI" is to compare the
 > changed branch against unmodified `main`. That is sound only when both runs happened on the same
@@ -1696,6 +1708,29 @@ measured, and their check could not see it because it was never in the compariso
 `0.6.0`, the only diff that answers "what does this bump change for me" is `0.6.0` against
 `0.14.0`. An adjacent-version diff answers a question nobody asked, and answers it convincingly
 enough to stop the investigation.
+
+**A null result on one check says nothing about the other.** A later consumer, on `^0.8.0` against
+a `0.15.0` floor, ran both recommended checks and got two clean results — zero resolved-rule
+differences and an identical linted file set, 309 files before and after. Both measurements were
+correct, and only one of them survives the bump to the floor. Measured across the range they
+actually face:
+
+| Check                           | `0.8.0` → `0.15.0`                                  |
+| ------------------------------- | --------------------------------------------------- |
+| linted file set                 | unchanged — `sharedIgnores` is identical, 8 entries |
+| resolved rules, `.ts` `.js`     | identical                                           |
+| resolved rules, **`.svelte`**   | **−18 / +4** on a bare `svelteConfig()`             |
+| resolved rules, `scripts/*.mjs` | −1 (`@typescript-eslint/no-require-imports`)        |
+
+The file set is stable because `sharedIgnores` did not change; the rules moved because `svelte.js`
+gained the `eslintRecommended` block and `toolingFiles` grew from 9 entries to 24. Those are
+independent parts of the package, so a clean file-set diff is not evidence about rules and a clean
+rule diff is not evidence about coverage. Run both, and scope both to the floor.
+
+The `.svelte` figure is the one to note if you have Svelte components: `no-undef` is among the 18
+that switch off, which is the point of the change — ambient and namespaced types such as
+`NodeJS.Timeout` and SvelteKit's `App.*` are values the rule cannot see, so it reports them as
+undefined inside `<script lang="ts">` while identical code in a `.ts` file is clean.
 
 A corollary, since a resolved-ruleset diff is the best tool here and worth using correctly: a rule
 present at severity `0` is not a rule that runs. `eslint-config-prettier` is part of the base
