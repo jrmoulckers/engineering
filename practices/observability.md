@@ -221,6 +221,29 @@ not by reading it. Test the passing path, not only the failing one. `xargs -r` m
 same reason: with no input, GNU `xargs` would otherwise run `grep` with no file arguments, and it
 blocks reading stdin.
 
+**Test it under both shells, because `run:` has two and they are not the same.** GitHub's default
+for `run:` on Linux is `bash -e {0}`. Adding `shell: bash` — for any reason, including an
+unrelated one — silently switches you to `bash --noprofile --norc -eo pipefail {0}`. Measured, the
+two modes diverge on exactly one pipeline shape:
+
+| Pipeline                                          | `bash -e` | `bash -eo pipefail` |
+| ------------------------------------------------- | --------- | ------------------- |
+| Last command fails (`… \| grep -v` no match)      | exits `1` | exits `1`           |
+| Early command fails, last succeeds (`… \| wc -l`) | exits `0` | **exits `1`**       |
+
+So the hazard is **not** the trailing `grep -v` most people guard against — that one already
+fails under plain `-e`. It is a pipeline ending in a command that always succeeds: `wc -l`,
+`head`, `sort`, `tee`. Those look harmless, report success under the default shell, and start
+failing the moment someone adds `shell: bash`. A guard covering the whole pipeline (`|| true`, or
+`$( … || echo "" )`) holds under both modes; a guard on only the first command does not.
+
+**And weight the two test directions differently.** A guardrail that goes red on a clean
+repository is noticed within a day, because it blocks everyone. A guardrail that can no longer go
+red is **silent forever** — nobody is inconvenienced by a check that always passes. The two
+failures are not symmetric, and the usual fix for the loud one is to loosen the exit handling,
+which is the shortest path to the silent one. Whenever you relax an exit condition, re-run the
+violation fixture in the same change.
+
 Four choices carry the design:
 
 - **Only tier 2 blocks.** A gate that fails on every `console.warn` is turned off within a week.

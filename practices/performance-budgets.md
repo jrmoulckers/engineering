@@ -69,6 +69,23 @@ Profile a **release-shaped** build. Debug builds and development servers carry i
 disabled optimization, and unminified code, so their hot paths are frequently not the shipped
 ones.
 
+### Know the floor of your instrument (`ENG-PERF-001`, `ENG-PERF-008`)
+
+Every sampling profiler in the table above — `pprof`, `node --cpu-prof`, async-profiler, the
+Android Studio CPU profiler in sampled mode — resolves nothing below its sampling interval. Work
+that is individually short and collectively expensive is exactly the shape this misses, and **it
+does not appear as a small number**. It appears as absence, or as time attributed to a caller.
+
+That inverts the usual reading of a profile. If a hot path is suspected and the profile is flat,
+that is a signal to change instrument — tracing or instrumentation mode — not a finding that the
+path is cheap. A flat profile is evidence about the instrument at least as often as it is
+evidence about the code, and `ENG-PERF-008`'s reproduce-then-quantify ordering is what stops a
+null result being promoted to a conclusion.
+
+**Record which mode produced the capture**, alongside the rest of the recipe. A sampled and a
+traced profile of the same workload are not comparable, and mixing them across a
+before-and-after reads as a regression that no code change caused.
+
 **On native platforms, this section is not enough on its own.** The table above names the
 instrument, but a profiler cannot fail a build and a CI benchmark cannot explain a regression —
 they are separate tools with separate outputs, which is invisible on the web because one command

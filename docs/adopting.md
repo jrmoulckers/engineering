@@ -2241,6 +2241,21 @@ If you inherit a span with no ledger behind it, expand it. If you are writing on
 first — a span backed by nothing is a claim about members nobody verified, which is the failure both
 instances share.
 
+**A third instance sharpens the rule, because the machine-checked thing was itself the victim.** A
+consumer's coverage ratchet read a header span `ENG-BUILD-001`–`ENG-BUILD-008` as covering both
+endpoints while the body implemented one, and so counted four principles as covered that no one had
+written a technique for. The ledger was correct; the _counter_ resolved the span naively. Their
+corrected number came out **lower** than the wrong one, which is the signature of a real fix to a
+counting error.
+
+So "machine-checked" is not sufficient on its own — a checker that treats a span as two tokens
+inherits exactly the defect the span creates. **Resolve ranges to their members before counting
+anything, and never let a heading be the source of a coverage claim.** The same defect has now
+appeared in a citation scanner, a practices header, and a coverage counter: three artifacts, three
+independent discoveries, one shape — **an inclusive-looking span asserts coverage of members nobody
+enumerated.** It recurs because the span is cheaper to write than the enumeration and reads as more
+authoritative than either.
+
 **Wrap so a citation never sits alone on a line.** Keep the qualifying clause on the same line as
 the link. It is a one-line authoring convention that makes any line-oriented review of your file
 sound, and it costs nothing.
