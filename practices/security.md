@@ -28,7 +28,7 @@ a native build, and record why.
 ### Pin external actions to an immutable revision
 
 ```yaml
-- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 ```
 
 A tag is a mutable pointer: `v5` can be repointed at new code without your repository changing.
@@ -37,6 +37,26 @@ trailing comment so the pin stays legible and updatable.
 
 `.github` reusable workflow references need the same treatment. Note that Dependabot updates
 SHA pins and rewrites that comment, so pinning does not mean freezing.
+
+**Derive the comment from the SHA, not the SHA from the comment.** The natural workflow is "look
+up the SHA for `v4.4.0`", which silently trusts whatever that tag pointed at the moment you
+looked — and a tag is the exact thing the pin exists to distrust. Resolve the other direction:
+take the SHA you are pinning and map it back to the release that contains it. A SHA you cannot
+independently re-derive is not a pin, it is a different opaque string to trust.
+
+Write the **precise** release in the comment, not the major alias. `# v4` names a moving pointer
+and tells a later reader nothing about which code is pinned; `# v4.4.0` is checkable. This repo's
+own workflows carried `# v4` until a consumer's write-up prompted the check.
+
+**Pin every action in the chain, not the interesting ones.** A consumer pinned a linter binary to
+an exact version and its shared config to an exact tag, then left the action that executes both on
+a floating tag — so the two carefully controlled inputs were being run by something anyone could
+repoint. Job integrity is capped by the weakest `uses:` in it, and an audit that starts from
+"what did I choose carefully" walks straight past the gap. Count the `uses:` lines that lack a
+40-hex SHA; the target is zero, and the number is the audit.
+
+Verify with a run, not a read. A wrong SHA fails at job start rather than at review time, so a
+green run over live pins is the evidence that they resolve.
 
 ### Make the severity gate mean something
 
