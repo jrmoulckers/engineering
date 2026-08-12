@@ -10,7 +10,7 @@ See [docs/adopting.md](../../docs/adopting.md) for installation and authenticati
 | --------------------------------------- | --------------------------- | ------------------------------------------- |
 | `@jrmoulckers/tsconfig/base.json`       | Any TypeScript              | —                                           |
 | `@jrmoulckers/tsconfig/vite-app.json`   | Browser application         | DOM libs, `vite/client`, `checkJs`          |
-| `@jrmoulckers/tsconfig/vite-react.json` | React browser application   | `jsx: react-jsx`, `esModuleInterop`         |
+| `@jrmoulckers/tsconfig/vite-react.json` | React browser application   | `jsx: react-jsx`                            |
 | `@jrmoulckers/tsconfig/vite-node.json`  | Build scripts, Node tooling | `node` types                                |
 | `@jrmoulckers/tsconfig/next.json`       | Next.js                     | `jsx: preserve`, `incremental`, Next plugin |
 | `@jrmoulckers/tsconfig/node.json`       | Node runs your `.ts` files  | `node` types, `allowImportingTsExtensions`  |

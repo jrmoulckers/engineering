@@ -5772,6 +5772,66 @@ emitting consumer with `TS5096` as shown above.
 State the delta in the PR description. "Adopted the shared base" hides a regression; "adopted
 the shared base; server moves to `node.json` to keep `.ts` specifiers working" does not.
 
+**A missing option has three possible verdicts, not two — and only one of them is a finding.**
+The instruction above says to treat any option the preset lacks as a finding. That is the right
+default and it is incomplete, because it has no bucket for an option the _language_ has retired.
+A consumer diffing off `@tsconfig/svelte` found two absences and neither was a gap:
+
+| Absent option     | Verdict                       | Why                                |
+| ----------------- | ----------------------------- | ---------------------------------- |
+| `sourceMap`       | **Deliberate, documented**    | Measured trade-off, recorded above |
+| `esModuleInterop` | **Obsoleted by the language** | See below                          |
+| _anything else_   | **A finding**                 | Raise it                           |
+
+So the instruction is: **diff, then establish whether the option still means anything on your
+TypeScript version before restoring it.** The failure mode of the shorter rule is not a noisy
+report — it is a consumer "restoring" the option locally with a `compilerOptions` override, which
+reintroduces exactly the per-repo drift this layer exists to delete. An override is the most
+expensive way to be wrong here, because it is invisible afterwards.
+
+`esModuleInterop` earns its row on all three supported majors, for two independent reasons on
+each. On TypeScript 5.x it is inert in this family because `base.json` sets
+`moduleResolution: "bundler"`, which implies `allowSyntheticDefaultImports` — so a default import
+from an `export =` module type-checks without it — and `noEmit: true`, which retires the
+`__importDefault` emit half. Verify the first half yourself rather than taking it on trust, since
+it is the load-bearing claim:
+
+```bash
+# passes under the preset's bundler resolution
+printf 'declare function f(): number; export = f;' > m.d.ts
+printf "import f from './m'; export const y = f();" > a.ts
+npx tsc --module ESNext --moduleResolution bundler --noEmit a.ts   # exit 0
+
+# the same code under node10, where nothing is implied
+npx tsc --module CommonJS --moduleResolution node10 --noEmit a.ts
+# error TS1259: Module can only be default-imported using the 'esModuleInterop' flag
+```
+
+That second command is the condition under which the option becomes load-bearing again. **If you
+override `moduleResolution` away from `bundler`, this reasoning expires and you need the flag
+back** — `scripts/test/tsconfig-parity.test.mjs` fails if any variant does so, precisely so the
+justification cannot quietly rot.
+
+On TypeScript 6 and 7 the option is being removed from the language outright, which is why setting
+it to `false` anywhere is a future break rather than a preference:
+
+```
+TS 6:  error TS5107: Option 'esModuleInterop=false' is deprecated and will stop
+                     functioning in TypeScript 7.0.
+TS 7:  error TS5108: Option 'esModuleInterop=false' has been removed. Please
+                     remove it from your configuration.
+```
+
+`true` stays legal on both — it is merely redundant. This is why the presets set it nowhere: the
+correct value is becoming the only value.
+
+**Note the asymmetry between the two verdicts.** `sourceMap` needs documenting because the
+trade-off is ours and a consumer cannot derive it. `esModuleInterop` needed documenting for the
+opposite reason — not because a consumer might get it wrong, but because a consumer doing exactly
+what this section tells them to do will surface it as a finding and have no bucket to put it in.
+An option that is correct-but-surprising costs a report from every repository that audits
+carefully. Documenting the reasoning is how you stop paying that cost per consumer.
+
 **And keep each verification inside the tool it was run with.** A consumer who proved their ESLint
 migration lost **zero rules** — a real, careful, rule-by-rule resolved-config diff — flagged that
 the same number was at risk of being quoted as though it covered their toolchain. It does not. A

@@ -156,7 +156,15 @@ describe('variants', () => {
     const react = await readJson('vite-react.json');
     assert.equal(react.extends, './vite-app.json');
     assert.equal(react.compilerOptions.jsx, 'react-jsx');
-    assert.equal(react.compilerOptions.esModuleInterop, true);
+
+    // `jsx` is the *only* thing it adds. It also carried `esModuleInterop: true`
+    // until a consumer's option-by-option audit flagged the asymmetry: five other
+    // variants omitted it. The option was inert here -- `base.json`'s
+    // `moduleResolution: "bundler"` implies `allowSyntheticDefaultImports` and its
+    // `noEmit` retires the emit half -- so nothing observable changed when it went.
+    // See scripts/test/tsconfig-parity.test.mjs for the family-wide guard.
+    assert.equal(react.compilerOptions.esModuleInterop, undefined);
+    assert.deepEqual(Object.keys(react.compilerOptions), ['jsx']);
   });
 });
 

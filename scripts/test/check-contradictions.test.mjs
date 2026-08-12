@@ -1,7 +1,15 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, copyFileSync, readFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  writeFileSync,
+  mkdirSync,
+  rmSync,
+  copyFileSync,
+  readFileSync,
+  existsSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,12 +18,33 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..');
 const SCRIPT = join(REPO, 'scripts', 'check-contradictions.mjs');
 
+/**
+ * The set of files the checker guards, read out of the script itself.
+ *
+ * Parsing source is ordinarily a poor way to test it, but the alternative here is
+ * a hand-maintained duplicate of `FILES`, and that duplicate has now silently
+ * drifted twice -- each time turning every case in this suite red for a reason
+ * unrelated to what it asserts. A drifting mirror is the worse failure.
+ *
+ * @returns {string[]}
+ */
+function guardedFiles() {
+  const src = readFileSync(SCRIPT, 'utf8');
+  const match = src.match(/const FILES = \[([^\]]*)\]/);
+  if (!match) throw new Error('could not read FILES out of check-contradictions.mjs');
+  return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+}
+
 // The checker reads the files it guards relative to its own location, so a case is
 // built by copying the script into a throwaway repo alongside synthetic targets.
 // That keeps these tests from depending on the real documents' wording, which is
 // the thing most likely to change underneath them.
 function runAgainst(body, opts = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'contradictions-'));
+  const omitted = new Set([
+    ...(body === null ? ['docs/adopting.md'] : []),
+    ...(opts.versions === null ? ['versions.json'] : []),
+  ]);
   try {
     mkdirSync(join(dir, 'scripts'), { recursive: true });
     mkdirSync(join(dir, 'docs'), { recursive: true });
@@ -23,9 +52,22 @@ function runAgainst(body, opts = {}) {
     if (body !== null) writeFileSync(join(dir, 'docs', 'adopting.md'), body, 'utf8');
     // A case must supply every file the checker guards. Omitting one is how this
     // suite first went red: the script grew a second target and the harness was
-    // still writing one file.
+    // still writing one file. It then went red a second time for the identical
+    // reason when a third target was added, so the set is no longer maintained by
+    // hand -- it is read out of the script under test, and anything a case has not
+    // written explicitly gets a benign placeholder.
     if (opts.versions !== null) {
       writeFileSync(join(dir, 'versions.json'), opts.versions ?? '{ "packages": {} }\n', 'utf8');
+    }
+    for (const rel of guardedFiles()) {
+      // A case that passes `null` is deliberately removing a target to prove the
+      // checker fails loudly rather than vacuously. Auto-filling that would turn
+      // the strongest test in this suite into a tautology.
+      if (omitted.has(rel)) continue;
+      const target = join(dir, rel);
+      if (existsSync(target)) continue;
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, rel.endsWith('.json') ? '{}\n' : '# placeholder\n', 'utf8');
     }
     try {
       const stdout = execFileSync(
