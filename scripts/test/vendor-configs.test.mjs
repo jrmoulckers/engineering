@@ -1333,3 +1333,52 @@ describe('the lock is validated before it is trusted', () => {
     assert.match(r.out, /1 vendored file\(s\) match/);
   });
 });
+
+describe('the two delivery channels ship the same files', () => {
+  // ADR-0001 delivers the same configuration over a registry and over a pinned
+  // git ref. Nothing makes the two agree: the packages are versioned 0.4.0 while
+  // the vendored channel is pinned v0.116.0, two independent numbering schemes
+  // over one set of bytes. A consumer found them byte-identical by hashing both
+  // by hand and asked what enforces it. Nothing did.
+  //
+  // The silent fork is a file present in one channel and absent from the other.
+  // Both consumers keep passing their own gate, because each verifies only the
+  // channel it uses -- so the divergence is invisible from either side.
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+  for (const [name, set] of Object.entries(SETS)) {
+    test(`${name}: every vendored file is also published`, () => {
+      const pkg = JSON.parse(readFileSync(join(ROOT, set.from, 'package.json'), 'utf8'));
+      const published = new Set(pkg.files ?? []);
+      const missing = set.files.filter((f) => !published.has(f));
+
+      assert.deepEqual(
+        missing,
+        [],
+        `${set.from}/package.json 'files' omits ${missing.join(', ')}, which the vendored ` +
+          `channel ships. Registry consumers would silently get a smaller config.`,
+      );
+    });
+
+    test(`${name}: every published config file is also vendored`, () => {
+      // The other direction, which is the one that bites on a new file: adding a
+      // config to a package and not to SETS reaches npm consumers only, and
+      // nothing fails, because every file SETS names still fetches successfully.
+      const pkg = JSON.parse(readFileSync(join(ROOT, set.from, 'package.json'), 'utf8'));
+      const NOT_CONFIG = new Set(['README.md', 'package.json']);
+      const publishedConfigs = (pkg.files ?? []).filter((f) => !NOT_CONFIG.has(f));
+      const vendored = new Set(set.files);
+      const missing = publishedConfigs.filter((f) => !vendored.has(f));
+
+      assert.deepEqual(
+        missing,
+        [],
+        `${set.from} publishes ${missing.join(', ')} but SETS.${name} does not vendor it.`,
+      );
+    });
+  }
+
+  // The `./package.json` export subpath each package needs for version probes is
+  // asserted in that package's own test file, not here: it is a packaging
+  // property, not a channel-parity one.
+});

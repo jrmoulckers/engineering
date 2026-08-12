@@ -37,7 +37,8 @@
     "./ignores": {
       "types": "./ignores.d.ts",
       "default": "./ignores.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "types": "./base.d.ts",
   "files": [

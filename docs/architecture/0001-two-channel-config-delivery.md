@@ -125,6 +125,17 @@ the fleet ends up mixed.
   default.
 - Upgrades are no longer a version-range bump. Someone must re-run the script with a newer tag,
   which is more deliberate and more visible, but will not happen automatically.
+- **Two channels means two numbering schemes over one payload, and nothing inherently keeps them
+  together.** The registry carries `prettier-config@0.4.0`; the vendored channel carries the same
+  bytes at tag `v0.116.0`. An adopter pulled both published tarballs and hashed them against their
+  vendored tree — 8/8 identical — then asked what enforces that. Nothing did. The dangerous case is
+  not a byte difference in a shared file but a file present in one channel and absent from the
+  other: adding a config to a package without adding it to `SETS` reaches registry consumers only,
+  and omitting one from the package's `files` array reaches vendoring consumers only. Neither fails
+  anything, because **each channel verifies only itself** — the vendored lock hashes every file it
+  fetched, and the published tarball contains every file it declared. The fork is invisible from
+  both sides simultaneously, which is why it has to be checked from outside either one.
+  `scripts/test/vendor-configs.test.mjs` now asserts the two file sets agree in both directions.
 - The repository now owns a fetch script as a supported interface, and its failure modes matter as
   much as its success path. It treats a non-200, an empty body, and a 200 carrying the wrong
   payload as fatal, and writes nothing until every file passes — a partial write would leave tools
