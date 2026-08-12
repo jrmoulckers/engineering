@@ -1,6 +1,15 @@
 /**
  * Ignore globs shared by every preset. Build output, dependencies, coverage,
  * vendored upstream artifacts, and generated tool directories are never linted.
+ *
+ * **Test-runner output belongs here even though it is not "build" output.**
+ * Playwright's HTML reporter writes a bundled application into
+ * `playwright-report/`, and a failing run writes trace snapshots — including
+ * `.js` — into `test-results/`. Linting them is both meaningless and
+ * catastrophic to the signal: one repository measured 16 problems becoming
+ * 5439. The failure only appears after a test fails, so a repository that
+ * adopts this preset while green will look fine and discover it later, on the
+ * run that already had something wrong with it.
  */
 export const sharedIgnores = [
   '**/dist/**',
@@ -11,6 +20,8 @@ export const sharedIgnores = [
   '**/dev-dist/**',
   '**/vendor/**',
   '**/.impeccable/**',
+  '**/playwright-report/**',
+  '**/test-results/**',
 ];
 
 /**

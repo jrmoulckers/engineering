@@ -150,6 +150,27 @@ describe('shared ignores', () => {
     }
   });
 
+  test('covers test-runner output, not just build output', async () => {
+    // Playwright's HTML reporter writes a bundled app into playwright-report/
+    // and trace snapshots into test-results/, both containing .js. One repo
+    // measured 16 problems becoming 5439. The globs alone are not the claim —
+    // assert ESLint actually skips those paths and still lints source.
+    for (const expected of ['**/playwright-report/**', '**/test-results/**']) {
+      assert.ok(sharedIgnores.includes(expected), `missing ${expected}`);
+    }
+
+    const { ESLint } = await import('eslint');
+    const eslint = new ESLint({
+      overrideConfigFile: true,
+      overrideConfig: base(),
+      cwd: process.cwd(),
+    });
+    assert.equal(await eslint.isPathIgnored('playwright-report/index.js'), true);
+    assert.equal(await eslint.isPathIgnored('test-results/trace-1/snapshot.js'), true);
+    // Without this the test would pass if base() ignored everything.
+    assert.equal(await eslint.isPathIgnored('src/app.ts'), false);
+  });
+
   test('tooling files include tests, config, and scripts', () => {
     assert.ok(toolingFiles.some((g) => g.includes('.test.')));
     assert.ok(toolingFiles.some((g) => g.includes('.config.')));
