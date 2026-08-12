@@ -2018,10 +2018,26 @@ cleanly:
 
 **The empty-token trap does not apply to these workflows.** Elsewhere in this guide, an unset
 `NODE_AUTH_TOKEN` sends an empty credential and 401s. At the pinned ref above the expression is
-`${{ secrets.packages-read-token || github.token }}`, so an unset or empty secret **degrades to the
-job token** rather than sending nothing. That is strictly better, but it means a stale secret name
-fails as a _403 against the wrong identity_ instead of an obvious 401 — quieter, and easier to
-misread as a package problem.
+`${{ inputs.registry-url != '' && (secrets.NODE_AUTH_TOKEN || github.token) || '' }}`, so an unset
+secret **degrades to the job token** rather than sending nothing — and the token is only populated
+when `registry-url` is set, which is what makes leaving it unwired genuinely inert rather than merely
+unused. That is strictly better, but it means a stale secret name fails as a _403 against the wrong
+identity_ instead of an obvious 401 — quieter, and easier to misread as a package problem.
+
+> **This paragraph named the secret `packages-read-token`. There is no such secret.** The name comes
+> from a proposal written before the backbone was fixed; the implementation used `NODE_AUTH_TOKEN`,
+> and the proposal's name was transcribed into this guide without being read back out of the
+> workflow. Caught by a consumer reading both callees at their own pin.
+>
+> **The failure is worse than a wrong word.** Passing an undeclared secret name to a reusable
+> workflow is rejected at the **caller**, before the job starts — so a reader following this sentence
+> got a startup failure ahead of every diagnostic this section exists to provide. It is precisely the
+> confusing-first-failure the section was written to prevent.
+>
+> Note also that the correct expression was already present elsewhere in this document. Two
+> spellings of the same secret, one of which cannot work. `docs:contradictions` now fails on the
+> wrong name, because **an identifier is a claim about another repository and has to be read back
+> from it, not remembered.**
 
 **The `packages: read` line above is not optional here, and this is where omitting it hurts
 most.** Every one of these callees requests `packages: read` at job level, and a caller's
