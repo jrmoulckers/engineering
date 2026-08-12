@@ -163,6 +163,25 @@ Combined with vendoring `tsconfig` and `prettier-config`, the result is that a c
 with no credential anywhere: the two configs a build needs are committed files, and the one package
 that requires the registry is never reached outside a contributor's machine.
 
+**`--omit=dev` does nothing for CI, and the two claims read as one.** A consumer flagged that the
+paragraphs above are easy to finish believing the token problem is solved, when what is solved is
+one of three audiences:
+
+| Who                | Needs `eslint-config`?          | Needs a token?                                 |
+| ------------------ | ------------------------------- | ---------------------------------------------- |
+| Deploying the app  | no — `--omit=dev` skips it      | **no** — this is what the flag buys            |
+| Contributor, local | yes, to run lint                | yes, a personal `read:packages` token          |
+| **CI lint job**    | **yes — that is its whole job** | **yes, and `--omit=dev` is unavailable to it** |
+
+The lint job exists to run ESLint, so it must install `devDependencies`; the one flag that removes
+the requirement is the one flag it cannot use. Its runner token also cannot be widened into the
+answer — a repository's `GITHUB_TOKEN` does not read a private package in another repository no
+matter what `permissions:` says. The fix is the package-level grant described above.
+
+So `--omit=dev` closes the deployment path completely and the CI path not at all. Treat "no
+credential to run this product" and "no credential to build this product" as separate claims,
+because only the first one is true.
+
 ### Vendoring — no token required
 
 Fetch the script once, then run it with the tag you want to pin:
@@ -2620,10 +2639,29 @@ caret form and bumped `0.4 → 0.6 → 0.7 → 0.8` in a single evening — four
 five-gate run, and each leaving them stale again within hours. They then asked, reasonably, that
 this trap be written down. It already was, three sections above the line they were editing.
 
-That is the diagnostic worth keeping: **repeated manual version bumps are a symptom of the wrong
-range form, not evidence of a well-maintained manifest.** If you find yourself editing a floor by
-hand more than once, the fix is not a faster edit — it is `>=x.y.z <1.0.0`, after which `npm
-update` crosses minors on its own and the floor table stops being something you have to be told.
+That is the diagnostic worth keeping: **repeated manual version bumps are a symptom of something
+being wrong, not evidence of a well-maintained manifest.** If you find yourself editing a floor by
+hand more than once, the fix is not a faster edit.
+
+**It is also not a wider range, and this paragraph used to say it was.** It recommended
+`>=x.y.z <1.0.0` so that `npm update` would cross minors unattended — which
+[_Take patches automatically; take minors as a decision_](#take-patches-automatically-take-minors-as-a-decision)
+later reverses on the evidence of our own releases, where `0.9.0` removed five peer dependencies and
+`0.16.0` put them back. A consumer raised the contradiction twice before it was fixed here, and the
+second time named the part that makes it worse than an ordinary stale sentence: the reversal is
+argued _from_ the `--check` design, so the document was citing a principle in one section and
+recommending its opposite in another. A reader who found this section first got advice the same
+document disowns eight hundred lines later, with nothing at the point of use to say so.
+
+**The general shape is worth more than the fix.** A reversal is not complete when the new guidance
+is written; it is complete when the _superseded_ guidance is gone. Adding a well-argued correction
+elsewhere leaves the original in place for anyone who arrives by search or by table of contents, and
+the more thorough the new section is, the more confidently wrong the old one now reads by contrast.
+When you reverse a recommendation here, grep for the specifier or the phrase, not for the section
+heading.
+
+The actual fix for repeated hand edits is the caret plus `pins:check`, which tells you a floor moved
+without deciding for you. See the section linked above for why.
 
 **And the convergence is the publisher's fault, not the consumers'.** Five of seven repositories
 independently arrived at `^0.8.0` while the floor was `0.15.0`. Five separate teams, each doing
