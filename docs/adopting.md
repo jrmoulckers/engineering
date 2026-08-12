@@ -2402,9 +2402,9 @@ every minor until the first stable major:
 
 | Package                        | Range             | Floor is set by                                                       |
 | ------------------------------ | ----------------- | --------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `>=0.16.0 <1.0.0` | Tooling globs cover every test/config/script suffix, and are exported |
+| `@jrmoulckers/eslint-config`   | `>=0.17.0 <1.0.0` | Tooling globs cover every test/config/script suffix, and are exported |
 | `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`     |
-| `@jrmoulckers/prettier-config` | `>=0.4.0 <1.0.0`  | Type declarations, so `checkJs` consumers can adopt at all            |
+| `@jrmoulckers/prettier-config` | `>=0.5.0 <1.0.0`  | Type declarations, so `checkJs` consumers can adopt at all            |
 
 The floors say what each version _added_, so they only rise when something is genuinely required.
 The ranges keep you current without editing the manifest. Confirm what is actually published
@@ -2438,7 +2438,7 @@ give the specifier rather than the number:
 ```diff
 - Type declarations shipped in 0.8.0.
 + Type declarations shipped in 0.8.0. The floor is 0.15.0 — set
-+ "@jrmoulckers/eslint-config": ">=0.16.0 <1.0.0".
++ "@jrmoulckers/eslint-config": ">=0.17.0 <1.0.0".
 ```
 
 If you are reading a release note from this repository that names a version without naming the
@@ -2465,8 +2465,8 @@ It reads the `@jrmoulckers/*` ranges out of your `package.json`, compares each a
 version recorded in `versions.json`, and exits non-zero if any range cannot reach it:
 
 ```
-  STALE    @jrmoulckers/eslint-config    ^0.3.0  CANNOT reach 0.16.0
-                                         use: >=0.16.0 <1.0.0
+  STALE    @jrmoulckers/eslint-config    ^0.3.0  CANNOT reach 0.17.0
+                                         use: >=0.17.0 <1.0.0
 ```
 
 Two properties are deliberate, and both exist because this guide has repeatedly caught its own
