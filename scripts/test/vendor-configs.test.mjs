@@ -1274,3 +1274,62 @@ describe('vendored ESM carries its module type', { skip: OFFLINE }, () => {
     assert.match(r.out, /declares type 'module'.*emits 'commonjs'/s);
   });
 });
+
+describe('the lock is validated before it is trusted', () => {
+  // A checker that cannot read its input must say so. Reporting "no drift" from
+  // an unusable lock is the failure this whole family keeps producing: a state
+  // indistinguishable from clean, held forever, by the thing meant to detect it.
+  function lockOnly(body) {
+    const dir = workspace();
+    writeFileSync(join(dir, 'engineering-configs.lock.json'), body);
+    return dir;
+  }
+
+  for (const [label, ref] of [
+    ['an empty ref', '""'],
+    ['a missing ref', null],
+    ['a non-string ref', '123'],
+    ['a whitespace-only ref', '"   "'],
+  ]) {
+    test(`${label} is refused rather than interpolated into advice`, () => {
+      // Every remediation message interpolates the ref. Left unvalidated, the
+      // advice reads `node scripts/vendor-configs.mjs ` with nothing after it --
+      // a command that cannot work, printed at the moment someone is confused.
+      const fields = ['"repository":"r"', ref === null ? null : `"ref":${ref}`]
+        .filter(Boolean)
+        .join(',');
+      const dir = lockOnly(`{${fields},"files":{"a.json":{"source":"x","sha256":"ab"}}}`);
+
+      const r = run(['--check'], dir);
+      assert.equal(r.code, 1, 'an unusable ref passed --check');
+      assert.match(r.out, /no usable 'ref'/);
+      assert.doesNotMatch(r.out, /vendor-configs\.mjs\s*$/m);
+    });
+  }
+
+  test('an empty file list is not a clean result', () => {
+    const dir = lockOnly('{"repository":"r","ref":"v1.0.0","files":{}}');
+    const r = run(['--check'], dir);
+    assert.equal(r.code, 1, 'a lock covering zero files reported success');
+    assert.match(r.out, /records no files/);
+  });
+
+  test('a valid lock still reaches the hash comparison', () => {
+    // The positive control. Without it, the assertions above are satisfied by a
+    // --check that rejects everything.
+    const dir = workspace();
+    writeFileSync(join(dir, 'a.json'), '{"a":1}\n');
+    const hash = createHash('sha256').update('{"a":1}\n').digest('hex');
+    writeFileSync(
+      join(dir, 'engineering-configs.lock.json'),
+      JSON.stringify({
+        repository: 'r',
+        ref: 'v1.0.0',
+        files: { 'a.json': { source: 'x', sha256: hash } },
+      }),
+    );
+    const r = run(['--check'], dir);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /1 vendored file\(s\) match/);
+  });
+});

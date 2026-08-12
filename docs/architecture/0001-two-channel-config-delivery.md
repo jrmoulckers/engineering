@@ -24,6 +24,21 @@ structural rather than local:
 anonymous access to its npm registry. Package visibility changes _authorization_ — whether a given
 token is allowed — but never removes the requirement to send one.
 
+That premise carries the whole decision, so it is worth stating how to falsify it rather than
+asserting it. An adopter verified it independently and produced a control the obvious test lacks:
+
+- Confirm the package is public from **GitHub's own answer**, not from inference —
+  `gh api orgs/<org>/packages?package_type=npm&visibility=public`.
+- Request it anonymously. `@github/prettier-config`, `@github/combobox-nav`, `@microsoft/tsdoc` and
+  `@Azure/swa-emu` all return `401 authentication token not provided`; the same request to
+  npmjs.com returns 200.
+- **Then request a package that does not exist.** It returns **404, not 401**.
+
+That last step is the one that closes the argument. Without it, a blanket 401 is equally consistent
+with a host that simply rejects all anonymous traffic — and the "it only needs to be made public"
+remedy survives. The 404 shows the 401 is package-specific, which is exactly what rules that remedy
+out. The adopter withdrew a remedy in one of their own issues on the strength of it.
+
 The consequence is that routing the scope puts a credential in the install path for **everyone**,
 not just CI. For a self-hosted product, that means a person cloning the repository to run it
 cannot `install` until they have created a GitHub account and minted a classic personal access
@@ -87,6 +102,14 @@ the fleet ends up mixed.
 - Repositories with no ESLint dependency — Go services, docs sites — need no registry access at
   all. This is a strict improvement for them.
 - Repositories using all three still need a token, but only for one package.
+- **"One fewer token" is not "no token", and the difference falls unevenly.** For CI the win is
+  real, because `GITHUB_TOKEN` is present by default. For any consumer whose deploy path is not
+  GitHub-hosted it is close to nothing: `npm install` and `pnpm install` resolve **every**
+  devDependency whether or not the build uses it, so one remaining registry package keeps the
+  credential requirement in full. An adopter deploying from Vercel reported that vendoring two of
+  three packages changed their situation not at all — they still carry an `NPM_RC` personal access
+  token, because the install step still resolves `eslint-config`. Read the benefit as _"CI needs one
+  fewer secret"_, never as _"adopters can land this without credentials"_.
 - **Verifying "no token needed" requires a cold cache.** npm satisfies an install from its
   local cache without contacting the registry at all, so a machine that has ever authenticated
   once will install the remaining registry package with every credential removed and exit 0. One

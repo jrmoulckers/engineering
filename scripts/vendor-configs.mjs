@@ -334,6 +334,19 @@ async function check() {
   const entries = Object.entries(lock.files ?? {});
   if (entries.length === 0) fail(`${LOCK} records no files`, 'Re-run the vendor step.');
 
+  // The ref is validated before any hashing, because every remediation message
+  // below interpolates it. An absent or malformed ref produces advice like
+  // `node scripts/vendor-configs.mjs ` with nothing after it -- a command that
+  // cannot work, printed confidently at the moment someone is already confused.
+  // A checker whose own output is unusable is worse than one that refuses.
+  if (typeof lock.ref !== 'string' || !/^\S+$/.test(lock.ref)) {
+    fail(
+      `${LOCK} has no usable 'ref' (found ${JSON.stringify(lock.ref ?? null)})`,
+      'The lock is malformed. Restore it from version control, or re-run: ' +
+        'node scripts/vendor-configs.mjs <ref>',
+    );
+  }
+
   // A key that escapes the working directory cannot be a vendored repository
   // file. Such locks were written by `--dest` runs before that was refused, and
   // they are the dangerous kind: on the machine that produced them every
