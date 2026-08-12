@@ -98,6 +98,52 @@ async function exists(path) {
   }
 }
 
+/**
+ * A repo-wide `prettier --write` rewrites the vendored files, which breaks every
+ * recorded hash. That does not merely disable drift detection — it inverts it:
+ * the next `--check` reports files as drifted, and the obvious reading of that
+ * is "someone hand-edited vendored files" rather than "the formatter did."
+ *
+ * A repository only escapes this while the vendored config happens to agree
+ * with upstream's own formatting on every vendored file, which is luck rather
+ * than a property anyone maintains.
+ *
+ * The check is deliberately literal — a prefix match against non-comment lines,
+ * not gitignore semantics — so it can say plainly what it looked for and stay
+ * a warning rather than a gate.
+ */
+async function warnIfFormatterWillRewrite(dest) {
+  const normalized = lockKey(dest).replace(/^\.\//, '').replace(/\/+$/, '');
+  let ignore;
+  try {
+    ignore = await readFile('.prettierignore', 'utf8');
+  } catch {
+    // No .prettierignore at all. If Prettier is not used here there is nothing
+    // to say, and a repository that formats without one has a larger problem
+    // than this script can diagnose.
+    return;
+  }
+
+  const covered = ignore
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'))
+    .some((line) => {
+      const entry = line.replace(/^\.\//, '').replace(/^\/+/, '').replace(/\/+$/, '');
+      return entry !== '' && (normalized === entry || normalized.startsWith(`${entry}/`));
+    });
+
+  if (!covered) {
+    process.stderr.write(
+      `\nwarning: '${normalized}' is not matched by any line in .prettierignore.\n` +
+        `These files are written byte-identical to upstream and pinned by SHA-256, so a\n` +
+        `repo-wide format rewrites them and breaks every recorded hash. --check then\n` +
+        `reports drift that reads as a local edit rather than as the formatter.\n` +
+        `Add this line:\n\n  ${normalized}/\n`,
+    );
+  }
+}
+
 function parseArgs(argv) {
   const positional = [];
   const flags = {};
@@ -356,6 +402,8 @@ async function main() {
       );
     }
   }
+
+  await warnIfFormatterWillRewrite(dest);
 
   process.stdout.write(`Recorded ref and SHA-256 of each file in ${LOCK}. Commit both.\n`);
 }
