@@ -1117,7 +1117,48 @@ widened `prettier-plugin-svelte` from `^3.2.0` to `^3.2.0 || ^4.0.0` — and the
 Svelte repository. The pin blocked precisely the change most relevant to it, and every check it
 ran stayed green.
 
-**A lockfile generated against the live registry is not evidence of currency.** Two repositories
+> **A retracted claim has to be corrected where it was made, not only where it landed.** A consumer
+> was told by this repository that "any authenticated token may now read the packages; no per-repo
+> access grant is needed". That was wrong. They did not act on it, and when a later message
+> attributed the belief to them, they declined the correction and named the actual source — this
+> guide — rather than accepting a fix to a mistake they had not made.
+>
+> That is the right move, and the reason is not politeness. A correction applied to the wrong party
+> leaves the claim intact at its origin, where it goes on being repeated to everyone else. **Wrong
+> attribution converts a fixable error into a recurring one.** If a correction arrives for something
+> you never claimed, say so and point at where it came from.
+
+**Tracking releases diligently is not currency either, and this is the failure mode that survives
+everything above.** One repository bumped three separate times, each time promptly, each time to
+the number named in the most recent message it had received — and reported, with a freshly read
+`package.json` quoted as proof, that there was "nothing to re-pin". All three were still short:
+
+| Package           | Declared | Ceiling the caret imposes | Published |
+| ----------------- | -------- | ------------------------- | --------- |
+| `eslint-config`   | `^0.4.0` | `<0.5.0`                  | `0.13.0`  |
+| `tsconfig`        | `^0.3.0` | `<0.4.0`                  | `0.4.0`   |
+| `prettier-config` | `^0.2.0` | `<0.3.0`                  | `0.3.0`   |
+
+Nothing here is careless. The re-read was real, the bumps were real, the reasoning was sound. The
+defect is that **a version named in a message is a snapshot of the moment it was written**, and a
+range derived from one inherits that timestamp permanently. Diligence about applying values you
+are sent cannot correct for the values being older than the registry — it only makes you stale
+more confidently, because each bump feels like a currency check and none of them was one.
+
+This repository is also a Svelte repository, which lands it in the trap described immediately
+above: `^0.2.0` on `prettier-config` excludes `0.3.0`, the single release that widened
+`prettier-plugin-svelte` to `^4.0.0`.
+
+**So make the registry the authority, never a message and never this document.** One command, and
+it answers about your tree rather than your intent:
+
+```bash
+npm ls @jrmoulckers/eslint-config @jrmoulckers/tsconfig @jrmoulckers/prettier-config
+npm view @jrmoulckers/eslint-config version   # what actually exists right now
+```
+
+Reading `package.json` back to yourself confirms what you declared, which was never the question.
+
 reached for a real `npm ci` / `pnpm install` against GitHub Packages as the rigorous answer, and
 both produced a lockfile with genuine registry URLs and genuine `sha512` integrity hashes — for a
 stale version. The manifest range caps resolution before the registry is ever consulted about
