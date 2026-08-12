@@ -1607,7 +1607,7 @@ every minor until the first stable major:
 | ------------------------------ | ----------------- | --------------------------------------------------------------------- |
 | `@jrmoulckers/eslint-config`   | `>=0.15.0 <1.0.0` | Tooling globs cover every test/config/script suffix, and are exported |
 | `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`     |
-| `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0`  | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                  |
+| `@jrmoulckers/prettier-config` | `>=0.4.0 <1.0.0`  | Type declarations, so `checkJs` consumers can adopt at all            |
 
 The floors say what each version _added_, so they only rise when something is genuinely required.
 The ranges keep you current without editing the manifest. Confirm what is actually published
