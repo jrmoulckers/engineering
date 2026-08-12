@@ -43,24 +43,53 @@ describe('versions.json channels are self-describing', () => {
     }
   });
 
-  test('at least one channel needs no registry auth, and it is reachable while blocked', () => {
-    // The point of recording this is that a repository waiting on package
-    // access can still adopt everything in a tokenless channel. If that stops
-    // being true the guidance sent to blocked consumers becomes wrong.
-    const tokenless = Object.entries(manifest.channels).filter(
-      ([, spec]) => spec.requiresRegistryAuth === false,
-    );
-    assert.ok(
-      tokenless.length > 0,
-      'no tokenless channel exists; blocked consumers can no longer make progress',
-    );
+  test('a channel claiming no registry auth is backed by a package that cannot be published', () => {
+    // This is the check that was missing, and its absence cost three
+    // repositories real time. Two packages were recorded as "vendored" —
+    // never published, no token needed — while publish.yml published every
+    // directory under packages/ unconditionally and check-published-versions
+    // verified all three against the registry on every run. The claim was
+    // false, consumers were told they were unblocked on packages that
+    // returned 403, and CI printed "matches the registry for 3 of 3" the
+    // whole time.
+    //
+    // A channel is a claim about delivery, so it has to be checked against
+    // the thing that decides delivery: whether npm can publish the package.
+    for (const [name, entry] of Object.entries(manifest.packages)) {
+      const spec = manifest.channels[entry.channel];
+      if (spec?.requiresRegistryAuth !== false) continue;
 
-    const names = new Set(tokenless.map(([channel]) => channel));
-    const reachable = Object.entries(manifest.packages).filter(([, e]) => names.has(e.channel));
-    assert.ok(
-      reachable.length > 0,
-      'a tokenless channel is defined but no package uses it, so the legend misleads',
-    );
+      const dir = name.replace('@jrmoulckers/', '');
+      const pkg = JSON.parse(
+        readFileSync(
+          fileURLToPath(new URL(`../../packages/${dir}/package.json`, import.meta.url)),
+          'utf8',
+        ),
+      );
+
+      assert.equal(
+        pkg.private,
+        true,
+        `${name} is recorded as channel "${entry.channel}", which claims it needs no registry ` +
+          `auth — but packages/${dir}/package.json has private: ${pkg.private}, so publish.yml ` +
+          `publishes it and consumers installing it hit a 403. Either set private: true or ` +
+          `record the channel as one that requires auth.`,
+      );
+    }
+  });
+
+  test('every channel in the legend is used by at least one package', () => {
+    // A channel nobody uses is a promise the file cannot keep. The "vendored"
+    // entry survived here after it had stopped being true of any package,
+    // which is what let the false claim keep reaching consumers.
+    const used = new Set(Object.values(manifest.packages).map((e) => e.channel));
+    for (const channel of Object.keys(manifest.channels)) {
+      assert.ok(
+        used.has(channel),
+        `channel "${channel}" is defined but no package uses it — remove it, or a consumer ` +
+          `will plan around a delivery path that does not exist`,
+      );
+    }
   });
 });
 

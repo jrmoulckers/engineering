@@ -64,9 +64,28 @@ repository. Most repositories will use both.
 
 | Package                        | Channel            | Why                                                                    |
 | ------------------------------ | ------------------ | ---------------------------------------------------------------------- |
-| `@jrmoulckers/tsconfig`        | vendored at a ref  | pure JSON, no runtime dependencies                                     |
-| `@jrmoulckers/prettier-config` | vendored at a ref  | dependency-free ES modules                                             |
+| `@jrmoulckers/tsconfig`        | **registry (npm)** | pure JSON, no runtime dependencies                                     |
+| `@jrmoulckers/prettier-config` | **registry (npm)** | dependency-free ES modules                                             |
 | `@jrmoulckers/eslint-config`   | **registry (npm)** | depends on four packages at runtime that a consumer must not re-choose |
+
+> **Correction, and this repository's most costly error to date.** `tsconfig` and
+> `prettier-config` were documented here — and recorded in `versions.json` — as **vendored at a
+> ref: never published, no token required, adopt them while blocked**. That was false. All three
+> packages are `private: false`, and `publish.yml` publishes every directory under `packages/`
+> unconditionally without consulting `channel`, so all three have been on the registry the entire
+> time and all three require a token.
+>
+> Three repositories were told they were unblocked on two packages that return `403
+permission_denied: read_package`, and one of them proved it with a real CI run naming
+> `@jrmoulckers/tsconfig/0.2.0`. **All three packages are gated on the same visibility grant.**
+>
+> The detail worth carrying: the contradicting evidence was in this repository's own CI output on
+> every run. `versions:check` prints `versions.json matches the registry for 3 of 3 package(s)` —
+> which is only possible if all three are on the registry — and that line was repeatedly quoted as
+> confirmation the file was correct. A check can be passing, accurate, and read as proof of the
+> opposite of what it says. `scripts/test/versions-channels.test.mjs` now asserts that a channel
+> claiming `requiresRegistryAuth: false` is backed by a package with `private: true`, so the
+> declaration cannot drift from what `publish.yml` actually does.
 
 The split exists because **GitHub Packages authenticates every read, including reads of a public
 package.** Putting the scope in the install path therefore requires every contributor — and, for a
@@ -404,9 +423,11 @@ then read them. Note that public does **not** mean anonymous — the registry st
 unauthenticated read with a 401, so `packages: read` and the token remain required either way.
 What changes is authorization, not authentication.
 
-**Since ADR-0001 this section applies to `@jrmoulckers/eslint-config` only.** `tsconfig` and
-`prettier-config` are vendored at a pinned ref and need no registry, no token, and no grant, so
-the twenty-one grants above are really seven.
+**This section applies to all three packages.** An earlier revision said it applied to
+`@jrmoulckers/eslint-config` only, on the grounds that `tsconfig` and `prettier-config` were
+vendored at a pinned ref and needed no registry, token, or grant. That was wrong — all three are
+published and all three need the grant, so the count stands at twenty-one rather than seven. See
+the correction under §1.
 
 Prefer either of those over storing a PAT in a secret.
 
@@ -738,21 +759,25 @@ and treat the fetch as part of the command rather than as something you did earl
 A test asserts that every version range printed in this document matches `versions.json`, so the
 table above cannot drift again without failing CI.
 
-**And read `channel` while you are there.** `@jrmoulckers/tsconfig` and
-`@jrmoulckers/prettier-config` are `"channel": "vendored"` — never published, copied in, and
-therefore unaffected by registry access or package visibility. Only `@jrmoulckers/eslint-config` is
-`"channel": "registry"`. Three repositories independently reported being blocked on all three.
+**And read `channel` while you are there.** All three packages are `"channel": "registry"`, so all
+three require a token and all three are gated on the same visibility grant.
 
-That number is the point. This paragraph was already here each time, and it did not reach anyone —
-because **you are reading it at the ref you pinned, while `versions.json` is read from `main`.**
-Prose about a channel goes stale in your checkout; the value it explains does not. So the meaning
-now lives in the same file as the value: `versions.json` carries a top-level `channels` legend, and
-each channel answers `requiresRegistryAuth` as a boolean. A test fails if a package ever declares a
-channel the legend does not define, so the two cannot drift apart.
+Three repositories independently reported being blocked on all three packages, and this paragraph
+previously told them that only `eslint-config` was affected — that `tsconfig` and
+`prettier-config` were `"channel": "vendored"`, never published, and adoptable while blocked.
+**They were right and this document was wrong.** The correction and its cause are under §1.
 
-**If you are blocked on package access, resolve your own answer from that legend rather than from
-here.** Everything in a channel with `"requiresRegistryAuth": false` is available to you today, at a
-tag, with no token and no visibility grant.
+The lesson survives the correction, and is now sharper. The original diagnosis was that prose goes
+stale in a consumer's checkout while `versions.json` is read from `main`, so the meaning of
+`channel` should live beside the value. That reasoning is still right, and it is why the legend
+exists. But it was applied to a value that was itself false, which moved a wrong answer somewhere
+more authoritative and harder to argue with. **Co-locating an explanation with a value does
+nothing if nothing checks the value**, and three consumers contradicting it was the signal that
+should have prompted the check.
+
+So the legend now carries an enforcement rather than an assertion: a channel declaring
+`"requiresRegistryAuth": false` must be backed by a package with `private: true`, and a channel no
+package uses cannot remain in the file. Both are tested.
 
 **If that command fails for you, read [`versions.json`](../versions.json) at the repository
 root — not a git tag, and not `packages/<name>/package.json`.** A consumer without
@@ -1642,9 +1667,11 @@ which reads like a broken preset rather than a missing dev dependency.
 If your repository already has a root TypeScript config, two things decide the migration, and
 they are documented in different sections — so read both before opening the PR.
 
-1. **`tsconfig` is a vendored package, not a registry one** (§2). Replacing a local base does not
-   add a registry dependency, does not need a token, and does not wait on package access. If you
-   have been holding a tsconfig migration behind registry auth, it was never blocked.
+1. **`tsconfig` is a registry package and does need a token** (§1). An earlier revision of this
+   list said the opposite — that replacing a local base added no registry dependency and was never
+   blocked on package access. That was wrong, and a consumer's CI proved it with `403
+permission_denied: read_package` on `@jrmoulckers/tsconfig/0.2.0`. If you are waiting on the
+   visibility grant, this migration waits with it.
 2. **Pick the variant per package, not per repository.** A repository whose server runs `.ts`
    directly and whose web app emits needs `node.json` for the former and `base.json` for the
    latter. That is the normal shape, not a workaround.
