@@ -531,6 +531,44 @@ steps:
 > guard can ever report it — anything you write lives inside a job that is never created. Diagnose
 > it by reading the caller's `permissions:` block against the callee's, not by looking for output.
 >
+> **A logless failure has at least three distinct causes, and one of them is billing.** A consumer
+> reported the whole fleet's CI down and diagnosed it by correlating outcome against repository
+> **visibility** — every private repository failing, every public one passing. The correlation was
+> real and the inference was right, but the probes they used all returned nothing: `--log-failed`
+> said `log not found`, `output.title` and `output.summary` were `null`, and every job reported
+> zero steps. They reached the answer by inference because the direct read appeared unavailable.
+>
+> **It is available.** The annotations endpoint carries plain English when nothing else does:
+>
+> ```bash
+> run=$(gh api "repos/OWNER/REPO/actions/runs?per_page=1" --jq '.workflow_runs[0].id')
+> job=$(gh api "repos/OWNER/REPO/actions/runs/$run/jobs" --jq '.jobs[0].id')
+> gh api "repos/OWNER/REPO/check-runs/$job/annotations" --jq '.[].message'
+> ```
+>
+> Measured across the fleet, that single command separates causes that are otherwise identical on
+> sight:
+>
+> | Repository state | Annotation                                                                                     |
+> | ---------------- | ---------------------------------------------------------------------------------------------- |
+> | private, failing | `The job was not started because recent account payments have failed or your spending limit …` |
+> | public, failing  | `Process completed with exit code 1.`                                                          |
+>
+> Reproduced identically on four private repositories. The billing failure is **not** the same as
+> the `packages: read` ceiling above, and the prescribed fix for that one does nothing here — a
+> consumer following it will add scopes, see no change, and start suspecting their pin. Both
+> produce a fast, logless, step-less failure that reads like an outage.
+>
+> Two cautions on the correlation itself. It is **suggestive, not decisive**: during the same
+> window a public repository failed for an ordinary reason (`exit code 1`), which is enough to
+> break a naive visibility correlation for anyone who samples it. And the billable timing is
+> consistent but indirect — `/timing` reporting `total_ms: 0` against nine jobs means nothing ran,
+> not why. Prefer the annotation, which states the cause outright.
+>
+> Billing exhaustion hits private repositories only, because public-repository Actions minutes are
+> not billed. That is why the visibility split appears at all, and why it will look like a
+> configuration difference between two repositories whose configuration is identical.
+
 > **The blast radius is the whole workflow file, not the one misconfigured job.** A second,
 > unrelated, perfectly valid job in the same file was added to that measurement and it did not run
 > either. Permission resolution happens before any job is instantiated, so one caller job missing
@@ -1692,6 +1730,30 @@ discoverable by inspection; file exclusions are not.
 The mitigation that consumer applies is worth copying: **comment each entry with who owns it**,
 so the next person to tidy the ignore file can see that removing a line has an owner on the other
 end rather than looking like dead weight.
+
+**Treat that list as an example of an invariant, not as the invariant.** A consumer verified their
+coverage properly — running all 72 entries of their sync manifest through `prettier
+--list-different` rather than eyeballing the four directory names — and found zero would be
+reformatted. Then they found the coverage was partly accidental: one synced file, `agency.toml`,
+was **not** ignored and was inert only because Prettier cannot infer a parser for it. Protected by
+two mechanisms, one of them deliberate.
+
+The invariant is: **every parseable path in the sync manifest must be covered by the ignore
+list.** Those two lists are maintained separately — the manifest is generated, the ignore list is
+enumerated by hand — so they drift in exactly one direction, silently, whenever a sync adds a
+path. A fixed list of paths is correct until the next sync, and the failure is invisible until a
+formatter run rewrites something nobody authored.
+
+Check it the way they did, against the manifest rather than against memory:
+
+```bash
+jq -r '.files[].path' .studio-sync.lock.json |
+  xargs npx prettier --list-different
+```
+
+Anything printed is a synced path your ignore list does not cover. A new extension the formatter
+learns to parse can move a file from inert to exposed without anything in your repository
+changing, which is the case a fixed list cannot anticipate.
 
 > **These exclusions are permanent, and `proseWrap: 'preserve'` does not retire them.**
 > `prettier-config@0.2.0` stopped Prettier rewrapping prose, and it is natural to read that as
