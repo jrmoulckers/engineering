@@ -1220,6 +1220,24 @@ grounds that it would be an inert line guarding an impossible failure. That is t
 the right reason. A consumer who had simply applied the advice would have shipped the inert entry
 and confirmed nothing.
 
+**The same reasoning applies to sequencing, not just to whether a line belongs.** Another
+consumer declined to pre-stage `registry-url` and `registry-scope` in CI ahead of the dependency
+that would use them. The config would have been harmless and the run would have been green — and
+that was the objection: a green run over a scope nothing resolves from **looks like validation of
+the registry wiring while exercising none of it**. Staged with the dependency instead, the same
+green tick carries evidence.
+
+Generalised, because this migration has now produced the failure twice — once as gates passing
+against a `link:`ed local checkout while the manifest claimed a published range:
+
+> **Do not land configuration ahead of the thing that exercises it.** A passing check over inert
+> config is indistinguishable from a passing check over working config, and the two get read the
+> same way later. The cost of waiting is one PR; the cost of the false green is that nobody
+> re-tests the wiring, because the tick is already there.
+
+Pre-staging for fleet consistency is a legitimate reason to override this — just record in the PR
+that the config is inert until the dependency lands, so the green run is not mistaken for proof.
+
 ### Exclude files that are sealed or generated
 
 Three kinds of file must go in `.prettierignore` for reasons stronger than taste:
