@@ -4015,6 +4015,47 @@ survived that review — proving a field channel can fail by breaking it on purp
 baseline device by model and OS version rather than a tier label — and they were worth more than the
 six sections around them.
 
+### Refresh the tool before you trust what it tells you
+
+**The vendoring script is vendored too, so its own fixes do not reach you — and the thing that
+would announce them is the thing that is stale.** An adopter reported four defects. All four were
+already fixed. They could not have known, because every mechanism that would have said so shipped
+in the same script they had pinned.
+
+| What they reported                                        | Actually fixed in          |
+| --------------------------------------------------------- | -------------------------- |
+| `.svelte` + `strictTypeChecked` aborts the run            | `eslint-config@0.14.0`     |
+| `vendor-configs.mjs` is not covered by the lock it writes | `v0.116.0` (`lock.tool`)   |
+| Staleness fires on release cadence, not payload change    | `v0.116.0` (content-gated) |
+| The notice cannot say whether the file set itself changed | `v0.116.0` (`toolChanged`) |
+
+Before `v0.116.0` the notice counted releases. It fired on every tag regardless of whether one byte
+you vendor had moved. That adopter took **seven consecutive no-op bumps**, each reporting
+`0 file(s) changed content`. From `v0.116.0` the notice is gated on content and stays silent when
+nothing you vendor would change — so silence became meaningful, but only for consumers who had
+already updated past the release that made it meaningful.
+
+**That is the trap: a cadence notice trains you to ignore it, and the habituated ignore then covers
+the release that mattered.** A consumer sitting below `v0.116.0` sees a notice on every tag, learns
+it means nothing, and is now blind by conditioning rather than by configuration.
+
+So the ordering is not optional:
+
+1. **Re-vendor at the newest release first.** `node scripts/vendor-configs.mjs <latest>` rewrites
+   the script and re-records `lock.tool` along with the configs.
+2. **Then read what `--check` says.** Its silence only means "compared, nothing differs" on a
+   current tool. On a stale one, silence means nothing was ever compared.
+
+Check which vintage you are on before believing a quiet run:
+
+```sh
+node -e "process.stdout.write(/would change/.test(require('fs').readFileSync('scripts/vendor-configs.mjs','utf8'))?'content-gated (v0.116.0+)\n':'cadence-only — refresh before trusting silence\n')"
+```
+
+The general form, and the reason `check-citations.mjs` is fetched over the network and kept
+nowhere: **a tool cannot be the sole reporter of its own staleness.** Where the report matters more
+than the convenience, run the copy you did not pin.
+
 ### Take patches automatically; take minors as a decision
 
 **This reverses guidance given here earlier, and the counter-example is one of our own releases.**
