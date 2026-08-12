@@ -1808,7 +1808,7 @@ every minor until the first stable major:
 
 | Package                        | Range             | Floor is set by                                                       |
 | ------------------------------ | ----------------- | --------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `>=0.16.0 <1.0.0` | Tooling globs cover every test/config/script suffix, and are exported |
+| `@jrmoulckers/eslint-config`   | `>=0.15.0 <1.0.0` | Tooling globs cover every test/config/script suffix, and are exported |
 | `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`     |
 | `@jrmoulckers/prettier-config` | `>=0.4.0 <1.0.0`  | Type declarations, so `checkJs` consumers can adopt at all            |
 
@@ -1844,7 +1844,7 @@ give the specifier rather than the number:
 ```diff
 - Type declarations shipped in 0.8.0.
 + Type declarations shipped in 0.8.0. The floor is 0.15.0 — set
-+ "@jrmoulckers/eslint-config": ">=0.16.0 <1.0.0".
++ "@jrmoulckers/eslint-config": ">=0.15.0 <1.0.0".
 ```
 
 If you are reading a release note from this repository that names a version without naming the
