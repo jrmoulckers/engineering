@@ -223,11 +223,36 @@ consuming repository to be granted access. Either way you must send a token.
 > ```bash
 > # Anonymous. Lists only public packages; the repo page itself returns 200 either way,
 > # which is what makes the repo a misleading proxy for the answer.
-> curl -s https://github.com/jrmoulckers/engineering/packages | grep -c eslint-config
+> curl -s https://github.com/jrmoulckers/engineering/packages | grep -c 'packages/container/package\|packages/npm/package'
 > ```
 >
 > While that returns `0`, the grants below are required. This is the current state and the
 > single blocker for adopting the presets.
+>
+> **Grep for the link shape, not for a package name.** A consumer read this probe as untestable
+> because it returned `0` for repositories with genuinely public packages too. Their controls were
+> sound in intent and wrong in needle: the page never contains a bare package name near the link,
+> so a name-based grep cannot match anywhere, and a probe that cannot match anywhere returns `0`
+> for every input. Re-measured anonymously against the link shape:
+>
+> | Repository                | Package links | Reading           |
+> | ------------------------- | ------------- | ----------------- |
+> | `home-assistant/core`     | **28**        | public packages   |
+> | `renovatebot/renovate`    | **1**         | public package    |
+> | `actions/runner`          | **1**         | public package    |
+> | `cli/cli`                 | 0             | genuinely none    |
+> | `nodejs/node`             | 0             | genuinely none    |
+> | `jrmoulckers/engineering` | 0             | private (correct) |
+>
+> The listed hrefs carry real names — `/orgs/home-assistant/packages/container/package/home-assistant`
+> — so the probe does vary with the property under test.
+>
+> **The lesson is the positive control, not the needle.** Running a probe against known negatives
+> only shows it returns `0`; it cannot distinguish "correctly reports absence" from "never reports
+> anything." Confirm the probe can produce a **non-zero** result against something known to have
+> the property before trusting a zero. That is the same operation as making a check go red once,
+> applied to a diagnostic instead of a gate — and here it inverted the conclusion twice: first
+> mine, then the correction to mine.
 
 > **GitHub Packages only supports classic personal access tokens.** Fine-grained PATs are
 > rejected by the npm registry. A fine-grained token fails with a 401 that is indistinguishable
@@ -239,16 +264,76 @@ consuming repository to be granted access. Either way you must send a token.
 > discriminates. A consumer noticed the 401/403 split; adding the existence control makes it a
 > three-way answer. Measured against `https://npm.pkg.github.com/@jrmoulckers%2f<name>`:
 >
-> | Credential | Package                  | Status  | What it proves                                    |
-> | ---------- | ------------------------ | ------- | ------------------------------------------------- |
-> | none       | real                     | **401** | credential never arrived                          |
-> | garbage    | real                     | **401** | credential arrived and failed                     |
-> | valid      | real, private            | **403** | **auth succeeded; package exists; access denied** |
-> | valid      | name that does not exist | **404** | not in GitHub Packages at all                     |
+> | Credential                | Package                  | Status  | What it proves                            |
+> | ------------------------- | ------------------------ | ------- | ----------------------------------------- |
+> | none                      | real                     | **401** | credential never arrived                  |
+> | garbage                   | real                     | **401** | credential arrived and failed             |
+> | valid, no `read:packages` | real, private            | **403** | **your token's scopes** — fixable by you  |
+> | valid, `read:packages`    | real, private, no grant  | **403** | **the grant** — fixable only by the owner |
+> | valid, `read:packages`    | real, private, granted   | **200** | readable now                              |
+> | valid                     | name that does not exist | **404** | not in GitHub Packages at all             |
 >
 > Read it as: **401 is about you, 403 is about permissions, 404 is about the package.** The `403`
 > arm is positive evidence in two directions at once — it confirms your token is fine _and_ that
 > the publish landed, neither of which the REST `404` can tell you.
+>
+> **The two `403`s are different outcomes and the body text separates them.** A consumer caught
+> this guide collapsing them into one row, which is a real defect: they mean opposite things and
+> only one of them is the owner's problem. Measured:
+>
+> ```
+> scope missing → {"error":"Permission permission_denied: The token provided
+>                            does not match expected scopes."}
+> grant missing → {"error":"Permission permission_denied: read_package"}
+> ```
+>
+> Match on the text after `permission_denied:`. If it mentions **scopes**, re-issue your token —
+> nothing is blocked on anyone else. If it is **`read_package`**, your credential is correct and
+> the package needs a grant. Reporting the first as the second sends an unblockable ask to the
+> owner and stalls; that happened here, in both directions, before either of us checked the body.
+
+> **Your machine may already hold a token with the scope — shadowed by one that lacks it.** I
+> reported for several releases that no available credential carried `read:packages`, and a
+> consumer falsified it on their own machine. `gh` stores multiple credentials and an environment
+> variable wins over the keyring, silently and without warning:
+>
+> ```
+> ✓ Logged in to github.com account NAME (GH_TOKEN)   ← active
+>   Token scopes: 'gist', 'project', 'read:org', 'repo', 'user', 'workflow'
+> ✓ Logged in to github.com account NAME (keyring)    ← ignored
+>   Token scopes: 'admin:public_key', 'gist', 'read:org', 'read:packages', 'repo'
+> ```
+>
+> Reproduced here exactly. Every probe I ran used the first line, returned the **scope** `403`, and
+> I read that as "no token anywhere has the scope" — when the machine held one the whole time.
+> `gh auth status` prints both; read past the active account, and clear `GH_TOKEN` in the shell to
+> use the keyring credential. This is the absence pattern again, with a twist: the capability was
+> not absent, it was **shadowed**, and the shadowing agent reported a symptom that looked like
+> absence.
+>
+> With such a token all three packages return **200** today, so anyone holding one can generate a
+> real lockfile with verified integrity hashes locally. Only CI still needs the owner's action.
+
+> **The owner's action is a choice, not a single option.** A consumer pointed out that this guide
+> presented flipping to public as the only remedy. Either of these unblocks CI:
+>
+> - **Grant per package** — the package's _Manage Actions access_ → add the consuming repository.
+>   The package stays private and each repository's own `GITHUB_TOKEN` can read it. This is the
+>   narrower change and the one to prefer.
+> - **Flip to public** — any authenticated token reads it, with no per-repository administration.
+>
+> A `403 permission_denied: read_package` from CI is consistent with **both**: it proves the grant
+> is missing, not that public is the only fix.
+>
+> The authoritative visibility check belongs to the owner and needs no scraping:
+>
+> ```bash
+> gh api "user/packages?package_type=npm" --jq '.[] | "\(.name) \(.visibility)"'
+> ```
+>
+> Note the name in that output is `eslint-config`, unscoped. The per-package endpoint takes that
+> bare name; passing `@jrmoulckers%2Feslint-config` returns a `404` that reads exactly like the
+> package not existing.
 >
 > The `404` arm is the one worth keeping in mind, because it catches a different bug entirely: a
 > valid token plus `404` means the package was never published under that name, so no amount of
