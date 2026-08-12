@@ -276,6 +276,22 @@ consuming repository to be granted access. Either way you must send a token.
 > (1)**, **`actions/runner` (1)**.
 >
 > Use both. The marker proves the probe ran; the controls prove the probe can answer.
+>
+> **A second consumer hit the failure this marker is for, and proposed a weaker fix.** They got a
+> 301 stub of 960 bytes where the real page is ~195 KB, grepped it, counted zero, and read that as
+> _private_ — from a page that never loaded. They suggested pinning `curl -L` plus a body-size
+> assertion (fail under ~50 KB).
+>
+> Pin `-L` by all means, but **it is not the fix, and their diagnosis of the cause does not
+> reproduce**: this exact URL returns `200` and the full 195,677-byte page here with and without
+> `-L`, byte-identical. Whatever produced their 301 was environment-specific — a proxy, a
+> corporate interceptor, a differing URL form — which is precisely why a fix aimed at the cause is
+> the wrong shape. A size threshold is a guess that needs retuning whenever GitHub's page weight
+> changes, and it still cannot tell a login wall from an empty state.
+>
+> The marker answers all of these at once: a 301 stub does not contain it, a login wall does not
+> contain it, and a real page with packages does not contain it either. **Assert what the page must
+> say, not how big it is or how it got there.**
 
 > **GitHub Packages only supports classic personal access tokens.** Fine-grained PATs are
 > rejected by the npm registry. A fine-grained token fails with a 401 that is indistinguishable
@@ -300,7 +316,26 @@ consuming repository to be granted access. Either way you must send a token.
 > arm is positive evidence in two directions at once — it confirms your token is fine _and_ that
 > the publish landed, neither of which the REST `404` can tell you.
 >
-> **The two `403`s are different outcomes and the body text separates them.** A consumer caught
+> **A scope-deficient token makes a public package and a private one indistinguishable — and that
+> is why the `403` gets over-read.** A consumer built the control that proves it: they probed
+> `@github/copilot`, a **publicly listed** package, alongside a private one and got byte-identical
+> behaviour — `401` anonymous, `403` with their token. They correctly concluded their `403` had
+> never been evidence about visibility.
+>
+> Their stated conclusion goes one step too far, though, and the extra step matters. Re-run with a
+> token that **has** `read:packages` and the two separate cleanly:
+>
+> | Package                      | anon  | scope-deficient token | **scoped token** |
+> | ---------------------------- | ----- | --------------------- | ---------------- |
+> | `@jrmoulckers/eslint-config` | `401` | `403`                 | **`200`**        |
+> | `@github/copilot`            | `401` | `403`                 | **`403`**        |
+>
+> So the registry _can_ answer the visibility question; the scope check simply runs first and
+> masks it. **A failing check that runs earlier than the one you care about will answer in its own
+> terms, and its answer looks like an answer to your question.** The remedy is not a better probe,
+> it is satisfying the earlier check and re-running — at which point `200` versus `403` is exactly
+> the discriminator you wanted.
+
 > this guide collapsing them into one row, which is a real defect: they mean opposite things and
 > only one of them is the owner's problem. Measured:
 >
