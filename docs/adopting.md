@@ -27,6 +27,8 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | `pnpm` refuses a just-published version                     | `minimumReleaseAgeExclude`                               |
 | `TS5097` / `TS5096` on `.ts` import specifiers              | `allowImportingTsExtensions`                             |
 | Lint is green but you suspect coverage shrank               | `set of files linted, in both directions`                |
+| Your finding count **dropped** after a version bump         | `look in your test files before assuming`                |
+| Unsure which before/after comparison to trust               | `Prefer measuring the artifact over reasoning`           |
 | Go: a wall of `errcheck` findings that CI does not report   | `Compare the set of findings, not the set of rules`      |
 | A rule you expected to fire never fires                     | `A clean `rules-of-hooks` run is not proof of absence`   |
 | Package install returns `401`/`403`                         | `Visibility changes _authorization_, not authentication` |
@@ -1709,28 +1711,73 @@ measured, and their check could not see it because it was never in the compariso
 `0.14.0`. An adjacent-version diff answers a question nobody asked, and answers it convincingly
 enough to stop the investigation.
 
-**A null result on one check says nothing about the other.** A later consumer, on `^0.8.0` against
-a `0.15.0` floor, ran both recommended checks and got two clean results — zero resolved-rule
-differences and an identical linted file set, 309 files before and after. Both measurements were
-correct, and only one of them survives the bump to the floor. Measured across the range they
-actually face:
+**A null result on one check says nothing about the other, and which half moves depends on your
+stack.** Two consumers sat on `^0.8.0` against a `0.15.0` floor. Both ran the checks this guide
+recommends, both got clean results, and **the same version gap changed a different half for each of
+them.** Measured by resolving each preset through `ESLint.calculateConfigForFile` at package
+`0.8.0` and `0.15.0` against one shared dependency tree:
 
-| Check                           | `0.8.0` → `0.15.0`                                  |
-| ------------------------------- | --------------------------------------------------- |
-| linted file set                 | unchanged — `sharedIgnores` is identical, 8 entries |
-| resolved rules, `.ts` `.js`     | identical                                           |
-| resolved rules, **`.svelte`**   | **−18 / +4** on a bare `svelteConfig()`             |
-| resolved rules, `scripts/*.mjs` | −1 (`@typescript-eslint/no-require-imports`)        |
+| Check                             | Svelte consumer                  | React consumer                        |
+| --------------------------------- | -------------------------------- | ------------------------------------- |
+| linted file set / `sharedIgnores` | unchanged — 8 entries both sides | unchanged — 8 entries both sides      |
+| resolved rules, `.ts` `.js`       | identical                        | identical                             |
+| resolved rules, framework files   | **`.svelte` −18 / +4**           | `.tsx` `.jsx` `.mts` `.cts` identical |
+| resolved rules, **test files**    | —                                | **`*.test.tsx` −2, `*.spec.tsx` −2**  |
+| preset `files` globs              | —                                | **14 → 29**                           |
 
-The file set is stable because `sharedIgnores` did not change; the rules moved because `svelte.js`
-gained the `eslintRecommended` block and `toolingFiles` grew from 9 entries to 24. Those are
-independent parts of the package, so a clean file-set diff is not evidence about rules and a clean
-rule diff is not evidence about coverage. Run both, and scope both to the floor.
+Neither consumer's measurement was wrong. The Svelte one would have caught its own change and
+missed the React one; the reverse also holds. The two moved because `svelte.js` gained the
+`eslintRecommended` block **and** `toolingFiles` grew from 9 entries to 24 — independent parts of
+the package, which is why a clean file-set diff is not evidence about rules and a clean rule diff is
+not evidence about coverage.
 
-The `.svelte` figure is the one to note if you have Svelte components: `no-undef` is among the 18
-that switch off, which is the point of the change — ambient and namespaced types such as
-`NodeJS.Timeout` and SvelteKit's `App.*` are values the rule cannot see, so it reports them as
-undefined inside `<script lang="ts">` while identical code in a `.ts` file is clean.
+The `.svelte` figure matters if you have components: `no-undef` is among the 18 that switch off,
+which is the point of the change — ambient and namespaced types such as `NodeJS.Timeout` and
+SvelteKit's `App.*` are values the rule cannot see, so it reports them as undefined inside
+`<script lang="ts">` while identical code in a `.ts` file is clean.
+
+**The test-file row is the one most likely to surprise, because nothing about it is framework
+specific.** The old tooling list carried `*.test.ts` and `*.test.js` but not `*.test.tsx`,
+`*.spec.tsx`, `*.spec.js`, `*.config.cjs`, or anything under `tools/`. So whether a file counted as
+tooling depended on which of two interchangeable suffixes its author had picked, and `no-console`
+fired in `a.test.tsx` while staying silent in `a.test.ts` next to it. At `0.15.0` both are exempt.
+If your finding count **drops** after this bump, look in your test files before assuming a rule was
+lost.
+
+### Prefer measuring the artifact over reasoning about the config
+
+A consumer put the underlying point better than the paragraphs above do, and it reorders the whole
+section:
+
+> The fix isn't "also compare file sets," it's "measure the artifact instead of reasoning about the
+> config."
+
+That is right, and it explains why every failure catalogued in this guide sits on one side of a
+line. In order of decreasing reliability:
+
+| Method                                  | Sees rule changes | Sees file-set changes | Sees your inventory |
+| --------------------------------------- | ----------------- | --------------------- | ------------------- |
+| Run the preset over your repository     | yes               | yes                   | yes                 |
+| Diff the resolved config per file class | yes               | only if you enumerate | no                  |
+| Diff the preset's source                | no                | no                    | no                  |
+
+A run cannot miss a file-set change, because a file that stops being linted stops producing
+findings. A rule diff can, and a source diff misses both — the same consumer's from-source
+reconstruction of their own findings under-counted by **19%**.
+
+**A run has exactly one blind spot, and it is worth naming because it is invisible:** it measures
+your inventory as it stands today. The same consumer found their old config selected
+`.ts .tsx .mjs .js` while the preset also selects `.mts .cts .jsx .cjs`, and that the delta was
+**zero** — because their repository contains none of those four. That zero is an accident of
+current contents, not a property of the configs. The first `.jsx` or `.cjs` file anyone adds is
+linted by the preset and was not by the old config, silently and with no bump to attribute it to.
+So run the preset, and separately compare the two **selection surfaces** rather than the two file
+lists.
+
+The ignore side does not net out either, and a tracked-file count cannot see it: the preset ignores
+`coverage`, `dev-dist`, `.svelte-kit` and `.impeccable`, none of which are usually tracked. If your
+old config ignored something the shared list does not — `.gradle`, in that consumer's case — it
+stays on your must-port list even though every file-based comparison scores it zero.
 
 A corollary, since a resolved-ruleset diff is the best tool here and worth using correctly: a rule
 present at severity `0` is not a rule that runs. `eslint-config-prettier` is part of the base
