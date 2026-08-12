@@ -2389,6 +2389,41 @@ such an instruction will search, find nothing, and be left unable to distinguish
 instruction from their own oversight. Both of this migration's instances were caught only because
 the recipient reported the absence instead of assuming they had misread.
 
+### Do not describe a consumer's tree from your own
+
+Four separate messages from this repository told one consumer to delete `--legacy-peer-deps` from
+their configuration. They had never used it, in any commit, and said so each time. The instruction
+cost them a verification sweep on each round, which is the same tax as a stale version literal.
+
+The cause is worth recording because it is not the obvious one. `--legacy-peer-deps` was not
+transcribed from their report, and it was not a cached fact about them. It appears exactly once in
+this repository's own `.github/workflows/validate.yml`, on the ESLint-matrix job, with a comment
+explaining that this repository's **dev tree** carries `eslint-plugin-react` and
+`eslint-plugin-jsx-a11y` for the framework-preset tests, both of which cap their ESLint peer at 9.
+It is a producer-side artifact of testing every preset in one tree. **No consumer has that tree,
+so no consumer can have that flag.**
+
+So the defect is the **producer's own repository leaking into advice aimed at consumers**. That is
+a more available error than it looks: when writing migration guidance, the nearest concrete example
+of a package-manager workaround, an ignore glob, or a peer conflict is whatever is in front of you
+— and yours is the one repository in the fleet whose dependency tree is deliberately unlike
+everyone else's, because it must install every preset's plugins at once.
+
+The check is cheap and specific. Before telling a consumer to remove something, **grep their tree,
+not yours** — and treat a "delete X" instruction as a claim about their repository requiring the
+same evidence as a version number:
+
+```bash
+gh api "repos/OWNER/REPO/contents/package.json" -H "Accept: application/vnd.github.raw" | grep -c 'X'
+```
+
+The tell that this was happening was available from the first message and I did not read it: a
+consumer denying something four times, with a sweep attached, is reporting a defect in the sender's
+state rather than being forgetful. **Repetition of a correction is itself the signal.** Two
+consumers raised the same shape in the same week — one about a pinned SHA re-derived instead of
+re-read, one about this flag — and in both cases the fix was to re-read the other repository at
+send time rather than to reword the sentence.
+
 ### A sound measurement against a stale tree is still wrong
 
 Comparing `--print-config` output before and after adopting a preset is the right method, and it
@@ -6705,6 +6740,56 @@ function assertDefined<T>(v: T | undefined, what: string): T {
 It costs one line, survives edits to the surrounding test, and fails with a sentence instead of a
 stack trace. Bulk-converting an existing, genuinely-guarded set of assertions to it is not worth
 the churn — this is guidance for what you write next.
+
+**A consumer audited all 145 of theirs rather than sampling, and the result corrects this section
+twice.** Their own summary claim — "every one follows a length assertion" — was false as stated,
+which is the outcome the paragraph above predicts. But the shape of the gap was not the predicted
+one:
+
+| Category                                       | Count  |
+| ---------------------------------------------- | ------ |
+| Index access, established by an assertion      | 89     |
+| Index access, established by an inline fixture | 40     |
+| **Return value, established by nothing**       | **16** |
+
+**First correction: establishment is not always an assertion.** Forty sites were sound because a
+mock in the same block returned a three-element literal. Visible, local, and correct — but no
+`toHaveLength` anywhere near them. A reader auditing for "is there an assertion above this" would
+score those forty as violations and rewrite working tests.
+
+**And those forty are the fragile set, not the eighty-nine.** The risk model above says the guard
+gets weakened later. In practice nobody edits `toHaveLength(3)`; they edit the fixture, because
+the fixture is where you add a test case. Drop a fixture from three games to two and `items[2]!`
+silently stops being a fact. So the ranking inverts: **fixture-established assertions carry more
+risk than assertion-established ones, precisely because the establishing line is the one people
+have a reason to touch.**
+
+**Second correction: the carve-out as written does not cover return values, and those are the
+sites that need the helper.**
+
+```ts
+const added = await addGame({ title: 'Hades', status: 'playing' });
+await db.putGame({ ...added!.game, coverUrl: '...' }); // nothing establishes that addGame succeeded
+```
+
+That is not "index access after a length assertion". Nothing in the block establishes it at all —
+the `!` asserts that a factory or lookup returned non-null, on the author's belief rather than on
+a local fact. If `addGame` starts returning `undefined`, the failure is
+`TypeError: Cannot read properties of undefined (reading 'game')` at whatever line spreads it,
+not `expected addGame to return a game`.
+
+So read the carve-out as covering **established** index access, by assertion or by visible
+fixture, and **not** covering return values. `assertDefined` earns its line on the return-value
+set specifically. That is also a far smaller and more defensible conversion target — sixteen sites
+rather than a hundred and forty-five — which is the version of this advice worth acting on:
+
+```ts
+const added = assertDefined(await addGame({ title: 'Hades' }), 'addGame result');
+```
+
+The general form: **`!` is sound when a fact in the same block establishes it, and the audit
+question is "what establishes this", not "is there an assertion above this".** Those differ on 40
+of 145 sites in the one codebase that has actually counted.
 
 So treat the burst as a one-time debt payment. Fix at the call site — add the guard, narrow the
 type, handle the absent case. Do **not** widen with `!` or `as` in production code, and do not
