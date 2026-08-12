@@ -2583,16 +2583,37 @@ through every run in which the install jobs failed.
 
 #### Reading the failure: 401 and 403 are different problems
 
-Both surface at install and are easy to conflate, but they point at opposite causes:
+Both surface at install and are easy to conflate, but they point at different causes. **There are
+three cases, not two, and the middle one is the one you will actually hit** — a consumer debugging
+locally reported it on their first probe:
 
-| Symptom                               | Meaning                             | Fix                                                     |
-| ------------------------------------- | ----------------------------------- | ------------------------------------------------------- |
-| `401 unauthenticated`                 | No token, wrong host, or wrong type | Check `NODE_AUTH_TOKEN`, `registry-url`, token class    |
-| `403 permission_denied: read_package` | Authenticated, not authorized       | Package visibility or an explicit grant — not the token |
+| Symptom                                  | Meaning                              | Fix                                                     |
+| ---------------------------------------- | ------------------------------------ | ------------------------------------------------------- |
+| `401 unauthenticated`                    | No token, wrong host, or wrong type  | Check `NODE_AUTH_TOKEN`, `registry-url`, token class    |
+| `403 ... does not match expected scopes` | Authenticated, **wrong token class** | **A token you can mint** — needs `read:packages`        |
+| `403 permission_denied: read_package`    | Authenticated, not authorized        | Package visibility or an explicit grant — not the token |
 
-The tell for a 403 is that **metadata resolves and only the tarball download fails**: the request
-was authenticated successfully and rejected on authorization. No amount of token work fixes it.
-Diagnostic contributed by a consumer who chased the wrong one first.
+Read the **body**, not the status. The two `403`s are opposite verdicts: the scope one is entirely
+yours to fix, the `read_package` one cannot be fixed by any token you can mint. Sending someone to
+the owner for a scope `403` strands them on a request nobody needs to grant.
+
+**The scope `403` is the common local case**, because `gh auth token` hands you the CLI's default
+token, which does not carry `read:packages`. So the first probe a human runs is the one most likely
+to produce it.
+
+> **This section said "two" until a consumer hit the third case immediately.** It also gave the tell
+> as _metadata resolves and only the tarball download fails_. That correctly identifies a
+> `read_package` `403` — and silently misfiles a scope `403`, which fails on **metadata too**. The
+> tell was accurate about the case it was written for and wrong as a general rule, which is the more
+> dangerous kind of accurate.
+>
+> Note what this cost: the three-case table already existed earlier in this document, in the
+> existence-control probe, added after an earlier consumer's work. This section was never updated to
+> match, so which answer you got depended on where you entered — the same defect as the range
+> guidance, found in the same document within the hour, by a different consumer. Two independent
+> instances is not bad luck; see _Superseded text is a defect, not history_ below.
+
+No amount of token work fixes the `read_package` case. Token work fixes the other two.
 
 **The general shape, worth recognising before you debug any of them:** every credential failure on
 this path reports as _a bad credential_ when the cause is almost always a **missing, misrouted, or
@@ -2616,8 +2637,9 @@ exist**.
 
 The trap is that this repeats at every minor. `^0.3.0` locks you out of `0.4.0` exactly as
 `^0.1.0` locks you out of `0.2.0`, so a consumer who follows a floor table using carets is stale
-again one release later and has no signal. Pin with an explicit upper bound instead, which tracks
-every minor until the first stable major:
+again one release later. **The answer to that is a signal, not a wider range** — `pins:check` tells
+you the floor moved without deciding for you, and the reasoning is in _Take patches automatically;
+take minors as a decision_ below.
 
 | Package                        | Range     | Floor is set by                                                       |
 | ------------------------------ | --------- | --------------------------------------------------------------------- |
@@ -2625,9 +2647,17 @@ every minor until the first stable major:
 | `@jrmoulckers/tsconfig`        | `^0.4.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`     |
 | `@jrmoulckers/prettier-config` | `^0.5.0`  | Type declarations, so `checkJs` consumers can adopt at all            |
 
+> **This passage used to end "pin with an explicit upper bound instead, which tracks every minor"
+> and "the ranges keep you current without editing the manifest."** Both are now deleted. The first
+> is reversed below on the evidence of our own releases. The second was never true in the first
+> place: a widened range does not move a locked install at all, as measured in _Widening a range
+> upgrades nothing_. The table beside it had already been corrected to carets without the prose
+> being touched — the third instance of the same defect in one day, and the one that shows why the
+> rule below has to be mechanical rather than editorial.
+
 The floors say what each version _added_, so they only rise when something is genuinely required.
-The ranges keep you current without editing the manifest. Confirm what is actually published
-rather than trusting this table, which is a literal and therefore ages:
+Confirm what is actually published rather than trusting this table, which is a literal and therefore
+ages:
 
 ```bash
 curl -s https://raw.githubusercontent.com/jrmoulckers/engineering/main/versions.json
@@ -3619,6 +3649,48 @@ So the supported adoption order when the grant is outstanding is: migrate the co
 it locally against a resolved copy of the packages, keep the manifest and lockfile changes on the
 branch, and land them in the same commit that becomes installable in CI.
 
+### Superseded text is a defect, not history
+
+**Three separate consumers hit this in a single day, in this document, on two unrelated topics.** A
+correction was written, argued well, and placed in a new section — and the text it reversed was left
+where it was. Which advice a reader received depended on where they entered.
+
+| Topic         | Correction lived in           | Superseded text still live in               | Found by             |
+| ------------- | ----------------------------- | ------------------------------------------- | -------------------- |
+| Version range | _Take patches automatically…_ | the repeated-bumps diagnostic               | a consumer, twice    |
+| Version range | (same)                        | the floor-table prose, beside a fixed table | this audit           |
+| `401`/`403`   | the existence-control probe   | _Reading the failure_, with a wrong tell    | a different consumer |
+
+The failure mode is specific and worth naming, because it does not feel like a mistake at the time:
+**writing the correction feels like completing the work.** It is more thorough than the original, it
+cites evidence, and it reads as authoritative — which is exactly what makes the surviving original
+worse than an ordinary stale sentence. The reader who finds the old text has no signal that a better
+answer exists a thousand lines away, and the old text is often _more_ prominent, because corrections
+get appended while originals sit under the heading people search for.
+
+So the rule:
+
+> A reversal is complete when the **superseded** text is gone, not when the correction is written.
+
+In practice:
+
+- **Grep for the artefact, not the topic.** Search the specifier, the status code, the flag — not the
+  section heading. Every instance above was found by searching a literal, and every one had been
+  missed by people reading the section that owned the subject.
+- **Fix tables and their prose together.** The floor table had already been corrected to carets while
+  the paragraph beside it still said the opposite. A table and its surrounding sentences are one
+  claim.
+- **A tell that is accurate for one case is a general rule that is wrong.** _Metadata resolves and
+  only the tarball fails_ was correct for the case it was written for, and silently misfiled the case
+  a consumer hit first.
+- **Prefer deleting to annotating.** Where the history is instructive it belongs in a blockquote
+  stating what the old advice was and why it was wrong, as above. Where it is not, delete it.
+
+`npm run docs:contradictions` enforces the mechanical half. It cannot judge an argument, but it can
+prove that a literal we retired is really gone — which is precisely where all three instances failed.
+Retiring guidance means adding it there in the same commit, so the next reintroduction fails a check
+instead of reaching a consumer.
+
 ### Take patches automatically; take minors as a decision
 
 **This reverses guidance given here earlier, and the counter-example is one of our own releases.**
@@ -3674,6 +3746,46 @@ re-resolve and will take the newest thing the range admits.
 Note also that these are **floors, not the published set**. Version tables in this guide name the
 minimum that carries a given fix; a consumer found a `0.2.1` that no table here had ever mentioned.
 `versions.json` records published state — read it rather than inferring the set from a floor.
+
+#### Widening a range upgrades nothing, and that is the argument against widening
+
+A consumer widened their range to reach a newer minor, reinstalled, re-tested, and stayed exactly
+where they were — because the lockfile still pinned the old version and **the old version satisfies
+the wider range**. Nothing moved, install exited 0, and `package.json` now looked correct. They
+ended in the same place the caret had left them, having followed the remedy exactly.
+
+Measured here on a public `0.x` package with the same shape, so this does not depend on our
+registry:
+
+| Range            | Command       | Resolved             |
+| ---------------- | ------------- | -------------------- |
+| `^0.2.0`         | `npm install` | `0.2.11`             |
+| `^0.2.0`         | `npm update`  | `0.2.11` — no change |
+| `>=0.2.0 <1.0.0` | `npm install` | `0.2.11` — no change |
+| `>=0.2.0 <1.0.0` | `npm update`  | **`0.5.4`**          |
+
+Read the last two rows together, because they are the whole case:
+
+- **A wide range does not upgrade you.** Only `npm update` does. So the wide range never removed the
+  need for a deliberate act — it relocated it from an edit you can see to a command you must
+  remember, which is strictly worse for the stranding problem it was meant to solve.
+- **When that act finally happens, it crosses everything at once.** `0.2.11 → 0.5.4` skipped `0.3`
+  and `0.4` entirely: three breaking `0.x` boundaries in one command, with **no version named in any
+  diff a reviewer sees.** `package.json` is unchanged; the movement is lockfile-only.
+
+The caret costs the same human action — an edit — and that edit _is_ the record. This is the
+evidence that settles the reversal below, and it arrived from a consumer who had just adopted the
+wide range on our recommendation.
+
+**So the verification step is the resolved version, never the range.** A range is a statement of
+intent; only the tree says what you are running:
+
+```bash
+node -p "require('@jrmoulckers/eslint-config/package.json').version"
+```
+
+Report that number. A correct-looking range in `package.json` is compatible with running anything
+the range admits — including the version you were trying to leave.
 
 ### The two packages support different TypeScript versions, on purpose
 
