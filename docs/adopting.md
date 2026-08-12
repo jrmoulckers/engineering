@@ -978,6 +978,13 @@ steps:
 > whether the job started. A consumer watching that second run nearly read `10s` as "it began
 > executing." **`steps=0` is the observation; the duration is noise around it.**
 >
+> **Reported state is unreliable in the same way.** A third run under the same hold showed `lint` at
+> `2s` while `test (ubuntu)` sat at **`pending` for over a minute** before failing. So one billing
+> hold has now presented as `2s`, `10s`, and `pending`-then-fail — across jobs in a _single_ run.
+> Neither elapsed time nor the in-flight state distinguishes "queued behind a busy runner" from
+> "will never start," and a job that looks `pending` is the most convincing of the three, because
+> waiting is what a healthy queued job also does. Read the annotation.
+>
 > **The two signatures have now been observed with the confound removed.** The table above pairs a
 > permission failure and a billing failure measured on different repositories, which leaves open the
 > objection that the difference tracks the repository rather than the cause. A public repository
@@ -1721,8 +1728,35 @@ such an instruction will search, find nothing, and be left unable to distinguish
 instruction from their own oversight. Both of this migration's instances were caught only because
 the recipient reported the absence instead of assuming they had misread.
 
-**A measurement is evidence for the number, not for the cause.** The most expensive defect in this
-migration was self-inflicted and began with a correct report. A consumer measured 37 packages /
+### `behind main: 0` does not mean nothing was dropped
+
+A long-running adoption branch is usually rebased several times, and a bad conflict resolution is
+the failure mode that survives review. **Ancestry cannot detect it.** `git rev-list --count
+HEAD..main` reporting `0` proves every commit on `main` is reachable — it says nothing about
+whether a resolution reverted the _content_ of one of them. The revert is a change you introduced,
+not a commit you are missing, so it is invisible to every "am I up to date" check.
+
+One repository lost a cycle to exactly this: a fix that existed on `main` was silently undone
+during a rebase resolution, on a branch that was fully current.
+
+**Review your deletions against `main`, not your commit list.** A bad resolution shows up as a
+deleted line you did not author:
+
+```bash
+git diff main...HEAD | grep '^-' | grep -v '^---'
+```
+
+Another repository ran this deliberately and accounted for all 133 deleted lines across 45 files,
+finding the concentration — 39 deletions — in the single file that had conflicted in every rebase.
+All were dead symbols it had intentionally removed. That is the useful outcome: not "no deletions"
+but "every deletion is one I can name."
+
+**Compilation is proof for one class of deletion and not the others.** If a deleted symbol still
+had a caller on `main`, the build fails, so a green build rules that out. It says nothing about a
+deleted config line, a dropped ignore entry, a reverted dependency bump, or a removed test — none
+of which any gate will notice. Read those by eye.
+
+**A measurement is evidence for the number, not for the cause.** The most expensive defect in thismigration was self-inflicted and began with a correct report. A consumer measured 37 packages /
 6.2 MB of React and Next tooling arriving in a Svelte-only repository. We assigned it a cause —
 that `peerDependenciesMeta.optional` does not prevent installation — and on that basis moved five
 framework plugins into a bespoke `frameworkPlugins` field that npm ignores, published the mechanism
