@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/eslint-config",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Engineering-owned ESLint flat configuration presets.",
   "license": "UNLICENSED",
   "private": false,
@@ -33,6 +33,10 @@
     "./next": {
       "types": "./next.d.ts",
       "default": "./next.js"
+    },
+    "./ignores": {
+      "types": "./ignores.d.ts",
+      "default": "./ignores.js"
     }
   },
   "types": "./base.d.ts",
@@ -49,6 +53,7 @@
     "react.d.ts",
     "next.d.ts",
     "types.d.ts",
+    "ignores.d.ts",
     "README.md"
   ],
   "engines": {

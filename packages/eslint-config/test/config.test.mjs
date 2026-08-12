@@ -137,6 +137,42 @@ describe('shared ignores', () => {
     assert.ok(toolingFiles.some((g) => g.includes('.config.')));
     assert.ok(toolingFiles.some((g) => g.includes('scripts/')));
   });
+
+  test('treats interchangeable suffixes and extensions identically', () => {
+    // A consumer measured 84 `no-require-imports` errors across 36 tooling
+    // files this list did not reach. Part of the cause was that the list had
+    // grown by accretion: `*.test.js` was present and `*.spec.js` was not, so
+    // whether a file counted as tooling depended on which of two synonymous
+    // suffixes its author had picked. Renaming a file changed its lint result.
+    for (const stem of ['test', 'spec']) {
+      for (const ext of ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs']) {
+        assert.ok(
+          toolingFiles.includes(`**/*.${stem}.${ext}`),
+          `toolingFiles is missing **/*.${stem}.${ext}`,
+        );
+      }
+    }
+    for (const ext of ['ts', 'js', 'mjs', 'cjs']) {
+      assert.ok(
+        toolingFiles.includes(`**/*.config.${ext}`),
+        `toolingFiles is missing **/*.config.${ext}`,
+      );
+      for (const dir of ['scripts', 'tools']) {
+        assert.ok(
+          toolingFiles.includes(`**/${dir}/**/*.${ext}`),
+          `toolingFiles is missing **/${dir}/**/*.${ext}`,
+        );
+      }
+    }
+  });
+
+  test('exempts tooling files from no-require-imports', () => {
+    // CommonJS tooling has no alternative to `require`, so the rule produced an
+    // error whose suggested fix is a syntax error in the file being linted.
+    const [config] = base().filter((c) => c.files === toolingFiles);
+    assert.equal(config.rules['@typescript-eslint/no-require-imports'], 'off');
+    assert.equal(config.rules['no-console'], 'off');
+  });
 });
 
 describe('typescript peer range', () => {
