@@ -11,6 +11,14 @@ describe('type declarations', () => {
   // gets `TS7016: Could not find a declaration file` if any subpath resolves to
   // bare JavaScript. That failure names this package while the feature being
   // adopted lives in `eslint-config`, so it reads as an unrelated regression.
+  //
+  // This asserts SHAPE — that a declaration is declared and published. It cannot
+  // see whether the declaration carries real types: one that widened to `any`
+  // would pass every assertion here. That gap is not closable by the usual probe
+  // either, because Prettier's `Config` has an index signature (`[_: string]:
+  // unknown`), so a bogus key type-checks against a perfectly good declaration.
+  // The check that does discriminate is a KNOWN key's type — `config.semi` must
+  // be `boolean | undefined`, not `any` — which needs a real `tsc` run.
   test('every export subpath resolves to a declaration', async () => {
     const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
