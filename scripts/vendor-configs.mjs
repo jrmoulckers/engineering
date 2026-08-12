@@ -254,6 +254,38 @@ async function latestRef() {
 }
 
 /**
+ * How many releases sit between a pin and the newest one.
+ *
+ * Four repositories read `you vendored v0.15.4; the newest release is v0.115.0`
+ * and stayed where they were. Two version strings of similar shape read as
+ * adjacent — `15.4` and `115.0` look like neighbours — and the notice's own
+ * "this is a valid choice" made a 116-release gap sound deliberate. A count
+ * cannot be misread that way.
+ *
+ * Fails soft like every other network step: no number is better than a wrong
+ * one, and this must never be able to redden a build.
+ */
+async function releaseGap(ref) {
+  try {
+    const response = await fetch(
+      `${process.env.VENDOR_API_BASE ?? 'https://api.github.com'}/repos/${REPO}/releases?per_page=100`,
+      { headers: { accept: 'application/vnd.github+json', 'user-agent': REPO } },
+    );
+    if (!response.ok) return null;
+    const body = await response.json();
+    if (!Array.isArray(body)) return null;
+    const newer = body.filter(
+      (r) => typeof r?.tag_name === 'string' && isNewerRef(r.tag_name, ref),
+    );
+    // One page holds 100. Anything at the cap is reported as a floor rather
+    // than as a total, because understating a gap is the failure being fixed.
+    return { count: newer.length, atLeast: body.length === 100 };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Verify the vendored tree still matches the lock, then report staleness.
  *
  * The split in severity is the whole point. Drift is a local integrity failure
@@ -366,11 +398,22 @@ async function check() {
   const latest = await latestRef();
   if (isNewerRef(latest, lock.ref)) {
     process.stdout.write(
-      `\nNotice: pinned at ${lock.ref}; newest release is ${latest}.\n` +
+      `\nNotice: pinned at ${lock.ref}; newest release is ${latest}${await gapPhrase(lock.ref)}.\n` +
         `This is not a failure. Update deliberately when you choose to:\n` +
         `  node scripts/vendor-configs.mjs ${latest}\n`,
     );
   }
+}
+
+/**
+ * Renders the gap, or nothing at all when it cannot be established. An empty
+ * string is deliberate: a notice that says "0 releases behind" because a
+ * request failed is worse than one that stays quiet about the count.
+ */
+async function gapPhrase(ref) {
+  const gap = await releaseGap(ref);
+  if (!gap || gap.count === 0) return '';
+  return `, ${gap.atLeast ? 'at least ' : ''}${gap.count} release(s) newer`;
 }
 
 /**
@@ -639,7 +682,7 @@ async function reportStaleness(ref) {
   const latest = await latestRef();
   if (isNewerRef(latest, ref)) {
     process.stdout.write(
-      `\nNotice: you vendored ${ref}; the newest release is ${latest}.\n` +
+      `\nNotice: you vendored ${ref}; the newest release is ${latest}${await gapPhrase(ref)}.\n` +
         `This is not a failure — pinning to an older ref is a valid choice.\n` +
         `If it was not deliberate, resolve the tag rather than typing one:\n` +
         `  gh api repos/${REPO}/releases/latest --jq .tag_name\n`,

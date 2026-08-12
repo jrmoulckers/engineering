@@ -344,13 +344,35 @@ The two outcomes deliberately differ in severity:
   stops meaning anything. Without this, vendoring quietly reintroduces the drift the registry
   channel prevents, which is [ADR-0001](architecture/0001-two-channel-config-delivery.md)'s main
   cost. This closes it.
-- **Staleness only warns**, and exits 0: ```
-  Notice: pinned at v0.114.0; newest release is v0.115.0.
-  This is not a failure. Update deliberately when you choose to:
-  node scripts/vendor-configs.mjs v0.115.0
-  ```
+- **Staleness only warns**, and exits 0:
 
   ```
+  Notice: pinned at v0.114.0; newest release is v0.115.0, 1 release(s) newer.
+  This is not a failure. Update deliberately when you choose to:
+    node scripts/vendor-configs.mjs v0.115.0
+  ```
+
+  The **count** is there because four repositories read a two-line version comparison and stayed
+  where they were. `v0.15.4` and `v0.115.0` read as neighbours — they differ by one character —
+  and "this is not a failure" made a **116-release** gap sound like a decision someone had made.
+  `116 release(s) newer` cannot be skimmed that way. If the count cannot be established it is
+  omitted rather than guessed, and a full page reports `at least N` rather than a wrong total.
+
+**Wire it into a command that already runs, or it will not run.** A check people have to remember
+has the reliability of not having one:
+
+```json
+{
+  "scripts": {
+    "vendor:check": "node scripts/vendor-configs.mjs --check",
+    "lint": "npm run vendor:check && eslint ."
+  }
+}
+```
+
+Chaining it ahead of lint short-circuits: under drift it exits 1 before ESLint runs, so the first
+error you see is the real one rather than a hundred confusing rule failures from a half-reverted
+config. If your CI calls a shared workflow with a `lint-command` input, put the chain there.
 
 **Never make staleness fatal, and never resolve the newest tag at fetch time.** Both convert
 pinning from a decision into a default. If a tag pushed here could redden your build, the change
@@ -1193,6 +1215,17 @@ steps:
 > is exactly why its per-job `duration_ms` is `0` rather than absent. Read it as: **no jobs means it
 > was never admitted; jobs with zero time means it was admitted and never ran.**
 >
+> **The sharpest discriminator needs no API call at all: find a job with no shared surface.** A
+> consumer pointed out that in their dead run, a plain `runs-on: ubuntu-latest` typecheck job also
+> died at `steps=0` — a job that calls no reusable workflow, takes no `registry-url`, requests only
+> `contents: read`, and installs nothing from this registry. Nothing about presets, permissions,
+> package visibility, or your pin can reach such a job.
+>
+> So: **if a run kills a job that has no shared-workflow surface at all, the cause is account-level,
+> not anything in this document.** That reasoning holds without reading annotations or timings, and
+> it is worth applying before any of the tables above — it is also the check that stops a permission
+> conclusion drawn during a billing outage from being believed. Keep one such job in your workflow
+> if you can; it doubles as a control.>
 > Prefer the annotation regardless. It states the cause outright, and neither counting exercise has
 > to be interpreted.
 >
