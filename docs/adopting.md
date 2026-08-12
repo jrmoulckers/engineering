@@ -899,6 +899,40 @@ steps:
 > Prefer the annotation regardless. It states the cause outright, and neither counting exercise has
 > to be interpreted.
 >
+> **A control run is only valid if it ran in the same platform state as the test, and this outage
+> has already voided one.** The standard control for "did my change break CI" is to compare the
+> changed branch against unmodified `main`. That is sound only when both runs happened on the same
+> side of the billing boundary. Once an account-level hold is in force, `main` fails too, and the
+> comparison stops discriminating — it returns "both red" no matter what the change did.
+>
+> This is not hypothetical. Measured on the fleet, the boundary is sharp:
+>
+> | run                    | result         |
+> | ---------------------- | -------------- |
+> | `2026-08-10T21:45:23Z` | **last green** |
+> | `2026-08-11T00:15:55Z` | **first red**  |
+>
+> Every private-repository run after that point is red, across four repositories, all with the
+> billing annotation. So **any CI-derived conclusion drawn from a private repo in that window rests
+> on a control that could not fail** — a full day of evidence, not the few hours it feels like from
+> inside the window.
+>
+> One repository in the fleet is worse off than confounded: it has **300 runs and zero successes**,
+> and its oldest surviving run already postdates the boundary. It has never once observed its own
+> CI pass. Nothing it concluded from a green-versus-red comparison can be load-bearing, because it
+> has never had a green.
+>
+> The practical rule: **before treating a red run as evidence about your change, confirm the account
+> can produce a green run at all.** The cheapest check is a public repository under the same
+> account, whose Actions minutes are not billed and which therefore stays green throughout. If the
+> public repo is green and every private one is red, you are looking at billing, and no amount of
+> workflow archaeology will move it.
+>
+> And when you report the finding, **give the boundary rather than a relative duration.** "It
+> started in the last three hours" was off by an order of magnitude here, because the reporter
+> reasonably dated the outage from when they noticed it. A timestamp is checkable by everyone else;
+> "recently" silently re-anchors to each reader's clock.
+>
 > **A consumer proposed `runner_name` as the discriminator instead. It works, but not for the
 > stated reason, and the value they named selects the wrong jobs.** Measured on both arms:
 >
