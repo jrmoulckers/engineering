@@ -3480,10 +3480,27 @@ gate you have never seen fail is a gate you have not yet tested.
 > `eslint-config-next` is a **meta-package**: it bundles `eslint-plugin-react`,
 > `eslint-plugin-jsx-a11y` and `eslint-plugin-react-hooks` as direct dependencies. This preset
 > consumes the bare `@next/eslint-plugin-next` instead, which carries only the `@next/next/*` rules.
-> For one release that meant every Next consumer silently lost **18 `react/*` and 31 `jsx-a11y/*`
-> rules** on adoption.
+> For one release that meant every Next consumer silently lost **every** `react/*` and `jsx-a11y/*`
+> rule on adoption.
 >
-> Three things made it invisible, and they generalise to any meta-package swap:
+> **Name the baseline whenever you quote a count for this defect — three are in play and all three
+> numbers are true.** Measured on the same probe file:
+>
+> | Measured from                 | `react/*` | `jsx-a11y/*` |
+> | ----------------------------- | --------- | ------------ |
+> | legacy `next/core-web-vitals` | 17 active | 6 active     |
+> | the broken `nextConfig()`     | 0         | 0            |
+> | the fixed layer (`0.13.0`+)   | 18 active | 31 active    |
+>
+> So the regression **dropped 17 and 6** relative to what consumers migrate off; a consumer
+> measuring the broken preset against the fix correctly reports **0 → 18 and 0 → 31**; and the fix
+> lands _ahead_ of the legacy config. A bare "18 and 31 were dropped" is wrong, because it implies
+> the legacy config enforced that many. I made exactly that error correcting these numbers — took a
+> consumer's true figure measured from one baseline and overwrote a true figure measured from
+> another. **Two correct measurements of the same change disagree whenever their baselines differ,
+> and neither one is a check on the other.**
+>
+> Three things made the original regression invisible, and they generalise to any meta-package swap:
 >
 > - **A rule-by-rule diff of the Next rules scores it as no change.** The `@next/next/*` set is
 >   identical either side. You have to diff the rules you did _not_ think you were changing.

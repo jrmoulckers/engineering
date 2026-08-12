@@ -64,12 +64,16 @@ function resolveCoreWebVitals() {
  * as direct dependencies. Omitting any of them here silently drops rules with no
  * signal at the call site.
  *
- * This preset made that argument for hooks and then shipped only hooks, dropping
- * 17 `react/*` and 6 `jsx-a11y/*` rules — including `react/jsx-key`, a real
- * correctness bug, and `jsx-a11y/alt-text`. The omission could not fail loudly:
- * removing `eslint-config-next` also removes the only thing installing those
- * plugins, so there was no unresolved-plugin error to raise. The rules ceased to
- * exist and lint stayed green.
+ * This preset made that argument for hooks and then shipped only hooks, taking
+ * `react/*` and `jsx-a11y/*` to zero — a drop of 17 and 6 respectively relative
+ * to the `eslint-config-next` consumers migrate off, and including
+ * `react/jsx-key`, a real correctness bug, and `jsx-a11y/alt-text`. The omission
+ * could not fail loudly: removing `eslint-config-next` also removes the only
+ * thing installing those plugins, so there was no unresolved-plugin error to
+ * raise. The rules ceased to exist and lint stayed green. See `react-layer.js`
+ * for the three baselines these counts can be measured from — the restored
+ * layer enables 18 and 31, which is *ahead* of the legacy config, so a count
+ * quoted without its baseline is ambiguous.
  *
  * The shared block lives in `react-layer.js` so this preset and `reactConfig()`
  * cannot drift apart again. The React Compiler family stays opt-in via

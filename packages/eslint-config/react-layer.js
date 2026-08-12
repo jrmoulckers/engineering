@@ -68,11 +68,24 @@ function asConfigArray(pluginName, candidate, where) {
  * `eslint-plugin-react`, `eslint-plugin-jsx-a11y`, and `eslint-plugin-react-hooks`.
  *
  * **This exists so the two presets cannot drift.** `nextConfig()` originally
- * imported only `@next/eslint-plugin-next` and layered hooks by hand. That
- * dropped all 18 `react/*` and all 31 `jsx-a11y/*` rules relative to the
- * `eslint-config-next` consumers migrate off — which bundles
- * `eslint-plugin-react`, `eslint-plugin-jsx-a11y` and `eslint-plugin-react-hooks`
- * as direct dependencies, not just hooks.
+ * imported only `@next/eslint-plugin-next` and layered hooks by hand, taking
+ * `react/*` and `jsx-a11y/*` to **zero**.
+ *
+ * State the baseline with any count here, because three are in play and each
+ * gives a different true number for the same defect:
+ *
+ * | Measured from                        | `react/*` | `jsx-a11y/*` |
+ * | ------------------------------------ | --------- | ------------ |
+ * | legacy `next/core-web-vitals`        | 17 active | 6 active     |
+ * | the broken `nextConfig()`            | 0         | 0            |
+ * | this layer (`0.13.0`+)               | 18 active | 31 active    |
+ *
+ * So the regression *dropped* 17 and 6 relative to what consumers migrate off,
+ * a consumer measuring the broken preset against the fix correctly reported
+ * 0 -> 18 and 0 -> 31, and the fix ends up *ahead* of the legacy config because
+ * `eslint-config-next` ships a hand-picked `jsx-a11y` subset rather than the
+ * plugin's recommended set. A bare "18 and 31" implies the legacy config had
+ * none, which is false.
  *
  * The mechanism is worth naming, because it is not a forgotten rule in a list:
  * `eslint-config-next` is a meta-package, and dropping down to the bare
