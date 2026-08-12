@@ -39,6 +39,19 @@ jobs:
         shell: pwsh
         run: pwsh -File .github/scripts/test-validate-principles.ps1
 
+  # Merging is not shipping: publish.yml runs on a tag, so a merge to main
+  # reaches no consumer until one is pushed. That was missed for 30 consecutive
+  # commits while each fix was reported to seven repositories as shipped. Needs
+  # full history and tags, hence its own checkout.
+  release-lag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Fail on package changes that no tag could publish
+        run: node scripts/check-release-lag.mjs
+
   packages:
     runs-on: ubuntu-latest
     permissions:
