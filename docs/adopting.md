@@ -2899,6 +2899,25 @@ escape hatch aborted a run. Hand-authored browser ESM with no project file anywh
 confirmed instance** of that shape, from an unrelated repository — enough to treat it as a category
 the presets must handle rather than an edge case.
 
+A **third** instance is the one that should set your expectations, because it is the least exotic:
+a Next application carrying three ordinary `.js` files in its own `src/` — an env module, a logger,
+a config table — alongside its TypeScript. Not tooling, not embedded assets, not a foreign
+ecosystem. The consumer confirmed it per file:
+
+| File                        | `no-misused-promises` | `projectService` |
+| --------------------------- | --------------------- | ---------------- |
+| `src/env.js`                | `0`                   | `false`          |
+| `src/lib/log.js`            | `0`                   | `false`          |
+| `src/config/media-hosts.js` | `0`                   | `false`          |
+| `src/lib/utils.ts`          | `2`                   | `true`           |
+
+**So the question to ask before adopting a type-aware option is not "do I have unusual files?" but
+"do I have any `.js` under `src/`?"** In a repository mid-migration to TypeScript the answer is
+almost always yes, and those files are the ones least likely to be remembered — they are the part
+of the codebase nobody is currently working on. The last row is what makes the table evidence
+rather than an absence: it shows the rule is genuinely on where a project exists, so the zeros
+above are scoping and not a preset that quietly disabled itself.
+
 > **The wider class: a missing thing presents as a wrong thing, or as a passing one.** The same
 > consumer unified three failures in this migration that had been recorded separately, and the
 > unification is correct — they are one lesson, not three:
