@@ -4085,6 +4085,52 @@ Before trusting a verification, ask which of these it was: the check ran and fou
 check ran against something other than the claim; or the check could not run at all and said so
 quietly.
 
+### Some defects are invisible from your side, by construction
+
+A preset has two kinds of version range, and they are not symmetric:
+
+| Range                  | Whose problem | Can you observe it?                                                                    |
+| ---------------------- | ------------- | -------------------------------------------------------------------------------------- |
+| **`peerDependencies`** | Yours         | Yes — it sits in your manifest, and install warns or fails                             |
+| **`dependencies`**     | Ours          | **No.** Not by lint results, not by peer warnings, not by `--strict-peer-dependencies` |
+
+A stale peer range is visible enough that adopters have reported three of them here. A stale
+_dependency_ range has no consumer-side vantage point at all: the only way to see it is to read the
+preset's own manifest as source. That is why `@eslint/js` sat at a range that excluded ESLint 10's
+recommended set while every consumer was green — a repo on ESLint 10 was linting against the
+ESLint 9 rule set, correctly, silently, and with nothing to notice.
+
+Our version matrix agreed with the consumers, and for the worst possible reason: it installed
+`eslint@10` but resolved `@eslint/js@9` from the lockfile, reproducing the defective pairing and
+then certifying it. **A matrix that does not assert what it resolved tests one configuration
+twice.**
+
+So when we tell you a floor moved for a dependency reason, take it as a correctness fix rather than
+housekeeping — you could not have found it, and neither could your CI. And when three of four
+ranges turn out to be stale, check the fourth rather than inferring it: `typescript-eslint` stayed
+at `^8.13.0` deliberately, because the caret still reaches current and its own TypeScript ceiling is
+where our cap comes from.
+
+### Re-verify a finding before you re-send it
+
+A finding is true at a timestamp, not permanently. Both directions have now happened in this
+migration, days apart:
+
+- A digest from here repeated that a repository cited `ENG-ARCH-003` while having no `docs/` at
+  all. Correct when first observed; by the time it was re-sent, that repository had added
+  `docs/architecture/0001-…` — **the gap was closed by the very report that flagged it**, and the
+  re-send described its author's own fixed problem as outstanding.
+- A repository reported two defects as open across three consecutive messages after both had been
+  fixed and announced, because the fix landed in a version they could not install.
+
+The remedy is not more careful authoring. Both messages were carefully authored and both were
+stale by the time they arrived. **Re-check each carried-forward item at send time, not at
+authoring time** — a status line costs one command and a repeated finding costs somebody a
+re-investigation of settled work.
+
+The tell is a report that survives more than one round trip unchanged. If an item has appeared in
+three messages, the likeliest explanation is no longer that nobody has acted on it.
+
 ### Take patches automatically; take minors as a decision
 
 **This reverses guidance given here earlier, and the counter-example is one of our own releases.**

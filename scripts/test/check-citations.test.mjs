@@ -516,4 +516,53 @@ describe('citation link anchors (ENG-DOC-004)', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  // An adopter following this repository's own naming convention ended up
+  // stating the name twice, because their prose already italicised principle
+  // names. Both halves are correct, so every other check passes.
+  describe('duplicated principle names', () => {
+    const CITE = '[`ENG-ARCH-003` (Durable decisions)](../principles/architecture/decisions.md)';
+
+    test('warns when the stated name is also emphasised nearby', () => {
+      const dir = fixture(`${CITE} *Durable decisions* requires an ADR.\n`);
+      try {
+        const { code, out } = run(dir, ['--no-links']);
+        assert.match(out, /Redundant: 1 citation\(s\) state the principle name twice/);
+        assert.match(out, /ENG-ARCH-003/);
+        assert.equal(code, 0, 'a redundancy caused by our own advice must not fail a consumer');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test('bold emphasis counts too', () => {
+      const dir = fixture(`${CITE} **Durable decisions** is the rule.\n`);
+      try {
+        assert.match(run(dir, ['--no-links']).out, /state the principle name twice/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    // The control that matters: emphasising a *different* principle's name is
+    // ordinary prose, not duplication.
+    test('a different emphasised name is not a duplicate', () => {
+      const dir = fixture(`${CITE} and *Thin typed adapters* both apply.\n`);
+      try {
+        const { out } = run(dir, ['--no-links']);
+        assert.doesNotMatch(out, /Redundant:/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test('an unemphasised citation stays quiet', () => {
+      const dir = fixture(`${CITE} requires an ADR.\n`);
+      try {
+        assert.doesNotMatch(run(dir, ['--no-links']).out, /Redundant:/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
 });
