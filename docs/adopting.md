@@ -1044,6 +1044,19 @@ instances in which **a missing thing presents as a passing one**.
 > the versions are equivalent. Strictly, `print-config` compares _resolved output for one
 > invocation_, and a factory has as many resolved outputs as it has option combinations.
 >
+> **The same option pair has a second trap, and a consumer hit it while migrating _off_ a legacy
+> config.** They measured 64 rules lost against their old setup and attributed 40 of them — the
+> type-aware `@typescript-eslint` rules — to a "`projectService` gap." `projectService` was
+> already enabled: `nextConfig()` defaults `typeAware` to `true`, so type information was being
+> supplied the whole time. Turning it on would have changed nothing, because the missing rules
+> were never gated on it.
+>
+> `typeAware` supplies the **information**; `strictTypeChecked` layers the **rules that consume
+> it**. Two knobs where the first reads as though it should be sufficient, and the symptom — 40
+> type-aware rules absent — names the information rather than the rule set. Passing
+> `strictTypeChecked: true` restores them, and works on every preset, since each forwards unknown
+> options to `base()`.
+>
 > The direction repeats this repository's earlier case with a better instrument. Then, behavioural
 > verification passed because a stale version behaves correctly. Now, a configuration diff read
 > zero because a stale version _configures_ correctly. Both times what was missing was capability,
@@ -3393,6 +3406,25 @@ Two rules that do matter, because both have been violated in practice:
 - **Do not renumber a published record.** Anything already merged may be cited from another
   repository, and this repository's own guidance tells consumers to cite ADRs by number. Fix a
   collision by giving the _newer_ record the next free number.
+
+**Fixing a collision means re-resolving every reference, not substituting the number.** A consumer
+found two records sharing `0003` and, before moving one, checked what the seven existing bare
+`ADR 0003` mentions actually meant. They did not all mean the same document: three tests and a
+design doc cited the canonical-URL and `308` behaviour of one record, while two source files cited
+the erasure-hold precondition of the other. A blanket `0003 → 0004` would have mis-pointed four of
+the seven.
+
+The reason this is worth a rule of its own is that the wrong result is **stable**: both numbers
+resolve to a real file, so nothing 404s, no check fails, and the citation reads authoritatively
+forever. It is the ADR form of a wrong-but-real `ENG-*` ID — the failure is that the reference
+resolves to the wrong _claim_, which existence checking cannot see. Resolve each reference against
+the text it is claiming, mechanically where you can: here, the erasure record contained no
+`canonical` and no `308` anywhere, which settled the split without a judgement call.
+
+Two references are easy to miss because they do not look like citations. The first is a
+`Superseded by ADR NNNN` heading — when the collision moves the _superseding_ record, that heading
+is stale even though the rule above is about the superseded record keeping its number. The second
+is a number embedded in test names or fixture data, which greps differently from prose.
 
 ### An ADR records a choice you made, not a fact you discovered
 
