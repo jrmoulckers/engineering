@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -474,5 +474,59 @@ describe('vendor-configs formatter interaction', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('vendor-configs lock validation', () => {
+  // The lock is the input to --check. A checker that cannot read its own input
+  // must say so: the state where extraction failed looks identical to clean.
+  function withLock(contents, body) {
+    const dir = workspace();
+    try {
+      mkdirSync(join(dir, 'cfg'), { recursive: true });
+      writeFileSync(join(dir, 'cfg', 'a.json'), '{}', 'utf8');
+      writeFileSync(join(dir, 'engineering-configs.lock.json'), contents, 'utf8');
+      body(run(['--check'], dir));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  test('distinguishes a corrupt lock from an absent one', () => {
+    withLock('{ not json', ({ code, out }) => {
+      assert.equal(code, 1);
+      assert.match(out, /exists but is not valid JSON/);
+      // Reporting "not found" for a file sitting right there sends the reader
+      // looking for the wrong problem.
+      assert.doesNotMatch(out, /no engineering-configs\.lock\.json found/);
+    });
+  });
+
+  for (const [name, entry] of [
+    ['null entry', 'null'],
+    ['no sha256', '{"source":"x"}'],
+    ['null sha256', '{"source":"x","sha256":null}'],
+    ['empty sha256', '{"source":"x","sha256":""}'],
+    ['string instead of object', '"deadbeef"'],
+  ]) {
+    test(`refuses to verify a lock entry with ${name}`, () => {
+      withLock(`{"ref":"v1","files":{"cfg/a.json":${entry}}}`, ({ code, out }) => {
+        assert.equal(code, 1, 'must not report success on an unverifiable entry');
+        assert.match(out, /no usable sha256/);
+        // "content differs" would be a false accusation: the file may be fine.
+        assert.doesNotMatch(out, /content differs/);
+      });
+    });
+  }
+
+  test('still passes a lock that genuinely matches', () => {
+    const hash = createHash('sha256').update('{}').digest('hex');
+    withLock(
+      `{"ref":"v1","files":{"cfg/a.json":{"source":"x","sha256":"${hash}"}}}`,
+      ({ code, out }) => {
+        assert.equal(code, 0);
+        assert.match(out, /1 vendored file\(s\) match/);
+      },
+    );
   });
 });

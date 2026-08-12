@@ -198,11 +198,24 @@ async function latestRef() {
  * accept the change, which is the property pinning exists to protect.
  */
 async function check() {
-  let lock;
+  let raw;
   try {
-    lock = JSON.parse(await readFile(LOCK, 'utf8'));
+    raw = await readFile(LOCK, 'utf8');
   } catch {
     fail(`no ${LOCK} found`, 'Run: node scripts/vendor-configs.mjs <ref>');
+  }
+
+  // A corrupt lock and an absent one are different problems with different
+  // fixes, and reporting "not found" for a file sitting right there sends the
+  // reader looking for the wrong thing.
+  let lock;
+  try {
+    lock = JSON.parse(raw);
+  } catch (error) {
+    fail(
+      `${LOCK} exists but is not valid JSON: ${error.message}`,
+      'Restore it from version control, or re-run the vendor step to rewrite it.',
+    );
   }
 
   const entries = Object.entries(lock.files ?? {});
@@ -210,6 +223,18 @@ async function check() {
 
   const drifted = [];
   for (const [dest, meta] of entries) {
+    // A lock entry carrying no usable hash cannot verify anything. Comparing
+    // against it would report "content differs", sending the reader to re-vendor
+    // a file that may be perfectly correct — and if the comparison were ever
+    // loosened, `undefined === undefined` would pass every file silently.
+    // The lock is the input to this check, so it gets the same validation the
+    // fetched payload does.
+    const expected = typeof meta?.sha256 === 'string' ? meta.sha256 : null;
+    if (!expected) {
+      drifted.push(`${dest}: lock entry has no usable sha256, so nothing can be verified`);
+      continue;
+    }
+
     let text;
     try {
       text = await readFile(dest, 'utf8');
@@ -217,7 +242,7 @@ async function check() {
       drifted.push(`${dest}: missing`);
       continue;
     }
-    if (sha256(text) !== meta.sha256) drifted.push(`${dest}: content differs from the lock`);
+    if (sha256(text) !== expected) drifted.push(`${dest}: content differs from the lock`);
   }
 
   if (drifted.length > 0) {
