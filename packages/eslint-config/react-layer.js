@@ -69,15 +69,26 @@ function asConfigArray(pluginName, candidate, where) {
  *
  * **This exists so the two presets cannot drift.** `nextConfig()` originally
  * imported only `@next/eslint-plugin-next` and layered hooks by hand. That
- * dropped 17 `react/*` and 6 `jsx-a11y/*` rules relative to the
+ * dropped all 18 `react/*` and all 31 `jsx-a11y/*` rules relative to the
  * `eslint-config-next` consumers migrate off — which bundles
  * `eslint-plugin-react`, `eslint-plugin-jsx-a11y` and `eslint-plugin-react-hooks`
  * as direct dependencies, not just hooks.
+ *
+ * The mechanism is worth naming, because it is not a forgotten rule in a list:
+ * `eslint-config-next` is a meta-package, and dropping down to the bare
+ * `@next/eslint-plugin-next` gets only the `@next/next/*` rules. A rule-by-rule
+ * diff of the *Next* rules scores that change as no change at all.
  *
  * The regression was silent in the worst way. Removing `eslint-config-next` also
  * removes the only thing that installed those two plugins, so nothing was left
  * to report an unresolved plugin: the rules simply ceased to exist and lint
  * stayed green. `react/jsx-key` — a real correctness bug — passed.
+ *
+ * Measured by a consumer on a real Next application: restoring the layer moved
+ * 95 active rules to 141 and surfaced **23 accessibility findings across 15
+ * files** — keyboard-inaccessible controls, unlabelled inputs, uncaptioned
+ * media — while `react/*` reported **zero**. So the React half is coverage at no
+ * cost, and the a11y half is where the defects were.
  *
  * Duplicating this block in both presets would restore coverage today and let it
  * diverge again on the next change, so both presets call this instead.
