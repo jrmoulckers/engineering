@@ -22,11 +22,21 @@
     "is behind, which is the safe direction: every version named here still resolves.",
     "",
     "Read \"channels\" below before reporting that you are blocked on package access. Three",
-    "separate repositories have reported being blocked on all three packages when only one",
-    "of them is installed from the registry at all. That fact was documented in",
-    "docs/adopting.md each time, but a consumer reads the docs at the ref they pinned, while",
-    "this file is read from main -- so the meaning of \"channel\" lives here, next to the",
-    "value it explains, rather than only in prose that goes stale in the reader's checkout.",
+    "separate repositories reported being blocked on all three packages, and this file told them",
+    "that only one was installed from the registry. THEY WERE RIGHT AND THIS FILE WAS WRONG.",
+    "tsconfig and prettier-config were recorded as channel \"vendored\" -- never published, no",
+    "token needed -- while all three packages are private: false and publish.yml publishes every",
+    "directory under packages/ unconditionally without consulting channel. All three have always",
+    "been on the registry. All three need a token. All three are gated on the same visibility",
+    "grant.",
+    "",
+    "The evidence was in this repository's own CI on every run: check-published-versions prints",
+    "\"versions.json matches the registry for 3 of 3 package(s)\", which is only possible if all",
+    "three are published -- and that line was quoted as proof this file was correct. A check can",
+    "be passing, accurate, and read as confirming the opposite of what it says. Co-locating an",
+    "explanation with a value does nothing if nothing checks the value, so the legend is now",
+    "enforced: a channel claiming requiresRegistryAuth false must be backed by a package with",
+    "private: true, and a channel no package uses cannot stay in this file. Both are tested.",
     "",
     "Copy \"range\" literally. Do not rewrite it as a caret. Every package here is below 1.0,",
     "and for a 0.x version npm reads ^0.2.0 as >=0.2.0 <0.3.0 -- it pins the MINOR, not the",
@@ -43,12 +53,10 @@
     "tracking issue outlives the chat that would have corrected it. If you record these",
     "values outside your repository, record the URL of this file next to them.",
     "",
-    "Do not write a npm specifier for a vendored package at all. Two of the three packages",
-    "below are channel \"vendored\": they are never published, so \"range\" describes the source",
-    "revision to copy, not something to put in package.json. A repository that lists all",
-    "three as dependencies is waiting on registry access for two packages it could have",
-    "adopted the same day. That has now happened after the channels legend was added, because",
-    "the specifiers were written down before the legend was read."
+    "Do not write a npm specifier for a vendored package at all. All three packages below are",
+    "channel \"registry\" today, so this does not currently apply to any of them -- it is kept",
+    "because a consumer listed all three as dependencies, was told two were vendored and",
+    "unblocked, and lost time acting on advice this file was the source of."
   ],
   "channels": {
     "registry": {
@@ -58,16 +66,6 @@
         "Add it to package.json and install it. GitHub Packages authenticates every read,",
         "including reads of a public package, so contributors and CI both need a classic PAT",
         "with read:packages. Package visibility affects authorization, not authentication."
-      ]
-    },
-    "vendored": {
-      "summary": "Copied into your repository at a ref. No token, no registry, no visibility dependency.",
-      "requiresRegistryAuth": false,
-      "notes": [
-        "Never published. Do not add it to package.json and do not wait on package access to",
-        "adopt it -- copy the file from this repository at a tag and record which tag you used.",
-        "If you are blocked on registry access, everything in this channel is still available",
-        "to you today."
       ]
     }
   },
@@ -89,7 +87,7 @@
     },
     "@jrmoulckers/tsconfig": {
       "version": "0.4.0",
-      "channel": "vendored",
+      "channel": "registry",
       "range": ">=0.4.0 <1.0.0",
       "peerDependencies": {
         "typescript": "^5.5.0 || ^6.0.0 || ^7.0.0"
@@ -97,7 +95,7 @@
     },
     "@jrmoulckers/prettier-config": {
       "version": "0.3.0",
-      "channel": "vendored",
+      "channel": "registry",
       "range": ">=0.3.0 <1.0.0",
       "peerDependencies": {
         "prettier": "^3.0.0",
