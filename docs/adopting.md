@@ -4111,6 +4111,31 @@ gate you have never seen fail is a gate you have not yet tested.
 >
 > So the rule is not only "a repo tag is never an actionable npm specifier" — it is **do not verify
 > at a repo tag either**, unless you read the package version out of the same file.
+>
+> **The sharpest form: the same string is valid in both namespaces and means two different things.**
+> A second consumer, independently, planned an adoption around `v0.16.0`. Both readings exist:
+>
+> | Reading            | Resolves to                                         |
+> | ------------------ | --------------------------------------------------- |
+> | repo tag `v0.16.0` | ships `eslint-config@0.9.0`                         |
+> | package `0.16.0`   | first appears at repo tag `v0.115.0` — 99 tags away |
+>
+> Neither is `latest`. There is no error to notice, because both refs resolve. Their proposed floor
+> gave it away: `>=0.9.0 <1.0.0`, and `0.9.0` is exactly the package version sitting at repo tag
+> `v0.16.0`. The floor was not a judgement about compatibility, it was the artifact of reading a
+> manifest at a tag.
+>
+> **The damage is not the low floor — it is that the floor and the verification target disagree.**
+> `>=0.9.0 <1.0.0` resolves to `0.17.0`. So they would install a manifest with seven peers while
+> having verified against one with two, and every install-time gate would pass. A range that is too
+> wide is nearly harmless when a lockfile is committed; **a verification performed against a
+> different artifact than the one installed is invisible until runtime.**
+>
+> That gap is worst for peers that were **added** after the ref being read. At the older ref the
+> `./svelte` entrypoint existed while `eslint-plugin-svelte` was not declared as a peer at all — so
+> the honest answer to "what range does it document?" was _none_, and a consumer following it
+> installs no plugin and fails when the config loads, not when it installs. **An absent declaration
+> at an old ref reads identically to no requirement.**
 
 ### Dropping a meta-package for the plugin it wraps loses everything else it bundled
 

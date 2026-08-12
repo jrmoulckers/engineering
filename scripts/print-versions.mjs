@@ -18,14 +18,108 @@
 // A workspace version ahead of the recorded one is normal mid-release: it means
 // a bump has merged but the tag has not been pushed, so it is NOT yet
 // installable. Saying so is the whole point — that gap is what gets misreported.
+//
+// `--tag <ref>` exists because the warning above was not enough. Two consumers
+// independently planned adoptions around the string `v0.16.0`, which is BOTH a
+// real repo tag (shipping eslint-config@0.9.0) and a real package version
+// (first shipped at repo tag v0.115.0, 99 tags away). Neither reading errors,
+// so there is nothing to notice. Telling people "a tag is not a version" does
+// not help them when they are holding a string that is legitimately both; they
+// need to be able to resolve it. This does that, offline, from git alone.
 
 import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+const git = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+
+// Resolving a ref that does not exist must be loud. `git show <bad-ref>:<path>`
+// fails the same way as a path that is genuinely absent at a good ref, and an
+// empty result reads as "this package did not exist yet" — which is a wrong
+// answer that looks like a finding. Verify the ref first, separately.
+function atTag(ref) {
+  try {
+    git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+  } catch {
+    console.error(
+      `Unknown ref: ${ref}\n` +
+        'Nothing was compared. Fetch tags first (git fetch --tags), or list them:\n' +
+        '  git tag --list --sort=-v:refname | head',
+    );
+    process.exitCode = 1;
+    return null;
+  }
+
+  let listing;
+  try {
+    listing = git(['ls-tree', '--name-only', `${ref}:packages`]);
+  } catch {
+    console.error(`No packages/ directory exists at ${ref}. Nothing to report.`);
+    process.exitCode = 1;
+    return null;
+  }
+
+  const found = [];
+  for (const dir of listing.split('\n').filter(Boolean)) {
+    let pkg;
+    try {
+      pkg = JSON.parse(git(['show', `${ref}:packages/${dir}/package.json`]));
+    } catch {
+      continue;
+    }
+    if (pkg.private === true) continue;
+    found.push({ name: pkg.name, version: pkg.version });
+  }
+  return found;
+}
+
+const tagIndex = process.argv.indexOf('--tag');
+if (tagIndex !== -1) {
+  const ref = process.argv[tagIndex + 1];
+  if (!ref) {
+    console.error('--tag requires a ref, e.g. --tag v0.16.0');
+    process.exitCode = 1;
+  } else {
+    const found = atTag(ref);
+    if (found) {
+      if (found.length === 0) {
+        console.error(`No publishable packages found at ${ref}.`);
+        process.exitCode = 1;
+      } else {
+        console.log(`Repo tag ${ref} ships:\n`);
+        const nameWidth = Math.max(...found.map((f) => f.name.length));
+        for (const f of found.sort((a, b) => a.name.localeCompare(b.name))) {
+          console.log(`  ${f.name.padEnd(nameWidth)}  ${f.version}`);
+        }
+
+        // The string itself may be a plausible package version. Say so without
+        // claiming which the reader meant — the point is that both readings
+        // exist, not that one is wrong.
+        const bare = ref.replace(/^v/, '');
+        const alsoAVersion = /^\d+\.\d+\.\d+$/.test(bare);
+        const shipsItself = found.some((f) => f.version === bare);
+        if (alsoAVersion && !shipsItself) {
+          console.log(
+            `\n"${bare}" is also a well-formed package version, and this tag does not ship it.\n` +
+              'These are different namespaces. If you meant the package, ask the registry:\n' +
+              `  npm view @jrmoulckers/<name>@${bare} peerDependencies`,
+          );
+        }
+        console.log(
+          '\nRead peer ranges from the package version above, not from the tag. A peer that is\n' +
+            'ABSENT at an old ref reads exactly like a peer that is not required.',
+        );
+      }
+    }
+  }
+  process.exit(process.exitCode ?? 0);
+}
+
 const manifest = JSON.parse(await readFile(join(root, 'versions.json'), 'utf8'));
+
 const recorded = manifest.packages ?? {};
 
 const entries = await readdir(join(root, 'packages'), { withFileTypes: true });
@@ -84,5 +178,6 @@ if (pending.length > 0) {
 
 console.log(
   '\nGit tags are a repository counter, not a package version — do not quote them as one.\n' +
+    'Holding a tag and unsure what it ships?  npm run versions:print -- --tag v0.16.0\n' +
     'To confirm against the registry (needs read:packages): npm run versions:check',
 );
