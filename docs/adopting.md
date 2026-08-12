@@ -246,6 +246,38 @@ A file the previous lock never recorded is reported as **newly tracked**, not as
 it as changed would overstate the diff exactly when `--dest` or `--set` moved, which is when the
 number is read most closely.
 
+#### Evaluating a new ref without committing to it
+
+To see what a ref would change before adopting it, vendor it to a scratch directory:
+
+```sh
+node scripts/vendor-configs.mjs v0.115.0 --dest "$(mktemp -d)"
+```
+
+**A `--dest` outside the working directory writes no lock file at all.** It reports what changed and
+stops there. That is deliberate, and it is a bug fix: the lock's keys are read relative to the
+directory it sits in, so a lock describing a scratch tree describes nothing in your repository.
+Earlier versions wrote it anyway, which replaced the real lock with absolute scratch paths and left
+`--check` reporting
+
+```
+8 vendored file(s) match engineering-configs.lock.json at v0.15.4.
+```
+
+while examining **no repository file at all**. A hand-edited vendored file passed. The evaluation
+command recommended here disarmed the guard that exists to catch exactly that, and it did so
+silently — on the machine that ran the probe, every absolute path still resolved, so nothing looked
+wrong until CI failed with `missing` on paths no runner has.
+
+If you already committed such a lock, `--check` now **rejects it by the shape of its keys** rather
+than passing or blaming a missing file:
+
+```
+error: engineering-configs.lock.json records 10 path(s) outside /repo
+```
+
+Re-run without `--dest` to fix it. Reported by an adopter who ran the probe exactly as documented.
+
 Because the files are byte-identical, `git diff` after a refresh shows upstream's change and
 nothing else, and local drift shows up as a diff against the recorded hash.
 

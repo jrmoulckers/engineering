@@ -31,7 +31,7 @@
 
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative, resolve, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const REPO = 'jrmoulckers/engineering';
@@ -88,6 +88,37 @@ function fail(message, hint) {
  */
 function lockKey(path) {
   return path.split('\\').join('/');
+}
+
+/**
+ * The lock sits at the working directory root and its keys are read relative to
+ * that root, so it can only describe files underneath it. A `--dest` pointing
+ * outside — a scratch directory, the documented no-commitment probe — produces
+ * a lock that describes nothing in the repository. Writing it anyway replaced
+ * the real lock with absolute scratch paths, and `--check` then reported
+ * success having examined no repository file at all: a hand-edited vendored
+ * file still passed. The guard added to close the drift hole was disarmed by
+ * the evaluation command the docs recommend.
+ */
+export function escapesCwd(dest, cwd = process.cwd()) {
+  const rel = relative(cwd, resolve(cwd, dest));
+  return rel !== '' && (rel.startsWith('..') || isAbsolute(rel));
+}
+
+/**
+ * Index a previous lock by upstream source path rather than by destination.
+ * The destination moves whenever `--dest` does; the source path does not, so
+ * this is the only key under which "did this file's content change between
+ * refs?" survives being asked from a scratch directory — which is exactly
+ * where the question gets asked.
+ */
+function hashesBySource(previous) {
+  const map = new Map();
+  for (const [key, meta] of Object.entries(previous?.files ?? {})) {
+    if (typeof meta?.sha256 !== 'string') continue;
+    map.set(typeof meta.source === 'string' ? meta.source : key, meta.sha256);
+  }
+  return map;
 }
 
 async function exists(path) {
@@ -255,6 +286,21 @@ async function check() {
 
   const entries = Object.entries(lock.files ?? {});
   if (entries.length === 0) fail(`${LOCK} records no files`, 'Re-run the vendor step.');
+
+  // A key that escapes the working directory cannot be a vendored repository
+  // file. Such locks were written by `--dest` runs before that was refused, and
+  // they are the dangerous kind: on the machine that produced them every
+  // absolute path still resolves, so the check passes green while examining
+  // nothing in the repository. On CI the same lock fails as `missing`, naming a
+  // path rather than the cause. Rejecting the shape says what is actually wrong.
+  const escaped = entries.map(([key]) => key).filter((key) => escapesCwd(key));
+  if (escaped.length > 0) {
+    fail(
+      `${LOCK} records ${escaped.length} path(s) outside ${process.cwd()}:\n  ${escaped.join('\n  ')}`,
+      'This lock was written by a --dest run and verifies nothing in this repository. ' +
+        'Re-run without --dest: node scripts/vendor-configs.mjs <ref>',
+    );
+  }
 
   const drifted = [];
   for (const [dest, meta] of entries) {
@@ -425,22 +471,37 @@ async function main() {
     // No previous lock: this is a first vendor.
   }
 
-  await writeFile(LOCK, `${JSON.stringify(lock, null, 2)}\n`, 'utf8');
+  // A lock whose keys point outside the working directory cannot be verified
+  // from it, so writing one destroys the only record that can be. The probe
+  // stays read-only and still answers the question it was run to answer.
+  const isProbe = escapesCwd(dest);
+  if (!isProbe) await writeFile(LOCK, `${JSON.stringify(lock, null, 2)}\n`, 'utf8');
 
   process.stdout.write(`Vendored ${staged.length} file(s) from ${REPO}@${ref} into ${dest}/\n`);
   if (previous && previous.ref !== ref) {
-    // A file the previous lock never recorded is new, not changed. Counting it
-    // as changed overstates the diff exactly when the dest or set moved, which
-    // is when the number is read most closely.
-    const known = staged.filter((item) => previous.files?.[lockKey(item.dest)]);
-    const changed = known.filter(
-      (item) => previous.files[lockKey(item.dest)].sha256 !== sha256(item.text),
-    );
+    // Compare by upstream source, not by destination. Keyed by destination,
+    // every lookup misses the moment --dest moves, and the count degrades to
+    // "all of them" or "none of them" — a reading that looks like an answer.
+    const before = hashesBySource(previous);
+    const known = staged.filter((item) => before.has(item.path));
+    const changed = known.filter((item) => before.get(item.path) !== sha256(item.text));
     const added = staged.length - known.length;
     process.stdout.write(
       `Ref moved ${previous.ref} -> ${ref}; ${changed.length} file(s) changed content` +
         `${added > 0 ? `, ${added} newly tracked` : ''}.\n`,
     );
+  }
+
+  if (isProbe) {
+    process.stdout.write(
+      `\n${LOCK} was NOT written: ${dest} is outside ${process.cwd()}.\n` +
+        `A lock there could not describe anything in this repository, and writing it\n` +
+        `would leave --check verifying files no runner has. Nothing here is committable —\n` +
+        `re-run without --dest once you have decided on a ref.\n`,
+    );
+    await warnIfFormatterWillRewrite(dest);
+    await reportStaleness(ref);
+    return;
   }
 
   // The lock replaces rather than merges, so files from a previous run at a
@@ -464,12 +525,19 @@ async function main() {
   }
 
   await warnIfFormatterWillRewrite(dest);
+  await reportStaleness(ref);
 
-  // Staleness was only reported by --check, which runs later and on a different
-  // day. The moment a ref is chosen is the moment the choice can still be
-  // changed cheaply, and four repositories have now vendored a ref far behind
-  // latest without anything saying so. Same contract as --check: a newer
-  // release is information, never a failure.
+  process.stdout.write(`Recorded ref and SHA-256 of each file in ${LOCK}. Commit both.\n`);
+}
+
+/**
+ * Staleness was only reported by --check, which runs later and on a different
+ * day. The moment a ref is chosen is the moment the choice can still be changed
+ * cheaply, and four repositories vendored a ref far behind latest without
+ * anything saying so. Same contract as --check: a newer release is
+ * information, never a failure.
+ */
+async function reportStaleness(ref) {
   const latest = await latestRef();
   if (isNewerRef(latest, ref)) {
     process.stdout.write(
@@ -479,8 +547,6 @@ async function main() {
         `  gh api repos/${REPO}/releases/latest --jq .tag_name\n`,
     );
   }
-
-  process.stdout.write(`Recorded ref and SHA-256 of each file in ${LOCK}. Commit both.\n`);
 }
 
 // Running `main()` on import would make the module untestable and would fire a
