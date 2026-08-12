@@ -44,9 +44,32 @@
 // citations were correctly scoped one line below — and a long URL is the most
 // likely thing to get a line of its own, so line-only review is least reliable
 // exactly where citations are most carefully written.
+//
+// The window counts NON-EMPTY neighbours, not raw ones. A citation set off as
+// its own paragraph — a bare link with a blank line either side, which is how
+// six of one consumer's eight were written — otherwise spends its whole budget
+// on blank lines and surfaces a fragment of the claim or none of it. That shape
+// is the one where the citing line is least self-explanatory, so it is exactly
+// where the window must not degrade.
 
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
+
+// Two non-empty lines either side of the citing line, skipping blanks rather
+// than spending the budget on them. Returns the citing line too, so callers can
+// mark it.
+function contextWindow(lines, i, span = 2) {
+  const picked = [{ n: i + 1, text: lines[i] }];
+  for (const dir of [-1, 1]) {
+    let found = 0;
+    for (let k = i + dir; k >= 0 && k < lines.length && found < span; k += dir) {
+      if (lines[k].trim() === '') continue;
+      picked.push({ n: k + 1, text: lines[k] });
+      found += 1;
+    }
+  }
+  return picked.sort((a, b) => a.n - b.n);
+}
 
 const CITATION = /\bENG-[A-Z]+-\d{3}\b/g;
 // `ENG-X-001 (Thin typed adapters)`. Parentheses only, and the content must
@@ -191,10 +214,7 @@ async function scanFile(file) {
     }
 
     for (const match of text.matchAll(CITATION)) {
-      const window = lines
-        .slice(Math.max(0, i - 2), i + 3)
-        .map((l, k) => ({ n: Math.max(0, i - 2) + k + 1, text: l }))
-        .filter((l) => l.text.trim() !== '');
+      const window = contextWindow(lines, i);
       // Two citation LINKS side by side on one line with no connective assert
       // "this rule IS those principles". Usually one binds only in part, which
       // the bare pairing cannot say. Scoped to links on the citing line, not
@@ -229,10 +249,7 @@ async function scanFile(file) {
       const from = Number(startNum);
       const to = Number(endNum);
       if (!(to > from) || to - from > 50) continue;
-      const window = lines
-        .slice(Math.max(0, i - 2), i + 3)
-        .map((l, k) => ({ n: Math.max(0, i - 2) + k + 1, text: l }))
-        .filter((l) => l.text.trim() !== '');
+      const window = contextWindow(lines, i);
       for (let n = from + 1; n < to; n += 1) {
         hits.push({
           file,

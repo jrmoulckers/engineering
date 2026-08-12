@@ -525,6 +525,24 @@ jobs:
 Pass a `secrets: NODE_AUTH_TOKEN:` block only for a registry the job's own token cannot reach.
 If you staged one for GitHub Packages, delete it.
 
+> **"Pass no secret at all" is about the caller's `secrets:` block, not about every
+> `NODE_AUTH_TOKEN` line in your file.** A consumer flagged that the sentence reads as "delete
+> every `NODE_AUTH_TOKEN`", and that following it literally would have broken four working steps.
+> The fallback is a property of the **reusable workflow**: it defaults the secret to the job's
+> `GITHUB_TOKEN` when the caller supplies none. An inline `actions/setup-node` step in your own
+> job has no such wrapper, so it still needs `NODE_AUTH_TOKEN` set explicitly in its `env:`.
+>
+> | Where the line appears                   | Under zero-config |
+> | ---------------------------------------- | ----------------- |
+> | `secrets:` block on a `uses:` caller job | **delete it**     |
+> | `env:` on your own inline install step   | **keep it**       |
+>
+> Most repositories have both shapes in one `ci.yml`, which is why the instruction is easy to
+> over-apply. Deleting the caller block is inert if you were passing the same token the fallback
+> would pick; deleting an inline `env:` is a 401 on the next run. When in doubt, check whether the
+> line sits under a `uses:` job — a job that delegates has no install step of its own to
+> authenticate.
+
 **Deleting it is a simplification, not a repair — and that distinction is worth stating out loud.**
 `NODE_AUTH_TOKEN` is still a declared optional `workflow_call` secret in every one of these
 callees, so a caller that keeps passing it goes on working. The old shape carries dead config; it
@@ -1648,6 +1666,33 @@ advice** — which is why the two need separating before anyone runs it.
 > mechanism — and repositories with no `.prettierignore` would have seen no drop and reasonably
 > suspected their own wiring. When you ship two changes at once and one of them has a predicted
 > effect, vary them independently before reporting the effect as evidence.
+
+> **A test that asserts on your own prose breaks under `always`, not under `preserve` — and the
+> difference decides whether the fix is a config bump or a code change.** A consumer rebased,
+> saw `printWidth: 96` split an asserted phrase in `DEPLOY.md` (`This automation-generated PR is
+the sole` became `This\nautomation-generated…`), and attributed it to `printWidth` overriding
+> `proseWrap`. Measured on a 170-character prose line at `printWidth: 96`:
+>
+> | `proseWrap` | Lines after | Prose reflowed? |
+> | ----------- | ----------- | --------------- |
+> | `always`    | 4           | **yes**         |
+> | `preserve`  | 3           | **no**          |
+>
+> `printWidth` does not re-wrap prose under `preserve`; the two settings compose exactly as
+> documented. What they hit was `proseWrap: 'always'`, which is `prettier-config@0.1.0` — so the
+> reflow half of their finding is a **stale-version symptom that a floor bump removes**, not a
+> permanent property of the preset.
+>
+> Their other two breakages are real and permanent: `singleQuote` rewrites quotes in `.cjs` and
+> `.mjs` sources, so any `toContain('target: "filesystem"')` fails regardless of `proseWrap`.
+>
+> **Keep their fix even though the cause was misattributed.** They normalised at the read boundary
+> and added non-empty **anchor assertions**, verifying non-vacuity explicitly against a negative
+> control. That is worth doing on its own merits, because the failure it prevents is the one this
+> guide keeps returning to: a formatter change silently turning a real assertion into a no-op that
+> still passes. Note the direction — their assertions broke **loudly**, and only because the
+> anchors existed. A repository asserting on its own source without them gets the reformat and a
+> green suite.
 
 > **"Does not reflow your prose" is true at the moment you switch, and progressively less true
 > afterwards. Expect a mixed corpus, and do not "fix" it.** `preserve` does not merely permit
