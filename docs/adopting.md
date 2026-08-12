@@ -193,13 +193,24 @@ error: .../packages/prettier-config/index.d.ts returned HTTP 404
        Declarations ship from v0.112.0 onward. Ref 'v0.15.1' predates them; vendor a newer tag.
 ```
 
-One consumer reached `v0.15.1` and then `v0.15.2` from an illustrative snippet in this guide, both
-below the floor, and lost a build to it. **Every ref in this document is an example, not a
-recommendation.** Resolve the tag rather than copying one:
+One consumer reached `v0.15.1`, then `v0.15.2`, then `v0.15.3` from illustrative snippets in this
+guide and from version literals carried forward by hand — three sub-floor refs in a row. **Every
+ref in this document is an example, not a recommendation.** Resolve the tag rather than copying
+one, and check the floor as well as the shape:
 
 ```bash
-gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name
+REF=$(gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name)
+case "$REF" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "not a semver tag: $REF" >&2; exit 1 ;; esac
+
+# A shape check alone accepts v0.15.3, which predates the declarations.
+MIN=v0.112.0
+if [ "$(printf '%s\n%s\n' "$MIN" "$REF" | sort -V | head -1)" != "$MIN" ]; then
+  echo "resolved $REF is below the $MIN vendoring floor" >&2; exit 1
+fi
 ```
+
+`sort -V`, not `sort`: a lexical sort puts `v0.99.0` above `v0.115.0`, so the naive form picks a
+tag nearly a hundred releases old and still looks like it resolved something.
 
 The declarations are not cosmetic for a vendoring consumer, and the precondition is the opposite of
 the one most people assume. **The trigger is `allowJs: false`, not `checkJs`** — and `allowJs` is
@@ -268,11 +279,12 @@ The two outcomes deliberately differ in severity:
   stops meaning anything. Without this, vendoring quietly reintroduces the drift the registry
   channel prevents, which is [ADR-0001](architecture/0001-two-channel-config-delivery.md)'s main
   cost. This closes it.
-- **Staleness only warns**, and exits 0:
-  ```
+- **Staleness only warns**, and exits 0: ```
   Notice: pinned at v0.114.0; newest release is v0.115.0.
   This is not a failure. Update deliberately when you choose to:
-    node scripts/vendor-configs.mjs v0.115.0
+  node scripts/vendor-configs.mjs v0.115.0
+  ```
+
   ```
 
 **Never make staleness fatal, and never resolve the newest tag at fetch time.** Both convert
@@ -285,6 +297,11 @@ pin easy to update and loud when it is stale; never automatic.
 A runner that is offline or rate-limited cannot tell you about staleness, so `--check` treats an
 unavailable answer as "fine" and stays silent. Drift is still checked, because that needs no
 network.
+
+**The file count is the fastest way to spot a sub-floor ref.** `--check` reports how many files it
+covers, and the current set is **10**. Eight means a ref older than `v0.112.0` got in and the two
+prettier declarations are missing — a more legible signal than reading the tag, because `v0.15.3`
+and `v0.115.0` look similar and sort in the wrong order.
 
 #### Vendor everything in one run, or the lock stops covering what you moved
 
