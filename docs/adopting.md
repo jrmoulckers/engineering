@@ -547,12 +547,43 @@ permissions:
 
 jobs:
   web:
-    uses: jrmoulckers/.github/.github/workflows/reusable-ci-web.yml@f1457271427fcde18a62b07c53a1ea75e14cd644
+    uses: jrmoulckers/.github/.github/workflows/reusable-ci-web.yml@905ca5f592e580299bb0c0192c5106a1d708ea03 # main
     with:
       package-manager: pnpm
       registry-url: https://npm.pkg.github.com
       registry-scope: '@jrmoulckers'
 ```
+
+> **This SHA is an example, not an authority — resolve it yourself before pasting.** The pin
+> printed here was `f1457271` for several releases, and by the time a consumer checked it was
+> **230 commits behind** `main`. Four repositories had been told to move to it. Re-pinning to it
+> would have been a rollback presented as a fix.
+>
+> One repository declined. They had already moved to a newer SHA, and instead of complying they
+> ran the comparison:
+>
+> ```bash
+> gh api repos/jrmoulckers/.github/compare/<recommended>...<mine> \
+>   --jq '{status,ahead_by,behind_by}'
+> # => {"status":"ahead","ahead_by":4,"behind_by":0}
+> ```
+>
+> `ahead_by` non-zero with `behind_by: 0` means the recommendation is strictly older than what you
+> have. That one call is the whole check, and it is worth running against **any** SHA anyone hands
+> you, including the one above.
+>
+> **A pinned SHA is a claim with a currency property, exactly like a version range.** This guide
+> has spent its length telling consumers that a stale ref makes a rigorous method produce a
+> confident wrong answer — and then shipped a stale ref of its own, in the copyable snippet, which
+> is the highest-traffic line in the document. Immutability is what makes a SHA safe to run and
+> also what stops it aging visibly: a tag that moved would have been noticed, a SHA that stayed
+> put looks correct forever.
+>
+> Resolve `main` at the moment you adopt, and record what you resolved:
+>
+> ```bash
+> gh api repos/jrmoulckers/.github/commits/main --jq '.sha'
+> ```
 
 Pass a `secrets: NODE_AUTH_TOKEN:` block only for a registry the job's own token cannot reach.
 If you staged one for GitHub Packages, delete it.
