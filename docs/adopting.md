@@ -3270,6 +3270,33 @@ This is the same shape as two other traps in this guide — a clean `rules-of-ho
 lab-only performance channel. In each, a tool reports nothing and the absence is read as
 correctness when it only means the check was never made.
 
+### A committed lockfile is what makes a wide range safe
+
+A consumer widened `^0.8.0` to `>=0.8.0 <1.0.0` so that an eventual `0.9.0` would be reachable
+without a hand edit nobody would be prompted to make. That is the right call **for them**, and the
+reason is not the range — it is that they commit `package-lock.json` and CI runs `npm ci`. CI
+resolves the locked version and nothing else, so a publish here cannot redden a PR that did not
+touch the lockfile. The range governs what `npm update` may _reach_, not what CI _resolves_.
+
+Invert either half and the same range becomes a liability. Without a committed lockfile — or with
+an install command that re-resolves — a wide range on a **lint config** means a minor published
+here adds rules to somebody else's unrelated PR, hours after it was opened, with no local change.
+That is the precise failure this repository refuses to cause elsewhere: `--check` warns on
+staleness rather than failing, so that a tag pushed here can never redden a consumer's build. A
+range wide enough to auto-adopt rules gives that property away one layer down, where this
+repository cannot protect it.
+
+So the guidance is conditional, not universal:
+
+| Your setup                                      | Recommended range                                    |
+| ----------------------------------------------- | ---------------------------------------------------- |
+| Lockfile committed, CI runs `npm ci`/`--frozen` | wide (`>=0.8.0 <1.0.0`) — upgrades stay deliberate   |
+| No lockfile, or CI re-resolves                  | pin exactly, and bump in a change that runs the gate |
+
+Note also that these are **floors, not the published set**. Version tables in this guide name the
+minimum that carries a given fix; a consumer found a `0.2.1` that no table here had ever mentioned.
+`versions.json` records published state — read it rather than inferring the set from a floor.
+
 ### The two packages support different TypeScript versions, on purpose
 
 | Package                      | `typescript` peer                | Verified against                              |

@@ -21,7 +21,8 @@
     "./svelte": {
       "types": "./svelte.d.ts",
       "default": "./svelte.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "index.js",

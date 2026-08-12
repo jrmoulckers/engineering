@@ -16,6 +16,25 @@ function lint(configs, code, filename) {
   return linter.verify(code, configs, { filename });
 }
 
+/**
+ * Export subpaths that resolve to modules, i.e. everything the declaration and
+ * publication assertions below apply to.
+ *
+ * `./package.json` is deliberately excluded. It is a data subpath, added because
+ * omitting it makes `require('@jrmoulckers/eslint-config/package.json')` throw
+ * `ERR_PACKAGE_PATH_NOT_EXPORTED` — which a consumer hit while reporting their
+ * resolved version, the exact question this repository had asked them to answer.
+ * It carries no declarations and needs no `files` entry, because npm always
+ * includes the manifest in the tarball regardless of `files`. Filtering it here
+ * rather than loosening the assertions keeps the invariants strict for every
+ * subpath that really is an entrypoint.
+ */
+const DATA_SUBPATHS = new Set(['./package.json']);
+
+function moduleExports(exports) {
+  return Object.entries(exports).filter(([subpath]) => !DATA_SUBPATHS.has(subpath));
+}
+
 describe('type declarations', () => {
   // A declaration that exists in the repository but is missing from `files` is
   // absent from the tarball, so it fails for the consumer and passes every
@@ -23,7 +42,7 @@ describe('type declarations', () => {
   test('every export subpath ships a published declaration', async () => {
     const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
-    for (const [subpath, entry] of Object.entries(pkg.exports)) {
+    for (const [subpath, entry] of moduleExports(pkg.exports)) {
       assert.equal(typeof entry, 'object', `${subpath} is a bare string, so it ships no types`);
       assert.ok(entry.types, `${subpath} has no "types" condition`);
 
@@ -31,6 +50,16 @@ describe('type declarations', () => {
       assert.ok(pkg.files.includes(target), `${target} is missing from "files"`);
       await readFile(new URL(`../${target}`, import.meta.url), 'utf8');
     }
+  });
+  test('the manifest is reachable as a subpath', async () => {
+    // Declaring `exports` at all makes every unlisted subpath unreachable, so
+    // reading the manifest — which tooling does routinely to report a resolved
+    // version — throws ERR_PACKAGE_PATH_NOT_EXPORTED rather than returning a
+    // version. Asserted here because DATA_SUBPATHS filters it out of the
+    // entrypoint checks above, and a filtered-out subpath is otherwise checked
+    // by nothing at all.
+    const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    assert.equal(pkg.exports['./package.json'], './package.json');
   });
 });
 
@@ -408,7 +437,7 @@ describe('published package contents', () => {
    */
   function entrypointTargets(exports) {
     const targets = [];
-    for (const entry of Object.values(exports)) {
+    for (const [, entry] of moduleExports(exports)) {
       const values = typeof entry === 'string' ? [entry] : Object.values(entry);
       for (const value of values) targets.push(String(value).replace('./', ''));
     }
@@ -469,7 +498,7 @@ describe('shipped type declarations', () => {
 
   test('exports map every entrypoint to its declaration', async () => {
     const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-    for (const [subpath, entry] of Object.entries(pkg.exports)) {
+    for (const [subpath, entry] of moduleExports(pkg.exports)) {
       assert.equal(typeof entry, 'object', `${subpath} must use export conditions to carry types`);
       assert.ok(entry.types, `${subpath} has no "types" condition`);
       assert.ok(entry.types.endsWith('.d.ts'), `${subpath} types condition is not a .d.ts`);

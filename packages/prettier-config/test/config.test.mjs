@@ -23,6 +23,11 @@ describe('type declarations', () => {
     const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
     for (const [subpath, entry] of Object.entries(pkg.exports)) {
+      // `./package.json` is a data subpath, not an entrypoint: it exists so that
+      // reading the manifest to report a resolved version does not throw
+      // ERR_PACKAGE_PATH_NOT_EXPORTED. It has no declaration and needs no
+      // `files` entry, since npm always ships the manifest.
+      if (subpath === './package.json') continue;
       assert.equal(
         typeof entry,
         'object',
@@ -35,6 +40,12 @@ describe('type declarations', () => {
       );
       await readFile(new URL(`../${entry.types.replace('./', '')}`, import.meta.url), 'utf8');
     }
+  });
+
+  test('the manifest is reachable as a subpath', async () => {
+    // Skipped by the loop above, so without this it is checked by nothing.
+    const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    assert.equal(pkg.exports['./package.json'], './package.json');
   });
 });
 
