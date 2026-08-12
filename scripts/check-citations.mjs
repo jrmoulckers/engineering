@@ -29,6 +29,16 @@
 // accessibility claim, whether or not it governs one. Hence the banner: ask
 // whether the principle governs the claim, not whether it mentions the topic.
 //
+// `rationale` and `evidence` are printed for the opposite reason: a citation
+// may legitimately rest on either, and showing only title and statement makes
+// such a citation look unsupported. A consumer nearly deleted a correct
+// citation of ENG-PERF-002 because its statement is about defining budgets
+// while the clause being cited — deterministic signals block, unstable lab
+// signals stay advisory — lives in `evidence`. Printing less of a principle
+// than a citation is allowed to rest on biases review toward removing true
+// claims, which is the more expensive direction to be wrong in: a wrong
+// citation is visible to the next reader, a deleted correct one is not.
+//
 // The context window matters as much as either. Judging a citation from its
 // own line alone produced three false convictions of a repository whose
 // citations were correctly scoped one line below — and a long URL is the most
@@ -104,8 +114,10 @@ Options:
                       Defaults to the copy on jrmoulckers/engineering@main.
                       Pass a pinned tag URL to match the ref you cite.
   --review            Print every citation with the principle's real title,
-                      so wrong-meaning citations are visible. Use this when
-                      writing citations; existence alone proves little.
+                      statement, rationale, and evidence, so wrong-meaning
+                      citations are visible. All three fields are shown
+                      because a citation may rest on any of them. Use this
+                      when writing citations; existence alone proves little.
   --by-id             Implies --review, but groups every use of an ID
                       together instead of walking files in order. One ID
                       standing for two different claims is invisible file
@@ -358,6 +370,20 @@ async function main() {
       if (principle?.statement) {
         console.log(`         says: ${principle.statement}`);
       }
+      // A citation may legitimately rest on `rationale` or `evidence` rather
+      // than the statement, and printing only the statement makes such a
+      // citation look unsupported. A consumer nearly "corrected" away a
+      // correct citation for this reason: ENG-PERF-002's statement is about
+      // defining budgets, while the clause they were citing — deterministic
+      // signals block, unstable lab signals stay advisory — lives in
+      // `evidence`. The reviewer has to see the fields the citation is
+      // allowed to rest on, or review pushes toward deleting true claims.
+      if (principle?.rationale) {
+        console.log(`      because: ${principle.rationale}`);
+      }
+      if (principle?.evidence) {
+        console.log(`     evidence: ${principle.evidence}`);
+      }
       if (c.viaRange) {
         console.log(
           `         via range ${c.viaRange} — the range asserts this, but the text never names it`,
@@ -388,6 +414,8 @@ async function main() {
         const uses = byId.get(id);
         console.log(`\n${id}  ${title}  (${uses.length} use${uses.length === 1 ? '' : 's'})`);
         if (principle?.statement) console.log(`  says: ${principle.statement}`);
+        if (principle?.rationale) console.log(`  because: ${principle.rationale}`);
+        if (principle?.evidence) console.log(`  evidence: ${principle.evidence}`);
         for (const c of uses) {
           console.log(`  ${c.file}:${c.line}`);
           for (const l of c.window ?? [{ n: c.line, text: c.context }]) {

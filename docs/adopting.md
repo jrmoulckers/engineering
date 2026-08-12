@@ -1438,19 +1438,41 @@ The sync layer reconciles local mutations against the remote authority.
 It uses a last-writer-wins strategy scoped per field rather than per record.
 ```
 
-This is not a style preference. It is measurably better on the two things that matter for
-review, and `preserve` exists to permit it:
+This is not a style preference. It is measurably better on the things that matter for review,
+and `preserve` exists to permit it. Every cell below is a real `git merge` result, with each
+edit re-formatted under the regime named in its row:
 
-| Shape           | One-word edit | Two edits, same paragraph | Bounded line length |
-| --------------- | ------------- | ------------------------- | ------------------- |
-| Hard-wrapped    | ~5 lines      | merges                    | yes                 |
-| One long line   | 1 line        | **conflicts**             | no                  |
-| Semantic breaks | 1 line        | merges                    | yes                 |
+| Shape                   | One-word edit   | Two edits, distant sentences | Two edits, adjacent lines | Bounded line length |
+| ----------------------- | --------------- | ---------------------------- | ------------------------- | ------------------- |
+| Hard-wrapped (`always`) | whole paragraph | **conflicts**                | **conflicts**             | yes                 |
+| One long line           | 1 line          | **conflicts**                | **conflicts**             | no                  |
+| Semantic breaks         | 1 line          | clean                        | **conflicts**             | yes                 |
 
 Hard wrapping rewraps every following line in the paragraph, so a one-word change arrives as a
 multi-line diff and the real edit has to be hunted for. A single unbroken line avoids that but
 collides on any concurrent edit, since every change touches the same line. Semantic breaks avoid
 both — and `proseWrap: 'always'` destroys them on write, which is why it is not the default.
+
+**Read the last column before using this table in an argument.** Adjacent edits conflict under
+every regime, because git needs an unchanged context line between two changes and no wrapping
+policy can supply one. Wrapping cannot fix that case and should not be claimed to.
+
+**And be careful how you measure the middle column, because it inverts.** A consumer measured
+this by editing _lines_ directly and concluded that conflict behaviour is governed by line
+granularity alone — that `always` and semantic breaks are indistinguishable, so the axis should
+not be cited in either direction. Measured that way the result is real and reproduces here. But
+holding the _line_ edit constant switches off reflow, which is the single behaviour that defines
+`always`. Hold the **prose** edit constant instead — one word added to the first sentence, one to
+the last — and the two regimes separate cleanly: `always` rewrote all 3 lines of the paragraph
+and **conflicted**, while semantic breaks touched 1 line and **merged clean**. Same edits, same
+Prettier invocation, opposite answer.
+
+That is the fourth-instance heuristic firing again, and this time on a _measurement of a
+measurement_: the consumer correctly retracted a wrong conflict claim, then verified the
+replacement with a test that held the deciding variable fixed. Both the original claim and its
+correction were argued from a test that could not have shown the difference. If a setting's
+whole function is to transform the artifact, an experiment that edits the artifact's
+post-transform shape has quietly removed the setting from the experiment.
 
 **The `~5 lines` figure is measured, and it is deliberately not larger.** The consumer who supplied
 it had earlier argued that `'always'` makes a one-word change produce an unbounded multi-line diff,
