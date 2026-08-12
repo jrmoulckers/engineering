@@ -2037,6 +2037,25 @@ export default base({ env: 'node' });
 > and `eslint-plugin-jsx-a11y` as direct dependencies. `react/jsx-key` and `jsx-a11y/alt-text`
 > both stopped firing. Fixed in **0.13.0**; both presets now share one internal layer.
 >
+> **Those are counts of _enforcing_ rules, and the distinction is not pedantry.** Measured on the
+> same probe file, `--print-config` on each config:
+>
+> |                 | legacy `next/core-web-vitals` | `nextConfig()` 0.13.0      |
+> | --------------- | ----------------------------- | -------------------------- |
+> | `react/*`       | 22 present / **17 active**    | 38 present / **18 active** |
+> | `jsx-a11y/*`    | 6 present / **6 active**      | 34 present / **31 active** |
+> | `react-hooks/*` | 2 present / **2 active**      | 17 present / **2 active**  |
+>
+> A key being present says nothing; `eslint-config-prettier` sets 17 `react/*` formatting rules to
+> `off`, and the React Compiler family is present-but-`off` until you pass `compiler: true` — which
+> is why the hooks row reads 17 present and 2 active rather than being a regression. **Count rules
+> whose severity is not `off`.** A present-key count would have reported the original bug as 38
+> versus 22 and looked like an improvement.
+>
+> Note the fix does not merely restore parity: `jsx-a11y` goes from 6 enforcing rules to **31**,
+> because `eslint-config-next` ships a small hand-picked subset rather than the plugin's
+> recommended set. If you adopt the preset expecting the old behaviour, expect new a11y findings.
+>
 > **The comment above the import argued for the fix and shipped without it.** It read "Next.js is
 > React, and `eslint-config-next` bundles `eslint-plugin-react-hooks`. Omitting it here would
 > silently drop rules with no signal at the call site" — correct reasoning, correct failure mode,
