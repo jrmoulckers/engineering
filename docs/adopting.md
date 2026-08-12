@@ -885,6 +885,38 @@ This is the sixth repository to lose work to the `0.x` caret, and the first wher
 verification pass ran, succeeded, and confirmed nothing about currency. It belongs with the other
 instances in which **a missing thing presents as a passing one**.
 
+> **A differential test only sees the surface you exercise — and a config factory's new
+> capabilities live behind options the old version silently ignores.** The same repository later
+> returned with the most rigorous method anyone has applied here: `eslint --print-config` on real
+> registry installs, compared across six file classes. It reported **zero rules added, zero
+> removed, zero option differences**, and concluded the versions were equivalent.
+>
+> Reproduced exactly — and the result depends entirely on how the factory is called:
+>
+> | Invocation                    | Old rules | New rules | Added  | Changed |
+> | ----------------------------- | --------- | --------- | ------ | ------- |
+> | `base()`                      | 449       | 449       | **0**  | **0**   |
+> | `base({ strictTypeChecked })` | 449       | **498**   | **49** | **1**   |
+>
+> Forty-nine rules appear, **43 of them error-level** — `await-thenable`, `no-misused-promises`,
+> `no-base-to-string`, `no-for-in-array` — and `no-floating-promises` flips from `off` to `error`.
+> None of it is visible at default options, because `strictTypeChecked` **did not exist** in the
+> old version. JavaScript destructures an absent key to `undefined`, so the old config does not
+> reject the unknown option; it returns a byte-identical result and reports no problem.
+>
+> That is the trap in general form: **comparing two versions at their default surface cannot
+> detect capability added behind a new parameter, and the older version will not tell you the
+> parameter is unknown.** A diff of `0` is evidence that the paths you exercised agree, not that
+> the versions are equivalent. Strictly, `print-config` compares _resolved output for one
+> invocation_, and a factory has as many resolved outputs as it has option combinations.
+>
+> The direction repeats this repository's earlier case with a better instrument. Then, behavioural
+> verification passed because a stale version behaves correctly. Now, a configuration diff read
+> zero because a stale version _configures_ correctly. Both times what was missing was capability,
+> and capability is invisible to any test written against the features you already use. Before
+> concluding two versions agree, diff the **release notes** for new options, then re-run the
+> comparison passing each one.
+
 > **A stale pin hides the fix for the bug you are about to report.** The sharpest instance so far:
 > a Svelte repository held `prettier-config` at `^0.2.0` deliberately, and in the same message
 > escalated — as an open upstream defect — that the package's `prettier-plugin-svelte` peer of
