@@ -82,6 +82,33 @@ const RETIRED = [
       'secrets.NODE_AUTH_TOKEN, which falls back to github.token when registry-url is set',
     exempt: [/There is no such secret/i, /from a proposal/i, /fails on the wrong name/i],
   },
+  {
+    // The sixth instance of superseded text found in this document, and the second
+    // for this particular claim. The carve-out was retracted with a controlled
+    // measurement in one section while a paragraph 40 lines away still told readers
+    // a block-less caller "sails through". Retracting against a heading leaves the
+    // other occurrences; retract against the artefact.
+    //
+    // Measured: default_workflow_permissions is `read` on all seven repositories in
+    // this fleet, granting contents + packages only -- so a block-less caller is
+    // still short pull-requests: read for reusable-ci-lint and id-token: write for
+    // reusable-deploy-pages, and fails exactly like one with a block.
+    id: 'blockless-caller-immune',
+    pattern:
+      /(?:inherits a permissive\s+default and sails through|sails through|no block is immune|is therefore immune|unaffected by (?:this|the) ceiling)/gi,
+    why: 'A caller with no permissions: block inherits default_workflow_permissions, measured as `read` fleet-wide, and fails identically against any callee needing more.',
+    replacement:
+      'compute the block as the union of what every callee declares; there is no exemption for omitting it',
+    exempt: [
+      /used to (?:say|follow|end)/i,
+      /is wrong and it is retracted/i,
+      /had been told/i,
+      /has been told/i,
+      /close to backwards/i,
+      /The conclusion drawn from that/i,
+      /pointed away from/i,
+    ],
+  },
 ];
 
 const FILES = ['docs/adopting.md', 'versions.json'];

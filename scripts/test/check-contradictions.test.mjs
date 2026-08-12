@@ -129,4 +129,26 @@ describe('check-contradictions', () => {
     assert.match(r.out, /No such secret exists/);
     assert.match(r.out, /NODE_AUTH_TOKEN/);
   });
+
+  // Found six days into the same defect: the claim was retracted with a controlled
+  // measurement in one section, and a paragraph forty lines away still asserted it.
+  // Retracting against a heading leaves the other occurrences.
+  test('fails on the retracted "a caller with no permissions block is immune" carve-out', () => {
+    const r = runAgainst(
+      '# Adopting\n\nfiller\n\nA repository that declared nothing at all sails through.\n',
+    );
+    assert.equal(r.code, 1);
+    assert.match(r.out, /default_workflow_permissions/);
+  });
+
+  // The retraction itself has to survive the rule that enforces it, or the only way
+  // to go green is to delete the history that explains why the guidance changed.
+  test('permits the prose that records the retraction', () => {
+    const r = runAgainst(
+      '# Adopting\n\nThe sentence that used to follow said a repository "inherits a permissive\n' +
+        'default and sails through". That is wrong and it is retracted, and here is the\n' +
+        'measurement that settles it.\n',
+    );
+    assert.equal(r.code, 0, r.out);
+  });
 });
