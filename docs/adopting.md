@@ -1742,7 +1742,7 @@ reading time.
 
 **Check the registry, not a git tag.** A repository tag and a package version are different
 numbers and move independently: this repository was at `v0.2.5` while `@jrmoulckers/tsconfig` was
-at `0.2.0`, and is at `v0.15.x` while that package is at `0.4.0`. Reading
+at `0.2.0`, and is at `v0.97.x` while that package is at `0.4.0`. Reading
 `packages/tsconfig/package.json` at some tag tells you what the source tree contained then, not
 what is published now — a consumer checked exactly that and concluded a peer range had never been
 widened, four releases after it was. The registry is authoritative:
@@ -1752,11 +1752,53 @@ npm view @jrmoulckers/tsconfig version peerDependencies \
   --registry=https://npm.pkg.github.com
 ```
 
+**And `git show main:path` may not be reading `main`.** Investigating the collision above, I ran
+`git show main:packages/eslint-config/package.json` and got `0.10.0` — a version that was never
+published and does not exist anywhere. The cause is worth knowing because it is invisible: in a
+worktree checkout the primary `main` is checked out elsewhere, so the local `main` ref is never
+updated by anything done here. `git fetch` advances `origin/main` and leaves `main` alone.
+
+```console
+$ git rev-list --count main..origin/main
+87
+```
+
+Eighty-seven commits behind, and every `git show main:<path>` had been silently answering from
+that. It does not error, and the answer is a real file from a real commit — it is simply the wrong
+commit. **Read `origin/main`, not `main`, whenever the checkout is a worktree.** This is the same
+failure shape as the stale registry cache: a well-formed answer to the question you did not ask.
+
 **Never cite a repository tag as a version to install.** Release notes here are written against
 repository tags, and adoption briefs have repeated them — but `v0.16.0` is not something you can
 put in a `package.json`, and the three packages carry three different numbers that all differ from
 it. A consumer told to "adopt `v0.2.5`" will reasonably write `^0.2.5` and get a resolution error
 for all three. Resolve each package separately; that is what the command above is for.
+
+**That failure used to be loud. It is now silent, and this is the sharper form of the trap.** The
+paragraph above assumes a consumer given a tag writes it into a manifest and gets a resolution
+error. That held while tags ran far ahead of package versions. It stopped holding once the package
+numbers entered the same range, because **the two sequences now collide**: a tag number is very
+often also a real package version, and installing it succeeds. Measured, same repository, same
+moment:
+
+| Repository tag | `eslint-config` package inside it |
+| -------------- | --------------------------------- |
+| `v0.4.0`       | `0.3.0`                           |
+| `v0.13.0`      | `0.8.0`                           |
+| `v0.97.0`      | `0.13.0`                          |
+
+So the string `0.13.0` names two different artifacts 84 tags apart. A consumer told "published as
+`v0.4.0`" who writes `^0.4.0` installs package `0.4.0` — which exists, resolves cleanly, passes
+every gate, and is **not** the code in tag `v0.4.0`. There is no error to notice. Read the table in
+the other direction too: inspecting `packages/eslint-config/package.json` at tag `v0.13.0` shows
+`0.8.0`, so a consumer confirming "the fix is in 0.13.0" against that tag finds a version number
+five minors below the one they were told about and reasonably concludes the claim was wrong.
+
+**State floors as package versions, and never name a repository tag where a manifest value is
+expected.** Release notes here are written against tags because that is what a release _is_; that
+makes them the wrong thing to copy into `package.json`. If a number is going into a dependency
+range, it must come from `npm view <pkg> version --prefer-online`, not from a release title, not
+from this document, and not from a message.
 
 ### A green install does not prove your peer ranges are satisfied
 
@@ -2171,6 +2213,17 @@ Three kinds of file must go in `.prettierignore` for reasons stronger than taste
 | Generated | The generator owns the formatting   | Formatter and generator fight; a permanent drift loop          |
 | Sealed    | A checksum attests to exact content | Reformatting invalidates the attestation, not just the check   |
 | Synced    | Another repository owns the content | False drift; the sync engine reports a conflict you never made |
+
+**The three rows are one rule: something other than you owns the bytes.** A consumer generalised it
+usefully after finding their own list already covered more than cross-repo syncs — `drizzle/` owned
+by `drizzle-kit`, `CHANGELOG.md` owned by `release-please`, alongside the synced `.github/agents/`
+and `AGENTS.md`. Neither generated file is "synced" and neither is "sealed", but both fail the same
+way. **Any tool that owns its output belongs here**, whether the owner is another repository, a
+code generator, a release bot, or a checksum. Ask who rewrites the file when you are not looking,
+not which of the three labels fits.
+
+This does not weaken the authorship rule above it — if you hand-edit the file, you own it, and it
+must not be ignored no matter how tool-shaped its path looks.
 
 This repository is its own example: `principles/` and `docs/ratification/` are pinned by
 semantic content hashes, so reflowing them would break the evidence that the ratified text is
