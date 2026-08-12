@@ -251,6 +251,18 @@ capability**, and your security gate starts erroring instead of auditing. Said t
 predicts the symptom on both package managers, rather than having to be memorized per tool. The
 measured failure text for each is [below](#the-npmrc-scope-trap-measured).
 
+**The trailing slash does not matter, and this document uses both forms.** A consumer noticed
+their `.npmrc` said `https://npm.pkg.github.com` while an example here said
+`https://npm.pkg.github.com/`, and — because a mis-routed scope silently never sends the
+credential — tested it rather than assuming. With a dummy token against the slashless form, npm
+returned `401 unauthenticated: User cannot be authenticated with the token provided`: the token
+**was** transmitted and rejected on its merits, so the host normalizes and both forms bind to the
+same `//npm.pkg.github.com/:_authToken` entry.
+
+Recorded because the negative result is the useful part. Had the forms _not_ matched, the symptom
+would have been an auth failure indistinguishable from "the CI change didn't take" — so this is
+a plausible suspect permanently eliminated rather than a difference to correct.
+
 **A committed `.npmrc` outranks the one CI writes for you.** `setup-node` writes its registry
 configuration to a **user**-level file and points `NPM_CONFIG_USERCONFIG` at it. Your committed
 `.npmrc` is **project**-level, and project beats user on every key it sets. npm says so out
@@ -379,6 +391,20 @@ steps:
 > both: **declare an explicit narrow block, and add `packages: read` only if a job in that file
 > calls a reusable that declares it.** Raised by a consumer who was the counterexample to the
 > earlier phrasing.
+>
+> **The exposure is inverted, and that is the thing to take away.** A second consumer sets
+> `permissions: {}` at _workflow_ level so that every job must declare its own — the strictest
+> posture available, and the one this guide recommends. An empty block grants nothing, so it is
+> the most efficient possible way to reach `startup_failure`: every scope any callee requests is
+> already denied. Meanwhile a repository that declared nothing at all inherits a permissive
+> default and sails through.
+>
+> So the population most exposed to this trap is **the population that followed the stricter
+> advice**, and "you are fine if you have no block" is close to backwards for a fleet that has
+> been told to write one. Least privilege and this failure mode are not in tension — the fix is
+> per-job `packages: read` on the callers that need it, not a looser ceiling — but the ordering
+> matters: tighten the block and add the scope in the same change, or the tightening is what
+> takes the pipeline down.
 >
 > This was measured against a deliberately misconfigured caller, and there is genuinely nothing to
 > read: **zero jobs created** (`/actions/runs/<id>/jobs` returns `total_count: 0`), **no check-run
