@@ -1576,11 +1576,11 @@ The trap is that this repeats at every minor. `^0.3.0` locks you out of `0.4.0` 
 again one release later and has no signal. Pin with an explicit upper bound instead, which tracks
 every minor until the first stable major:
 
-| Package                        | Range             | Floor is set by                                                         |
-| ------------------------------ | ----------------- | ----------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `>=0.14.0 <1.0.0` | Type-aware rules stay off for every file type a `tsconfig` cannot cover |
-| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`       |
-| `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0`  | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                    |
+| Package                        | Range             | Floor is set by                                                       |
+| ------------------------------ | ----------------- | --------------------------------------------------------------------- |
+| `@jrmoulckers/eslint-config`   | `>=0.15.0 <1.0.0` | Tooling globs cover every test/config/script suffix, and are exported |
+| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`     |
+| `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0`  | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                  |
 
 The floors say what each version _added_, so they only rise when something is genuinely required.
 The ranges keep you current without editing the manifest. Confirm what is actually published
