@@ -220,26 +220,57 @@ consuming repository to be granted access. Either way you must send a token.
 > public repository does not make the package public, and nothing about the repository page
 > hints otherwise. Check the package, never the repo:
 >
-> ```bash
-> # Anonymous. Lists only public packages; the repo page itself returns 200 either way,
-> # which is what makes the repo a misleading proxy for the answer.
-> curl -s https://github.com/jrmoulckers/engineering/packages | grep -c 'packages/container/package\|packages/npm/package'
-> ```
->
-> While that returns `0`, the grants below are required. This is the current state and the
-> single blocker for adopting the presets.
->
-> **There is a direct probe, and it is better than this one.** A consumer proposed asking the API
-> for the field itself rather than inferring it from a page:
->
 > ```console
 > $ gh api users/jrmoulckers/packages/npm/eslint-config --jq .visibility
 > private
 > ```
 >
-> Prefer it. The `curl` above answers by **absence**, which is the failure mode this document has
-> had to retract twice; this answers by value. Keep the anonymous `curl` only as the no-auth
-> fallback, and note the API route needs `read:packages`.
+> While that returns `private`, the grants below are required. This is the current state and the
+> single blocker for adopting the presets.
+>
+> **An earlier version of this section recommended scraping the `/packages` page instead. It has
+> been removed, and how it failed is worth more than the probe was.** The published form was:
+>
+> ```bash
+> curl -s https://github.com/OWNER/REPO/packages | grep -c 'packages/container/package\|packages/npm/package'
+> ```
+>
+> A consumer reported it returns `0` for repositories with unmistakably public packages, and
+> therefore cannot produce a negative result. Re-measuring gave the opposite:
+>
+> | Repository             | measured here | measured by the consumer |
+> | ---------------------- | ------------- | ------------------------ |
+> | `home-assistant/core`  | **28**        | 0                        |
+> | `renovatebot/renovate` | **1**         | 0                        |
+> | `cli/cli`              | 0             | 0                        |
+>
+> Both runs were correct. The pattern is written in POSIX basic regular expressions, where `\|` is
+> **alternation** — which is what `grep` uses by default. In PCRE, .NET, and PowerShell's
+> `Select-String`, `\|` is an **escaped literal pipe**, so the expression becomes the single fixed
+> string `packages/container/package|packages/npm/package`, which appears on no page anywhere:
+>
+> ```console
+> $ pwsh -c "([regex]::Matches($body,'packages/container/package\|packages/npm/package')).Count"
+> 0
+> $ pwsh -c "([regex]::Matches($body,'packages/container/package|packages/npm/package')).Count"
+> 28
+> ```
+>
+> So the probe silently reports "no public packages" whenever it is run in a regex engine other
+> than the author's — and it never errors, because the pattern is valid in both, meaning different
+> things.
+>
+> **The reason it had to be deleted rather than repaired is that its correct negative answer is
+> also `0`.** Every way of running it wrongly produces exactly the value it produces when the
+> answer is genuinely "none public". This one probe has now returned a spurious `0` four distinct
+> ways: an absence test with no control, a units error reading 960 lines as bytes, a needle that
+> could not generalise, and now an escape that changes meaning between engines. That is not four
+> careless readers; it is a probe whose failures are indistinguishable from its findings.
+>
+> Prefer a check that answers by **value**. `gh api … --jq .visibility` returns `private` or
+> `public`, and a broken invocation returns an error instead of a plausible answer. When a probe
+> must answer by absence, publish a control with a known non-zero result beside it — and state the
+> shell it was measured in.
 >
 > **But `gh` reports on the identity actually in effect, which may not be the one you configured.**
 > Running that probe here returned two different answers on the same machine, in the same
@@ -273,7 +304,9 @@ consuming repository to be granted access. Either way you must send a token.
 > Note also that the 403 and a genuine "no such package" are easy to conflate — neither says
 > `public`, and only one is about permissions.
 >
-> **Grep for the link shape, not for a package name.** A consumer read this probe as untestable
+> **Grep for the link shape, not for a package name.** _(Retained as history: the probe below has
+> since been retired for the engine-dependence described above. The reasoning still applies to any
+> absence-based check you write.)_ A consumer read this probe as untestable
 > because it returned `0` for repositories with genuinely public packages too. Their controls were
 > sound in intent and wrong in needle: the page never contains a bare package name near the link,
 > so a name-based grep cannot match anywhere, and a probe that cannot match anywhere returns `0`
@@ -408,6 +441,35 @@ consuming repository to be granted access. Either way you must send a token.
 >
 > A later release re-enters quarantine rather than inheriting the exemption. Waiting a day is also
 > a complete fix, and usually the cheaper one.
+>
+> **The exact-version form has an upgrade trap, reported by the consumer who proposed it.** On the
+> _next_ bump, the install fails on the version you are **leaving**. Reproduced exactly — manifest
+> moved to `0.13.0`, exclude updated to name `0.13.0`:
+>
+> ```console
+> $ pnpm install
+> [ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] 1 lockfile entries failed verification:
+>   @jrmoulckers/eslint-config@0.12.0 was published at 2026-08-11T22:23:55.000Z,
+>   within the minimumReleaseAge cutoff (2026-08-11T06:03:34.305Z)
+> ```
+>
+> The check runs against **lockfile entries**, and the outgoing pin is still one of them at the
+> moment of resolution. So the error names a version that is no longer in your manifest, was
+> working ten seconds ago, and is not the one you edited — which reads like the tool rejecting the
+> change you did not make.
+>
+> List both across the transition, then drop the old entry once the lockfile is rewritten:
+>
+> ```yaml
+> minimumReleaseAgeExclude:
+>   - '@jrmoulckers/eslint-config@0.13.0'
+>   - '@jrmoulckers/eslint-config@0.12.0' # remove after the lockfile is regenerated
+> ```
+>
+> Verified: with both listed the install succeeds and the lockfile rewrites to `0.13.0` alone, after
+> which the transitional line is dead and should go. Every repository that adopts the exclude will
+> meet this on its next bump, and it is only visible while both versions are inside the window —
+> so it appears exactly when releases are frequent, and not at all when you test it later.
 
 > **`allowImportingTsExtensions` is deliberately not in the shared base, and hoisting it would
 > break emitting consumers.** A consumer kept it locally and asked for it to be hoisted, reasonably
