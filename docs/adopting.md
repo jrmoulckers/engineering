@@ -28,6 +28,7 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | `warn` rules are failing your build                         | `A warn severity is not advisory under`                  |
 | `TS7016` on a config file after enabling `checkJs`          | `Precondition 1: the config file must be`                |
 | Type declarations appear to do nothing                      | `Precondition 2:`                                        |
+| A valid, documented option is rejected as unknown           | `silently overrides the package's shipped types`         |
 | `pnpm` refuses a just-published version                     | `minimumReleaseAgeExclude`                               |
 | `TS5097` / `TS5096` on `.ts` import specifiers              | `allowImportingTsExtensions`                             |
 | Lint is green but you suspect coverage shrank               | `set of files linted, in both directions`                |
@@ -1438,6 +1439,57 @@ permissions map still gets `Metadata: read`. Metadata cannot be dropped. Reposit
 `{}` at the top level and describe it as deny-all are describing something the platform does not
 implement — harmless in itself, but it means "we grant nothing globally" is not a safe premise to
 reason from.
+
+### A local `declare module` silently overrides the package's shipped types
+
+If you hand-wrote an ambient declaration while a package shipped no types, **delete it the moment
+the package ships its own**. It does not become redundant — it becomes an override, and it freezes
+the API at whatever shape you wrote months ago. Nothing in the toolchain reports this.
+
+This affects every repository that adopted before `eslint-config@0.8.0`, `tsconfig@0.4.0` or
+`prettier-config@0.4.0`, because the advice at the time was to hand-declare the modules.
+
+It fails by blaming the caller for a valid option:
+
+```
+nextConfig({ typeAware: true })
+  → TS2353: 'typeAware' does not exist in type '{ ignores?: ...; env?: ... }'
+```
+
+`typeAware` exists, is documented, and is declared by the installed package. Read cold, the
+reasonable conclusion is "the preset does not support this yet" — which is exactly wrong, and the
+option is real. New options are invisible through an old shim, so the more the package gains, the
+more of it disappears.
+
+**The error text itself tells you which one you are looking at.** Reproduced both arms against the
+real package:
+
+| Arm                     | Error on a bogus option                                |
+| ----------------------- | ------------------------------------------------------ |
+| shipped types (healthy) | `does not exist in type 'ReactOptions'`                |
+| local shim (shadowed)   | `does not exist in type '{ ignores?: ...; env?: ...}'` |
+
+A **named** type means you are reading the package's declarations. An **anonymous type literal**
+means you are reading a hand-written shim, because a published declaration exports a named
+interface. That is the discriminator to look for, and it is present in the error you already have.
+
+TypeScript is silent about the shadowing. Verified with `skipLibCheck: false`: no duplicate
+declaration, no conflict, no warning — the ambient declaration simply wins. Find them by grep:
+
+```bash
+grep -rn "declare module '@jrmoulckers/" --include='*.d.ts' .
+```
+
+**When you remove one, verify in three directions, not one.** "The error went away" is also what an
+option silently widening to `any` looks like:
+
+| Check              | Expected                                               |
+| ------------------ | ------------------------------------------------------ |
+| `typecheck`        | clean                                                  |
+| the new option     | now accepted                                           |
+| a **bogus** option | **still rejected**, naming the package's own interface |
+
+The third is load-bearing; the first two pass identically against a shim that resolved to `any`.
 
 ### Under-granting kills the run; over-granting does nothing at all
 
