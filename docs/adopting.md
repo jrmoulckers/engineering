@@ -21,7 +21,7 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | `401` on install from Vercel/Netlify/Fly but CI is green     | `applies to GitHub Actions only`                         |
 | A red check you already know about hides a new failure       | `has stopped being a check`                              |
 | Wondering if an extra `permissions:` scope is harmful        | `Under-granting kills the run`                           |
-| Every job fails in ~1s with `steps=0`                        | `The permission ceiling and the billing hold`            |
+| Every job fails with `steps=0`, any duration                 | `The permission ceiling and the billing hold`            |
 | A version bump seems to change nothing                       | `Diffing the increment is not verifying the floor`       |
 | `--print-config` shows rules for a framework you do not use  | `Grep the severity, not the name`                        |
 | `npm update` will not take a new minor                       | `Do not use a caret at all`                              |
@@ -32,6 +32,7 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | A citation link works but lands at the top of the file       | `cannot 404, so retitling a heading`                     |
 | Unsure which version of a package is actually installable    | `a repository counter, not a package version`            |
 | A "bogus option" check says a typed package has no types     | `does not work on every package`                         |
+| Two measurements of one file's size disagree slightly        | `A character count is not a byte count`                  |
 | Lint went green after swapping a meta-package for its plugin | `Dropping a meta-package for the plugin it wraps`        |
 | `pnpm` refuses a just-published version                      | `minimumReleaseAgeExclude`                               |
 | `TS5097` / `TS5096` on `.ts` import specifiers               | `allowImportingTsExtensions`                             |
@@ -943,6 +944,12 @@ steps:
 >
 > Prefer the annotation regardless. It states the cause outright, and neither counting exercise has
 > to be interpreted.
+>
+> **Do not use elapsed time as any part of the signature.** The same repository, under the same
+> billing hold, reported `2s` on one run and `10s` on the next — with `steps=0` and no log in both.
+> The elapsed figure includes queue time, so it varies with platform load and says nothing about
+> whether the job started. A consumer watching that second run nearly read `10s` as "it began
+> executing." **`steps=0` is the observation; the duration is noise around it.**
 >
 > **The two signatures have now been observed with the confound removed.** The table above pairs a
 > permission failure and a billing failure measured on different repositories, which leaves open the
@@ -3525,6 +3532,43 @@ gate you have never seen fail is a gate you have not yet tested.
 >
 > **If you are replacing a meta-package with one of its members, enumerate its dependencies first.**
 > That list is the set of things you are silently dropping.
+
+### A character count is not a byte count, and the difference only appears once you add an em dash
+
+> Two file sizes I published as **verified** were wrong — `1636` and `1116` bytes for a config a
+> consumer measured at `1642` and `1120`. The consumer checked whether a tag had been moved, which
+> would have been serious, and found sizes stable at every tag: `1636` was never a size the file has
+> ever had.
+>
+> The cause reproduces exactly. In PowerShell:
+>
+> ```powershell
+> (Get-Content $f -Raw).Length   # 2046  -- CHARACTERS, after UTF-8 decoding
+> (Get-Item $f).Length           # 2052  -- BYTES on disk
+> ```
+>
+> The file contains **three em dashes** (`U+2014`), each one character but **three bytes** in UTF-8.
+> Three characters × 2 extra bytes = the 6-byte gap. The older revision had two, giving 4. That is
+> why the two errors differed and looked like they ruled out a systematic cause — the offset is not
+> constant, it scales with how much non-ASCII the file contains.
+>
+> Every byte-accurate tool agrees with the larger number: `git cat-file -s`, `wc -c`,
+> `curl -w '%{size_download}'`, `(Get-Item).Length`. Only the string length disagrees.
+>
+> **The reason this is worth a section rather than a correction: it is silent on ASCII-only files.**
+> `.Length` on a decoded string is exactly right until the day someone writes a dash, a curly quote,
+> an arrow, or an accented name — none of which look like they change a measurement. A check built on
+> it passes its own tests, passes review, and starts lying later, at a commit that has nothing to do
+> with measurement.
+>
+> Two consequences worth carrying:
+>
+> - **Never assert on file size.** Had the config's shape check been a size assertion it would now be
+>   failing on a correct file. Assert on content — that `version:` and `linters:` are present — which
+>   survives both formatting and prose edits.
+> - **When two sizes disagree by a small amount, count the non-ASCII characters before assuming
+>   drift.** A difference equal to twice the number of 3-byte characters is this bug, not a changed
+>   file. The `git cat-file -s` figure is the one to trust.
 
 ### A citation's `#fragment` cannot 404, so retitling a heading breaks it silently
 

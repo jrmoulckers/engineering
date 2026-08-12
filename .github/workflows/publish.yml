@@ -66,6 +66,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          # The previous tag in version order. A lexical sort is wrong here for
+          # the same reason it is wrong for consumers: v0.9.0 sorts above
+          # v0.11.0. Empty when this is the first tag.
+          PREV="$(git tag --list 'v*' --sort=-v:refname \
+            | awk -v t="$TAG" 'p==1{print;exit} $0==t{p=1}')"
+
+          # Non-npm consumers (Go config, practices, principles) cannot tell
+          # from a package-version list whether anything they fetch changed.
+          # Measured on this repository: across 29 tags, configs/golangci.yml
+          # changed 3 times. A consumer without this line either re-pins 29
+          # times or misses the 3 that mattered — and one who stays current has
+          # no signal that enforcement changed under them.
+          ARTIFACTS=""
+          if [ -n "$PREV" ]; then
+            ARTIFACTS="$(git diff --name-only "$PREV..$TAG" \
+              -- configs/ practices/ principles/ || true)"
+          fi
+
           {
             echo "Shared configuration and practice for jrmoulckers repositories."
             echo
@@ -74,6 +93,18 @@ jobs:
             for dir in packages/*/; do
               node -p "const p=require('./${dir}package.json'); '- \`' + p.name + '@' + p.version + '\`'"
             done
+            echo
+            if [ -z "$PREV" ]; then
+              echo "First tag — every artifact is new."
+            elif [ -z "$ARTIFACTS" ]; then
+              echo "**No non-npm artifact changed since \`$PREV\`.** If you consume"
+              echo "\`configs/golangci.yml\`, \`practices/\` or \`principles/\`, this tag is"
+              echo "provenance-only: re-pinning changes which tag you name, not what you enforce."
+            else
+              echo "**Changed since \`$PREV\`**, for consumers that fetch files rather than packages:"
+              echo
+              echo "$ARTIFACTS" | sed 's/^/- `/; s/$/`/'
+            fi
             echo
             echo "Go consumers fetch \`configs/golangci.yml\` at this tag."
             echo
