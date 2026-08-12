@@ -132,6 +132,28 @@ export async function main(argv) {
       const re2 = new RegExp(re.source, 'ig');
       console.log(`  ${f.padEnd(9)} ${excerpt(String(h.record[f]), re2)}`);
     }
+    // Always show the obligation, matched or not.
+    //
+    // Looking up a known ID matches the `id` field and nothing else, so this
+    // tool used to answer `ENG-OBS-004` with its title -- "End-to-end
+    // correlation" -- and then advise reading the whole record it had just
+    // declined to print. That is the exact input that produces a wrong citation:
+    // an adopter drafting against `ENG-OBS-004` inferred "requires a stable
+    // operation name" from the title, where the statement requires *propagated
+    // correlation identifiers, bounded and unrelated to sensitive identity*. A
+    // second citation went the same way off `ENG-TEST-004` / "Distinct static
+    // signals". Both would have passed the citation checker, because the ID
+    // resolves; a wrong-but-resolving citation launders an unratified rule as
+    // ratified.
+    //
+    // This repository's own guidance is "Statements, not titles". The tool it
+    // recommends for the lookup was showing titles.
+    for (const f of ['statement', 'evidence']) {
+      if (h.matched.includes(f)) continue;
+      const value = h.record[f];
+      if (value === undefined || value === null || String(value) === '') continue;
+      console.log(`  ${f.padEnd(9)} ${String(value)}`);
+    }
     // The distinction that produced this tool: purpose versus obligation.
     if (!h.matched.includes('statement') && h.matched.includes('evidence')) {
       console.log(
@@ -143,8 +165,8 @@ export async function main(argv) {
   }
   console.log(`Searched fields: ${fields.join(', ')}.`);
   console.log(
-    'A match is not authority. Read the whole record and confirm the principle governs\n' +
-      'your claim rather than merely sharing its vocabulary.',
+    'A match is not authority. The Statement is the obligation and the title is a\n' +
+      'label for it -- cite what the Statement says, not what the title suggests.',
   );
   return 0;
 }

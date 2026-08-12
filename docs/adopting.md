@@ -6882,6 +6882,26 @@ and flags Evidence-only hits explicitly. The field matters to your judgement: a 
 you the principle is _for_ your case, an Evidence hit tells you it is what you must be able to
 _show_ — and the second is usually the citable one.
 
+**Look up the ID before you cite it, not just to confirm it exists.** Passing an ID prints its
+Statement and Evidence whether or not they matched:
+
+```text
+ENG-OBS-004  End-to-end correlation
+  statement Correlate work across trust and dependency boundaries with propagated identifiers
+            that are unique, bounded, and unrelated to sensitive identity.
+```
+
+That output is deliberately hard to skim past, because the title is what misleads. An adopter
+drafting against `ENG-OBS-004` wrote that it "requires structured logs to carry a stable operation
+name" — a reasonable reading of _End-to-end correlation_, and not what it says. A second citation
+went the same way off `ENG-TEST-004` / _Distinct static signals_. **Both would have passed
+`citations:check`, because the ID resolves.** A wrong-but-resolving citation is the worst kind: it
+launders an unratified rule as ratified, and the checker's green is what makes it credible.
+
+Until recently this tool answered an ID lookup with the title alone and then advised reading a
+record it had declined to print. If you have a vendored copy from before that, cite from
+`principles/index.json` directly.
+
 #### Two rules that pull against each other, and how to settle it
 
 "Check before concluding no principle exists" and "cite nothing rather than the nearest-sounding ID"
