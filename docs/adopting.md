@@ -25,6 +25,9 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | A version bump seems to change nothing                       | `Diffing the increment is not verifying the floor`       |
 | `--print-config` shows rules for a framework you do not use  | `Grep the severity, not the name`                        |
 | `npm update` will not take a new minor                       | `Do not use a caret at all`                              |
+| Want to know if your pins are stale without a registry token | `Check your pins mechanically`                           |
+| A base64-decoded file is corrupt on Windows                  | `WriteAllBytes`                                          |
+| A Node script exits `0xC0000409` after a `fetch`             | `UV_HANDLE_CLOSING`                                      |
 | `warn` rules are failing your build                          | `A warn severity is not advisory under`                  |
 | `TS7016` on a config file after enabling `checkJs`           | `Precondition 1: the config file must be`                |
 | Type declarations appear to do nothing                       | `Precondition 2:`                                        |
@@ -1941,6 +1944,83 @@ give the specifier rather than the number:
 
 If you are reading a release note from this repository that names a version without naming the
 current floor, treat the version as trivia and check `versions.json` before editing anything.
+
+### Check your pins mechanically, because every symptom of a stale one is silence
+
+Everything in this section describes a defect with **no error message**. The install succeeds, the
+range is satisfied, the behaviour is correct for the version you have, and `npm outdated` says
+nothing actionable about a range that is met. Eleven repositories reached that state, and none of
+them found it by noticing something.
+
+So do not rely on noticing. `versions.json` lives in a **public** repository and is readable over
+plain HTTPS with no registry token, which means a consumer can check their own pins even when they
+cannot authenticate to the package registry at all — the case where the question is most likely to
+be asked:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jrmoulckers/engineering/main/scripts/check-pins.mjs \
+  | node - ./package.json
+```
+
+It reads the `@jrmoulckers/*` ranges out of your `package.json`, compares each against the published
+version recorded in `versions.json`, and exits non-zero if any range cannot reach it:
+
+```
+  STALE    @jrmoulckers/eslint-config    ^0.3.0  CANNOT reach 0.16.0
+                                         use: >=0.16.0 <1.0.0
+```
+
+Two properties are deliberate, and both exist because this guide has repeatedly caught its own
+tooling reporting clean for the wrong reason:
+
+- **A range it cannot parse is reported `unknown` and exits non-zero**, never `ok`. A checker that
+  treats "I failed to evaluate this" as "this is fine" reports success on exactly the inputs it did
+  not examine.
+- **An unreadable `versions.json` exits `2` with an error** rather than finding no problems. A
+  network failure and a clean bill of health must not look alike.
+
+Run it in CI if you want the guarantee rather than the reminder; a stale pin is otherwise invisible
+until someone re-reports a defect that was fixed in a release their caret excludes.
+
+#### Two Windows traps when running tooling from this repository
+
+Both were found by consumers running the tooling above, and both produce a wrong result rather than
+an error.
+
+**Do not pipe binary through PowerShell to extract a file — PowerShell will re-encode it on the way
+through.** A consumer decoding a base64 attachment with
+`... | Set-Content` or `> file` got a corrupt file that failed to parse, because the pipeline
+decodes bytes to text and re-encodes them on write. Write the bytes directly:
+
+```powershell
+[IO.File]::WriteAllBytes('out.mjs', [Convert]::FromBase64String($b64))
+```
+
+Measured on a 5,854-byte script: `WriteAllBytes` reproduces the source hash exactly, while the
+piped form yields a different SHA-256 and a file **two bytes larger**.
+
+**The corrupted file still passed `node --check`.** That is the part worth keeping: the damage is to
+encoding and line endings, so whether it breaks depends on the content — one consumer's extraction
+failed to parse outright, mine parsed clean and was still not the file I sent. A syntax check is not
+an integrity check. If it matters that you received the bytes that were sent, **compare hashes**;
+running the file successfully proves only that it runs.
+
+This is the same class of fault as `(Get-Content -Raw).Length` returning a **character** count where
+a byte count was meant — described under `A character count is not a byte count`. PowerShell's
+pipeline is text, and every conversion at its edges is lossy for anything that is not ASCII.
+
+**Do not call `process.exit()` after a `fetch()` in your own tooling.** On Windows, Node aborts with
+a libuv assertion and returns `0xC0000409` (`-1073740791`) instead of the code you asked for, because
+the connection pool is still open:
+
+```
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+```
+
+Measured on Node 24.3.0: `process.exit(3)` aborts, while `process.exitCode = 3` exits cleanly with
+`3` in 0.4s — so nothing is gained by forcing it. The failure is worse than a crash, because the
+script prints its correct output first and only then aborts; a CI step reads a garbage exit code from
+a run that looked like it worked. `scripts/check-pins.mjs` assigns `exitCode` for this reason.
 
 **Verifying the behaviour does not verify the version, and this is the way the caret survives a
 careful adoption.** One repository adopted `@jrmoulckers/prettier-config@^0.2.0` and checked it
