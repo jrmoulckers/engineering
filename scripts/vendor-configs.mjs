@@ -492,6 +492,36 @@ async function check(noRemote = false) {
 
   process.stdout.write(`${entries.length} vendored file(s) match ${LOCK} at ${lock.ref}.\n`);
 
+  // Skipping an absent `tool` above keeps old locks working, but it also makes
+  // this run silent about the one thing it could not check -- and silence here
+  // reads as "verified", which is the failure mode this script exists to refuse.
+  //
+  // A fleet audit found four adopters in this state, one of them vendored at a
+  // ref far newer than the release that added tool tracking. `lock.ref` records
+  // the ref that was *requested*, not the vintage of the script that wrote the
+  // lock, so a current-looking ref is not evidence of a current tool.
+  //
+  // Deliberately not labelled `Notice:`. That prefix belongs to the staleness
+  // report, whose silence is a load-bearing guarantee -- reusing it here would
+  // make a quiet staleness run impossible to distinguish from an unverified
+  // tool, which is the same conflation in a new place.
+  //
+  // The claim is scoped to what the lock proves. A key can also be absent
+  // because the vendor run could not fetch the script, so this says the tool is
+  // unverified and names the test that separates the two causes, rather than
+  // asserting an age the lock cannot establish.
+  if (lock.tool === undefined) {
+    process.stdout.write(
+      `\nUnverified: this lock has no 'tool' entry, so the vendoring script itself was\n` +
+        `not checked. ${lock.ref} is the ref you asked for, not the age of the script that\n` +
+        `wrote this lock, so a current ref is not evidence of a current tool.\n` +
+        `Tell the two apart -- a copy that cannot say whether your files would change is\n` +
+        `reporting staleness on release cadence, and will stay quiet about itself:\n` +
+        `  node -e "process.stdout.write(/would change/.test(require('fs').readFileSync('scripts/vendor-configs.mjs','utf8'))?'current\\n':'refresh me\\n')"\n` +
+        `This is not a failure. Refreshing records the tool: node scripts/vendor-configs.mjs ${lock.ref}\n`,
+    );
+  }
+
   // Pristine is not the same as used.
   //
   // A consumer pointed out that everything above can pass on a tree nothing
