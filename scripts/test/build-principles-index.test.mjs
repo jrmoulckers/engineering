@@ -1,5 +1,10 @@
 // citations-check: ignore-file -- builds deliberately-invalid citation fixtures.
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
 import assert from 'node:assert/strict';
 
 import { parsePrinciples } from '../build-principles-index.mjs';
@@ -132,4 +137,50 @@ test('fields that are deliberately not indexed are not reported as unknown', () 
   const { principles, unknown } = parsePrinciples(source, 'principles/x.md');
   assert.equal(principles.length, 1);
   assert.deepEqual(unknown, []);
+});
+
+// The catalog contradicted itself in all 66 records: `Status: Ratified` beside
+// "Engineering owns this Draft's ... mechanism; only the repository owner may
+// change it to Ratified." A consumer could not tell which half was authoritative,
+// and a proposal that leaned on the word "Ratified" could not be evaluated. The
+// owner ruled that Ratified is correct and the clause was stale boilerplate.
+//
+// Uniformity is what made it invisible: 66 of 66 looks like a convention rather
+// than a defect, and nothing compared the two lines to each other.
+describe('a principle does not contradict itself about its own status', () => {
+  const dir = path.join(here, '..', '..', 'principles');
+
+  function records() {
+    const out = [];
+    const walk = (d) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (e.name.endsWith('.md')) out.push([p, readFileSync(p, 'utf8')]);
+      }
+    };
+    walk(dir);
+    return out;
+  }
+
+  test('no ratified record describes itself as a Draft', () => {
+    const offenders = [];
+    for (const [file, text] of records()) {
+      const lines = text.split(/\r?\n/);
+      lines.forEach((line, i) => {
+        if (!/Owner and ratification:/.test(line)) return;
+        if (!/Draft/.test(line)) return;
+        const near = lines.slice(Math.max(0, i - 8), i).join('\n');
+        if (/Status:\s*Ratified/.test(near)) offenders.push(`${file}:${i + 1}`);
+      });
+    }
+    assert.deepEqual(offenders, [], 'a Ratified record must not call itself a Draft');
+  });
+
+  test('no record still promises to change its status to Ratified', () => {
+    const offenders = records()
+      .filter(([, text]) => /may change it to Ratified/.test(text))
+      .map(([file]) => file);
+    assert.deepEqual(offenders, []);
+  });
 });
