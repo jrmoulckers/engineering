@@ -16,6 +16,24 @@ function lint(configs, code, filename) {
   return linter.verify(code, configs, { filename });
 }
 
+describe('type declarations', () => {
+  // A declaration that exists in the repository but is missing from `files` is
+  // absent from the tarball, so it fails for the consumer and passes every
+  // local check. Assert publication, not just existence.
+  test('every export subpath ships a published declaration', async () => {
+    const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+
+    for (const [subpath, entry] of Object.entries(pkg.exports)) {
+      assert.equal(typeof entry, 'object', `${subpath} is a bare string, so it ships no types`);
+      assert.ok(entry.types, `${subpath} has no "types" condition`);
+
+      const target = entry.types.replace('./', '');
+      assert.ok(pkg.files.includes(target), `${target} is missing from "files"`);
+      await readFile(new URL(`../${target}`, import.meta.url), 'utf8');
+    }
+  });
+});
+
 describe('base preset', () => {
   test('returns a non-empty flat config array', () => {
     const configs = base();

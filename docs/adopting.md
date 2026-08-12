@@ -3482,6 +3482,35 @@ declarations. `extend` is deliberately typed `unknown[]`: config objects origina
 different copy of `@types/eslint` than yours are not mutually assignable, so a narrower type would
 reject correct configs.
 
+**`include` without `allowJs` is a silent no-op, not an error.** A consumer enabling the
+declarations found their `tsconfig.node.json` had listed `svelte.config.js`, `eslint.config.js`
+and `prettier.config.js` in `include` since adoption — and with `allowJs` off, `tsc` skips all
+three. No error, no warning, exit `0`, and `--listFiles` shows none of them in the program. The
+`include` entry made it look as though they were checked; they never had been.
+
+So turning on the declarations changes nothing until `allowJs` and `checkJs` are both on, and the
+absence of any diagnostic reads as "the types do not work" rather than "the file is not being
+compiled." Confirm the file is actually in the program before concluding anything about it:
+
+```bash
+tsc -p tsconfig.node.json --listFiles | grep prettier.config
+```
+
+That is this guide's standing rule about probes, in a new place: a green run proves nothing until
+you have shown the check can see the file. Pair it with a negative control — pass a deliberately
+invalid option and require a non-zero exit — because a config file that is skipped and a config
+file that is correct produce identical output.
+
+**Every subpath of every package must ship a `types` condition for this to work at all.** The same
+consumer could not enable `checkJs`, because `@jrmoulckers/prettier-config` at `0.3.0` shipped no
+declarations, so `prettier.config.js` failed with `TS7016` the moment the project began checking
+JavaScript. Fixed in `prettier-config@0.4.0`. The failure is worth recognising because it **names
+the wrong package**: the feature being adopted is in `eslint-config`, the error is raised against
+`prettier-config`, and it appears only once an unrelated compiler option is switched on. A test in
+each package now asserts that every `exports` subpath declares `types` and that the declaration is
+listed in `files`, since a declaration that exists in the repository but is not published fails
+identically for the consumer and passes every local check.
+
 #### Diff the _resolved_ rule set per file class, not the config source
 
 A consumer with no previous ESLint config had no before/after to compare, and said so rather than
