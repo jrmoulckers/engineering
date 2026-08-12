@@ -1523,6 +1523,37 @@ The mitigation that consumer applies is worth copying: **comment each entry with
 so the next person to tidy the ignore file can see that removing a line has an owner on the other
 end rather than looking like dead weight.
 
+> **The sharpest case is a file you own that contains a region you don't — and whole-file
+> exclusion is the expensive answer to it.** A consumer hit this when `main` grew a synced
+> `studio:base` region inside `.github/copilot-instructions.md`, a file that is locally authored
+> overall. Their category exclusions listed whole paths, so nothing covered it. They added the
+> whole file to `.prettierignore`, which is correct and safe.
+>
+> It also stops formatting the majority of the file that they do own, permanently, to protect a
+> few lines. Prettier supports region-level ignores in Markdown, which keeps both properties:
+>
+> ```markdown
+> <!-- prettier-ignore-start -->
+> <!-- studio:base:start -->
+> ... managed content ...
+> <!-- studio:base:end -->
+> <!-- prettier-ignore-end -->
+> ```
+>
+> Verified structurally rather than by eye — the managed region came back **byte-identical**
+> (table unpadded, `*emphasis*` not converted to `_emphasis_`, runs of spaces intact) while local
+> prose outside the markers was reformatted normally.
+>
+> **Put the `prettier-ignore` markers outside the sync delimiters, not inside.** A sync engine
+> that rewrites the interior of its own region will overwrite anything placed within it, so
+> markers on the inside survive exactly until the next sync and then vanish silently — leaving a
+> file that formats correctly today and reformats a managed region the next time upstream
+> changes. Outside the delimiters, they are part of the content you own.
+>
+> Whole-file exclusion remains the right call when the managed region has no stable delimiters to
+> bracket, or when the file is mostly managed anyway. The point is to make it a decision rather
+> than the only known option.
+
 If you hold signed manifests, lockfiles with recorded integrity, golden or snapshot fixtures, or
 vendored third-party sources, apply the same reasoning before your first format pass — the first
 run is where the damage lands, and a reflowed snapshot fixture fails as a false test failure a
