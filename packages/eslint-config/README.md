@@ -185,6 +185,51 @@ is the accurate choice, not the lazy one.
 
 Tests, config files, and scripts are exempt from `no-console`.
 
+### `warn` is not advisory under `--max-warnings 0`
+
+Every preset ships some rules at `warn` deliberately, on the reasoning that they flag things worth
+seeing but not worth blocking a build for. **That reasoning is void the moment a consumer runs
+`eslint --max-warnings 0`**, which is a common and otherwise sensible gate: a `warn` then fails
+the build exactly as an `error` does, and the severity distinction this package chose collapses
+without any signal that it has.
+
+The count is not one or two rules. Measured from the resolved config on a `.tsx` file:
+
+| Preset           | Rules at `warn` |
+| ---------------- | --------------- |
+| `base()`         | 1               |
+| `reactConfig()`  | 2               |
+| `svelteConfig()` | 2               |
+| `nextConfig()`   | **18**          |
+
+`no-console` reaches every preset, so no consumer is exempt. The Next figure is large because
+`@next/next` publishes 14 of its own rules at `warn`, and the preset deliberately preserves Next's
+severities rather than promoting them.
+
+The rules most likely to need a per-repo decision under that flag are the two with genuine false
+positives — `react-hooks/exhaustive-deps` and `@typescript-eslint/no-explicit-any` — plus
+`no-console` in any repository with legitimate console output outside the tooling globs.
+
+Neither severity is wrong; they are answering different questions. **Decide which gate you are
+running before reading a `warn` as advisory:**
+
+```jsonc
+// treats warn as advisory — the severities in this package mean what they say
+"lint": "eslint ."
+
+// treats warn as fatal — every rule in the table above becomes blocking
+"lint": "eslint . --max-warnings 0"
+```
+
+If you want the second gate and not the promotion, downgrade the specific rules at the call site
+rather than abandoning the flag:
+
+```js
+export default nextConfig({
+  rules: { 'react-hooks/exhaustive-deps': 'off' },
+});
+```
+
 ## Compatibility
 
 Plugins disagree about where flat configs live, and reading the wrong key fails at config load

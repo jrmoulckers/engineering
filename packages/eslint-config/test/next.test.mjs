@@ -1,6 +1,8 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 
+import { ESLint } from 'eslint';
 import next from '@next/eslint-plugin-next';
 
 import { nextConfig } from '../next.js';
@@ -15,6 +17,54 @@ function isFlatShaped(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
   return !Array.isArray(entry.plugins);
 }
+
+describe('warn severities are documented', () => {
+  // The README tells consumers how many rules `--max-warnings 0` promotes to
+  // blocking. That number is only useful if it cannot drift, and it moves
+  // whenever an upstream plugin changes a severity, with no edit here.
+  //
+  // Resolved through ESLint rather than by merging `rules` blocks: a flat merge
+  // ignores `files` scoping, so the tooling block's `no-console: 'off'` lands on
+  // every file and the count comes out one short for every preset.
+  const documented = { base: 1, react: 2, svelte: 2, next: 18 };
+
+  const cwd = fileURLToPath(new URL('../', import.meta.url));
+  const target = fileURLToPath(new URL('../src/component.tsx', import.meta.url));
+
+  async function warnRules(name) {
+    const mod = await import(`../${name}.js`);
+    const eslint = new ESLint({
+      cwd,
+      overrideConfigFile: true,
+      overrideConfig: mod.default(),
+    });
+    const resolved = await eslint.calculateConfigForFile(target);
+    return Object.entries(resolved.rules ?? {})
+      .filter(([, value]) => (Array.isArray(value) ? value[0] : value) === 1)
+      .map(([rule]) => rule)
+      .sort();
+  }
+
+  for (const [name, expected] of Object.entries(documented)) {
+    test(`${name} exposes ${expected} warn-severity rule(s) on .tsx`, async () => {
+      const warns = await warnRules(name);
+      assert.equal(
+        warns.length,
+        expected,
+        `README documents ${expected} for ${name}; resolved ${warns.length}: ${warns.join(', ')}`,
+      );
+    });
+  }
+
+  test('no-console is warn in every preset, so no consumer is exempt', async () => {
+    for (const name of Object.keys(documented)) {
+      assert.ok(
+        (await warnRules(name)).includes('no-console'),
+        `${name} does not resolve no-console to warn on a source file`,
+      );
+    }
+  });
+});
 
 describe('next preset', () => {
   test('resolves against the installed plugin without throwing', () => {
