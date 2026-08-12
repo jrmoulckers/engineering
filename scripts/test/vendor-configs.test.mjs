@@ -14,7 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SETS } from '../vendor-configs.mjs';
+import { SETS, isNewerRef } from '../vendor-configs.mjs';
 import { createHash } from 'node:crypto';
 
 const script = fileURLToPath(new URL('../vendor-configs.mjs', import.meta.url));
@@ -34,6 +34,22 @@ function run(args, cwd, source = script, env = {}) {
     timeout: 60_000,
   });
   return { code: result.status, out: `${result.stdout}${result.stderr}` };
+}
+
+// spawnSync blocks this process's event loop, so an in-process server can never
+// answer the child and the child times out. Tests that stub the release lookup
+// must use this instead.
+function runAsyncIn(cwd, args, env = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [script, ...args], {
+      cwd,
+      env: { ...process.env, ...env },
+    });
+    let out = '';
+    child.stdout.on('data', (d) => (out += d));
+    child.stderr.on('data', (d) => (out += d));
+    child.on('close', (code) => resolve({ code, out }));
+  });
 }
 
 function workspace() {
@@ -589,21 +605,7 @@ describe('vendor-time staleness notice', () => {
   // implementation, because unauthenticated calls are capped at 60/hour per IP
   // and the rest of this suite had spent them. A test whose result depends on
   // how many other calls ran that hour is not a test of the code.
-  // spawnSync blocks this process's event loop, so an in-process server can
-  // never answer the child and the child times out. The first version of these
-  // tests deadlocked exactly that way.
-  function runAsync(args, cwd, env) {
-    return new Promise((resolve) => {
-      const child = spawn(process.execPath, [script, ...args], {
-        cwd,
-        env: { ...process.env, ...env },
-      });
-      let out = '';
-      child.stdout.on('data', (d) => (out += d));
-      child.stderr.on('data', (d) => (out += d));
-      child.on('close', (code) => resolve({ code, out }));
-    });
-  }
+  const runAsync = (args, cwd, env) => runAsyncIn(cwd, args, env);
 
   async function withApi(tagName, body) {
     const server = createServer((req, res) => {
@@ -657,6 +659,33 @@ describe('vendor-time staleness notice', () => {
     });
   });
 
+  // GitHub returns the most recent release by tag DATE, not the greatest
+  // version. Comparing for inequality therefore prompts a DOWNGRADE the first
+  // time a patch is backported to an older line -- and it prompts every
+  // consumer at once. Reported by an adopter who found it in their own notice
+  // before it fired here.
+  test('never prompts a move to an older release', { skip: OFFLINE }, async () => {
+    await withApi('v0.15.7', async (exec) => {
+      const { code, out } = await exec(['v0.115.0']);
+      assert.equal(code, 0);
+      assert.match(out, /Vendored 10 file\(s\)/);
+      assert.doesNotMatch(
+        out,
+        /Notice: you vendored/,
+        'v0.15.7 is older than v0.115.0; suggesting it is a downgrade prompt',
+      );
+    });
+  });
+
+  test('stays silent when the reported tag is not a version', { skip: OFFLINE }, async () => {
+    await withApi('main', async (exec) => {
+      const { code, out } = await exec(['v0.113.0']);
+      assert.equal(code, 0);
+      // An ordering that cannot be established is not a staleness signal.
+      assert.doesNotMatch(out, /Notice: you vendored/);
+    });
+  });
+
   test('stays silent when the API is unreachable', { skip: OFFLINE }, async () => {
     // A 403 exercises the !response.ok branch; only a refused connection
     // exercises the catch. Without this, rewriting the catch to rethrow passes
@@ -672,5 +701,76 @@ describe('vendor-time staleness notice', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('release ordering', () => {
+  // GitHub's releases/latest returns the most recent release by tag DATE, not
+  // the greatest version. These run without network so the ordering rules are
+  // pinned independently of what is currently published.
+  const cases = [
+    ['v0.115.0', 'v0.113.0', true, 'a genuinely newer release'],
+    ['v0.15.7', 'v0.115.0', false, 'a backport published after a newer minor'],
+    ['v0.115.0', 'v0.115.0', false, 'the same release'],
+    ['v0.15.4', 'v0.9.0', true, 'two-digit minor, where string order disagrees'],
+    ['v0.9.0', 'v0.15.4', false, 'the reverse, which string order calls newer'],
+    ['v1.0.0', 'v0.115.0', true, 'a major bump'],
+    ['v0.115.1', 'v0.115.0', true, 'a patch bump'],
+    ['0.116.0', 'v0.115.0', true, 'a tag without the v prefix'],
+    [null, 'v0.115.0', false, 'no reported tag'],
+    ['main', 'v0.115.0', false, 'a branch name rather than a tag'],
+    ['v0.115', 'v0.115.0', false, 'a malformed version'],
+  ];
+
+  for (const [candidate, current, expected, label] of cases) {
+    test(`${expected ? 'newer' : 'not newer'}: ${label}`, () => {
+      assert.equal(
+        isNewerRef(candidate, current),
+        expected,
+        `isNewerRef(${JSON.stringify(candidate)}, ${JSON.stringify(current)})`,
+      );
+    });
+  }
+});
+
+describe('--check staleness ordering', () => {
+  // The vendor-time notice and --check are separate call sites with separate
+  // comparisons. Fixing one and asserting only that one leaves the other free
+  // to prompt a downgrade -- confirmed by mutation: reverting --check alone
+  // passed the entire suite before this block existed.
+  function api(tagName) {
+    const server = createServer((req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ tag_name: tagName }));
+    });
+    return server;
+  }
+
+  async function checkAgainst(reportedLatest, vendoredRef) {
+    const server = api(reportedLatest);
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const dir = workspace();
+    try {
+      const vendored = await runAsyncIn(dir, [vendoredRef], { VENDOR_API_BASE: base });
+      assert.equal(vendored.code, 0, 'vendoring must succeed before --check is meaningful');
+      return await runAsyncIn(dir, ['--check'], { VENDOR_API_BASE: base });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+
+  test('--check never prompts a move to an older release', { skip: OFFLINE }, async () => {
+    const { code, out } = await checkAgainst('v0.15.7', 'v0.115.0');
+    assert.equal(code, 0);
+    assert.match(out, /vendored file\(s\) match/);
+    assert.doesNotMatch(out, /Notice: pinned at/, 'v0.15.7 is older than v0.115.0');
+  });
+
+  test('--check still reports a genuinely newer release', { skip: OFFLINE }, async () => {
+    const { code, out } = await checkAgainst('v0.999.0', 'v0.113.0');
+    assert.equal(code, 0, 'staleness is information, never a failure');
+    assert.match(out, /Notice: pinned at v0\.113\.0; newest release is v0\.999\.0/);
   });
 });

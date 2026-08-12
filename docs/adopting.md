@@ -303,6 +303,50 @@ covers, and the current set is **10**. Eight means a ref older than `v0.112.0` g
 prettier declarations are missing — a more legible signal than reading the tag, because `v0.15.3`
 and `v0.115.0` look similar and sort in the wrong order.
 
+#### `releases/latest` is the most recent release, not the greatest version
+
+If you write your own staleness check, **compare versions — do not compare for difference.**
+
+GitHub's `releases/latest` returns the most recent non-draft, non-prerelease release ordered by
+the underlying tag's date. That is not the same as the highest version. A patch backported to an
+older line and published after a newer minor is reported as `latest`, so:
+
+```sh
+[ "$latest" != "$pinned" ] && echo "update to $latest"   # prompts a DOWNGRADE
+```
+
+The output is confident, plausible, and wrong, and it fires for **every consumer simultaneously** —
+the first backport release turns a correct check into fleet-wide bad advice. It cannot be caught by
+observing a failure, because the misleading output is shaped exactly like the correct output.
+
+Compare with `sort -V`, or parse and compare numerically:
+
+```sh
+[ "$(printf '%s\n%s\n' "$pinned" "$latest" | sort -V | tail -1)" != "$pinned" ]
+```
+
+Two further traps in the same area. **String comparison is not version comparison** — `v0.9.0`
+sorts above `v0.15.4` lexically, which is wrong, and this repository's tags have run past `v0.99.0`
+so the two-digit minor case is live rather than hypothetical. And **an ordering you cannot
+establish is not a staleness signal**: if either ref fails to parse, say nothing rather than
+guessing, for the same reason the check exits 0 when the lookup fails.
+
+`scripts/vendor-configs.mjs` had this defect at both call sites, and shipped with it. An adopter
+found it in their own notice first and reported the mechanism.
+
+#### The verifier is the least-tested code you run
+
+Every recipe here asks you to run a check, and the checks have now failed more often than the
+things they check. A drift checker that cannot read its lock reports no drift. A staleness notice
+whose extraction fails silently names no version and still prints confidently. An install verified
+on a warm cache proves nothing about a cold one. A `--print-config` diff is sound and still wrong
+against a stale tree.
+
+These share one shape: **the failure of the check presents as a successful check.** So when you add
+one, test that it can _fail_ — break the input on purpose and confirm the red — before trusting a
+green. A check that has never been observed failing is an assertion about your intent, not about
+your repository.
+
 #### A warm npm cache makes a token requirement disappear
 
 If you are checking whether a change removed the need for a token, **a plain `npm ci` cannot tell
