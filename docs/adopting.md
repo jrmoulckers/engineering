@@ -888,7 +888,13 @@ steps:
 > | Cause                     | `/jobs` returns | `/timing` `.billable`                     |
 > | ------------------------- | --------------- | ----------------------------------------- |
 > | caller grant below callee | **`0` jobs**    | **`{}`** — empty, `run_duration_ms: null` |
-> | billing / spending limit  | **`8` jobs**    | `UBUNTU` present, `total_ms: 0`           |
+> | billing / spending limit  | **every job**   | runner present, `total_ms: 0`             |
+>
+> Read `total_ms` (billable), **not `run_duration_ms`** (wall clock). A billing-stopped run reports
+> `run_duration_ms` values of 4,000–39,000 ms across the fleet while every `total_ms` and every
+> per-job `duration_ms` is exactly `0`. Reaching for the wrong one makes the billing case look like
+> a run that executed. Measured on four repositories with job counts of 3, 6, 9 and 10 — the count
+> itself is whatever the workflow declares, so compare against zero, not against a number.
 >
 > The cleaner discriminator is therefore **whether jobs exist at all**, not how long they ran. It
 > also matches the mechanism: a caller asking for more than it holds is rejected before any job is
@@ -921,6 +927,27 @@ steps:
 > and its oldest surviving run already postdates the boundary. It has never once observed its own
 > CI pass. Nothing it concluded from a green-versus-red comparison can be load-bearing, because it
 > has never had a green.
+>
+> That repository's control has now been read directly rather than inferred. Its oldest surviving
+> unmodified-`main` run — the control arm of a permissions experiment — returns **9 jobs, 0 steps,
+> and the billing annotation verbatim**. So the control did not merely fail; it failed for a reason
+> the experiment could not see and could not have been fixed by any change to the branch under
+> test. **A control that fails for an account-level reason returns "both red" and reads as
+> confirmation.** The experiment's conclusion may still be true — the permission mechanism is real
+> and was demonstrated separately — but this run is no longer evidence for it.
+>
+> The general form is worth more than the incident: **a control only controls for the variables it
+> can vary.** Before a red-versus-red or green-versus-red comparison is load-bearing, confirm the
+> control was capable of the other outcome. That is the same demand made of any probe elsewhere in
+> this guide — run it against a state you believe is broken — applied to the control arm, which is
+> the one place it is habitually skipped because the control is assumed rather than tested.
+>
+> **The visibility split is itself the cheapest fleet-wide probe.** Actions minutes are billed on
+> private repositories and free on public ones, so an account-level hold partitions a mixed fleet
+> exactly along `gh repo view --json visibility`. Measured here: four private repositories red with
+> the annotation, four public ones running normally and merging, at the same minute, on the same
+> workflows. If the split falls on visibility rather than on anything in the workflows, the cause is
+> the account, and no amount of workflow auditing will move it.
 >
 > The practical rule: **before treating a red run as evidence about your change, confirm the account
 > can produce a green run at all.** The cheapest check is a public repository under the same
@@ -1589,6 +1616,17 @@ rather than trusting this table, which is a literal and therefore ages:
 ```bash
 curl -s https://raw.githubusercontent.com/jrmoulckers/engineering/main/versions.json
 ```
+
+**The cost of ignoring this is now measured, and it presents as diligence.** One consumer kept the
+caret form and bumped `0.4 → 0.6 → 0.7 → 0.8` in a single evening — four hand edits to
+`package.json`, each one prompted by a message rather than by any tool, each verified with a full
+five-gate run, and each leaving them stale again within hours. They then asked, reasonably, that
+this trap be written down. It already was, three sections above the line they were editing.
+
+That is the diagnostic worth keeping: **repeated manual version bumps are a symptom of the wrong
+range form, not evidence of a well-maintained manifest.** If you find yourself editing a floor by
+hand more than once, the fix is not a faster edit — it is `>=x.y.z <1.0.0`, after which `npm
+update` crosses minors on its own and the floor table stops being something you have to be told.
 
 **Verifying the behaviour does not verify the version, and this is the way the caret survives a
 careful adoption.** One repository adopted `@jrmoulckers/prettier-config@^0.2.0` and checked it
@@ -2408,12 +2446,12 @@ the presets must handle rather than an edge case.
 > consumer unified three failures in this migration that had been recorded separately, and the
 > unification is correct — they are one lesson, not three:
 >
-> | Missing                               | How it presents                                                                                  |
-> | ------------------------------------- | ------------------------------------------------------------------------------------------------ |
-> | no registry token                     | `401`, textually identical to a wrong or expired token                                           |
-> | no fetched `.golangci.yml`            | a clean lint run against a strictly smaller default rule set                                     |
-> | a failed fetch writing to disk        | an error body saved as config, with exit status `0`                                              |
-> | `packages: read` absent from a caller | `startup_failure` with **no job, no step and no log** — indistinguishable from a platform outage |
+> | Missing                               | How it presents                                                                                 |
+> | ------------------------------------- | ----------------------------------------------------------------------------------------------- |
+> | no registry token                     | `401`, textually identical to a wrong or expired token                                          |
+> | no fetched `.golangci.yml`            | a _different_ finding set — noisier on `errcheck`, silent on five linters                       |
+> | a failed fetch writing to disk        | an error body saved as config, with exit status `0`                                             |
+> | `packages: read` absent from a caller | `startup_failure` with **no job, no step and no log** — see below, this has more than one cause |
 >
 > In each case the absent thing is indistinguishable from a present-but-wrong thing, and in two of
 > them it is indistinguishable from success. **So verify presence before assuming validity**: check
@@ -2862,7 +2900,7 @@ as something other than absence.**
 | `--no-config --list-different` reports 0 | ignore file still applied; zero files were checked                |
 | npm registry `401`                       | token absent, empty or wrong — indistinguishable                  |
 | npm `401`/`403` on a package             | says nothing about whether the package is private                 |
-| `startup_failure` with no logs           | missing `packages: read`; reads like a platform outage            |
+| `startup_failure` with no logs           | **at least two causes** — read the annotation, do not infer       |
 | lint "passes" with no config present     | the linter fell back to built-in defaults silently                |
 | a fetch step exits 0                     | an error body was written to the destination as config            |
 | a preset diff shows no change            | the new option did not exist; the key destructured to `undefined` |
