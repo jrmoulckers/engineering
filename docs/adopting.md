@@ -243,6 +243,14 @@ Route the scope, and nothing else. Do **not** commit an `_authToken` line, even 
 interpolates an environment variable: it makes every local command fail confusingly when the
 variable is unset, and it puts a credential-shaped string in version control.
 
+**"Scope, not wholesale" is not a style preference, and stating it as one is why people ignore
+it.** Setting `registry=` without a scope prefix reroutes _every_ registry operation, including
+advisory lookups — and GitHub Packages implements **no advisory endpoint at all**. So a wholesale
+reroute does not redirect `npm audit` / `pnpm audit` to a different source; it **removes the
+capability**, and your security gate starts erroring instead of auditing. Said that way it also
+predicts the symptom on both package managers, rather than having to be memorized per tool. The
+measured failure text for each is [below](#the-npmrc-scope-trap-measured).
+
 **A committed `.npmrc` outranks the one CI writes for you.** `setup-node` writes its registry
 configuration to a **user**-level file and points `NPM_CONFIG_USERCONFIG` at it. Your committed
 `.npmrc` is **project**-level, and project beats user on every key it sets. npm says so out
@@ -351,11 +359,26 @@ steps:
 ```
 
 > **`packages: read` is the one change that can break a working pipeline.** A called workflow
-> can never hold a permission its caller lacks. If your workflow has an explicit `permissions:`
-> block and you do not add `packages: read`, the run fails at startup with **no readable log** —
-> no failing step to open, no error text, just `startup_failure`. It reads like an outage rather
-> than a missing scope, so check this first. Workflows with no `permissions:` block at all
-> inherit the repository default and are unaffected.
+> can never hold a permission its caller lacks. If your workflow **calls an install-bearing
+> reusable** and has an explicit `permissions:` block that omits `packages: read`, the run fails
+> at startup with **no readable log** — no failing step to open, no error text, just
+> `startup_failure`. It reads like an outage rather than a missing scope, so check this first.
+>
+> **Both halves of that condition are required, and conditioning on the wrong one is expensive
+> in a different direction.** A Go repository with an explicit `contents: read` block and no
+> `packages: read` is green, because it calls no such reusable — nothing is ever asked for the
+> permission, so the ceiling never binds. Read as "explicit block without `packages: read` is
+> dangerous", the rule pushes repositories with no npm surface at all to grant a scope they have
+> no use for. That is a **widening of `GITHUB_TOKEN` authority adopted for no reason**, which is
+> the opposite of `ENG-SEC-004` (_"least privilege, scope, and credential lifetime needed for
+> each operation"_). Condition on the call, not on the block.
+>
+> **And do not read this as a reason to omit `permissions:`.** Omitting it inherits the
+> repository default, which in many organizations is still the permissive write-all set — so
+> "unaffected" is true of `startup_failure` and false of least authority. The advice that gets
+> both: **declare an explicit narrow block, and add `packages: read` only if a job in that file
+> calls a reusable that declares it.** Raised by a consumer who was the counterexample to the
+> earlier phrasing.
 >
 > This was measured against a deliberately misconfigured caller, and there is genuinely nothing to
 > read: **zero jobs created** (`/actions/runs/<id>/jobs` returns `total_count: 0`), **no check-run
@@ -632,7 +655,7 @@ error in the reasoning that produced it. When a test exists only to defend a con
 a behaviour, write the evidence for that conclusion into the test body, so the next reader can
 re-check the claim instead of trusting the check.
 
-**Route by scope. Never replace the default registry.** Setting
+**Route by scope. Never replace the default registry.** <a id="the-npmrc-scope-trap-measured"></a>Setting
 `registry=https://npm.pkg.github.com/` wholesale, rather than scoping it, breaks `npm audit` /
 `pnpm audit` — GitHub Packages implements no advisory endpoint. Under npm the failure reads:
 
@@ -1042,11 +1065,12 @@ before believing a green local run, on any channel, including ones added later.
 > consumer unified three failures in this migration that had been recorded separately, and the
 > unification is correct — they are one lesson, not three:
 >
-> | Missing                        | How it presents                                              |
-> | ------------------------------ | ------------------------------------------------------------ |
-> | no registry token              | `401`, textually identical to a wrong or expired token       |
-> | no fetched `.golangci.yml`     | a clean lint run against a strictly smaller default rule set |
-> | a failed fetch writing to disk | an error body saved as config, with exit status `0`          |
+> | Missing                               | How it presents                                                                                  |
+> | ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+> | no registry token                     | `401`, textually identical to a wrong or expired token                                           |
+> | no fetched `.golangci.yml`            | a clean lint run against a strictly smaller default rule set                                     |
+> | a failed fetch writing to disk        | an error body saved as config, with exit status `0`                                              |
+> | `packages: read` absent from a caller | `startup_failure` with **no job, no step and no log** — indistinguishable from a platform outage |
 >
 > In each case the absent thing is indistinguishable from a present-but-wrong thing, and in two of
 > them it is indistinguishable from success. **So verify presence before assuming validity**: check
@@ -1054,6 +1078,16 @@ before believing a green local run, on any channel, including ones added later.
 > a clean run, check the fetched body is the shape you expected before moving it into place. An
 > error message describes what failed, not what was missing, and reasoning from the message alone
 > reliably diagnoses the wrong one.
+>
+> The same consumer later added the fourth row and it is the most extreme member: the other three
+> at least produce output to misread, while this one produces **nothing at all** and so presents as
+> a fault in GitHub rather than in your file. It also shows the countermeasure has a limit — you
+> cannot assert presence from inside a job that is never created, so this row is checked by reading
+> the caller against the callee, or from a separate workflow file. Where the general rule fails,
+> the fallback is to make the dependency **unreachable rather than merely absent**: the
+> `blackhole.invalid` test elsewhere in this guide disproves a suspected registry dependency
+> precisely because an unroutable host cannot return a plausible-looking `401`. Absence is
+> ambiguous; unroutability is not.
 
 **Byte-identical source across versions still does not license carrying a result forward.** This is
 the part worth internalising, and it comes from that consumer being unusually precise about scope.
@@ -2487,6 +2521,30 @@ corpus you do not control.
 Three separate repositories wrote a correct ID with a wrong path before this was enforced, one of
 them in a document whose two links were both wrong while both IDs were right. Do not hand-write the
 path; copy `source` from `index.json`.
+
+**A fourth found one that 404s and reported it as link rot. It was not.** They had cited
+`v0.2.0/principles/testing.md` and diagnosed it as stale — valid once, broken when the tree gained
+its `assurance/`, `architecture/`, `operations/` and `platforms/` subdirectories. Checked against
+the actual history: those subdirectories **already existed at `v0.2.0`**, and `principles/testing.md`
+has never existed at any ref in this repository. The path was not stale, it was **never valid**.
+
+Worth separating, because the two have different causes and different fixes:
+
+|             | Rotted                              | Never valid                                     |
+| ----------- | ----------------------------------- | ----------------------------------------------- |
+| Cause       | the target moved after you cited it | the path was constructed by pattern, not copied |
+| Implies     | pin the ref, add a redirect         | verify at authoring time                        |
+| Detected by | re-checking old citations           | checking the citation when it is written        |
+
+Diagnosing a never-valid path as rot sends you to fix history that was never broken, and leaves
+the actual defect — a plausible-looking path assembled from the ID rather than copied from
+`source` — in place to recur. It is the same defect the link check exists for, and pinning a tag
+does not prevent it: `v0.2.0` is a perfectly good pin pointing at a file that was never there.
+
+Their generalized warning stands and is the reason this matters: **a citation that 404s is worse
+than no citation.** It carries the authority of a reference while being uncheckable, and the
+reader who follows it cannot tell whether the principle is missing or the link is. Sweeping every
+engineering link in a repository is cheap — theirs was fifteen — and worth doing once per repo.
 
 **If no principle covers it, cite nothing.** A near-miss citation is the one failure mode this
 whole scheme cannot survive: it transfers authorship of a rule to this repository, which never
