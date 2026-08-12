@@ -117,4 +117,16 @@ describe('check-contradictions', () => {
     assert.equal(r.code, 1);
     assert.match(r.out, /versions\.json/);
   });
+
+  // An identifier is a claim about another repository. This one reached the guide
+  // from a proposal written before the backbone was implemented and was never read
+  // back out of the workflow, so it named a secret that does not exist.
+  test('fails on a secret name the reusable workflows do not declare', () => {
+    const r = runAgainst(
+      '# Adopting\n\nPass `${{ secrets.packages-read-token }}` to the workflow.\n',
+    );
+    assert.equal(r.code, 1);
+    assert.match(r.out, /No such secret exists/);
+    assert.match(r.out, /NODE_AUTH_TOKEN/);
+  });
 });

@@ -69,6 +69,19 @@ const RETIRED = [
     replacement: 'copy the recorded range literally, whatever shape it has',
     exempt: [/used to/i, /WHAT CHANGED/i, /it now records/i],
   },
+  {
+    // An identifier is a claim about another repository. This one was transcribed
+    // from a proposal written before the backbone was implemented, and never read
+    // back out of the workflow. Passing an undeclared secret name to a reusable
+    // workflow is rejected at the caller, so a reader following it got a startup
+    // failure before any of the surrounding diagnosis could apply.
+    id: 'nonexistent-secret-name',
+    pattern: /packages-read-token/g,
+    why: 'No such secret exists. The reusable workflows declare NODE_AUTH_TOKEN; an undeclared secret name is rejected at the caller.',
+    replacement:
+      'secrets.NODE_AUTH_TOKEN, which falls back to github.token when registry-url is set',
+    exempt: [/There is no such secret/i, /from a proposal/i, /fails on the wrong name/i],
+  },
 ];
 
 const FILES = ['docs/adopting.md', 'versions.json'];
