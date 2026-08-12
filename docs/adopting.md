@@ -2925,11 +2925,11 @@ again one release later. **The answer to that is a signal, not a wider range** �
 you the floor moved without deciding for you, and the reasoning is in _Take patches automatically;
 take minors as a decision_ below.
 
-| Package                        | Range     | Floor is set by                                                       |
-| ------------------------------ | --------- | --------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `^0.17.0` | Tooling globs cover every test/config/script suffix, and are exported |
-| `@jrmoulckers/tsconfig`        | `^0.4.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`     |
-| `@jrmoulckers/prettier-config` | `^0.5.0`  | Type declarations, so `checkJs` consumers can adopt at all            |
+| Package                        | Range     | Floor is set by                                                         |
+| ------------------------------ | --------- | ----------------------------------------------------------------------- |
+| `@jrmoulckers/eslint-config`   | `^0.17.0` | Tooling globs cover every test/config/script suffix, and are exported   |
+| `@jrmoulckers/tsconfig`        | `^0.5.0`  | `vite-react.json` drops the lone `esModuleInterop`; TS 6/7; `node.json` |
+| `@jrmoulckers/prettier-config` | `^0.5.0`  | Type declarations, so `checkJs` consumers can adopt at all              |
 
 > **This passage used to end "pin with an explicit upper bound instead, which tracks every minor"
 > and "the ranges keep you current without editing the manifest."** Both are now deleted. The first
@@ -4055,6 +4055,35 @@ node -e "process.stdout.write(/would change/.test(require('fs').readFileSync('sc
 The general form, and the reason `check-citations.mjs` is fetched over the network and kept
 nowhere: **a tool cannot be the sole reporter of its own staleness.** Where the report matters more
 than the convenience, run the copy you did not pin.
+
+### Ask what the green run actually examined (`ENG-TEST-004`)
+
+A passing check is evidence about the object it examined, which is not always the object in the
+claim. Three instances, all real, all reported by adopters or found here:
+
+| The claim                                                                  | What the green run actually covered                                                                       |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| "Peer ranges verified" — `pnpm install --strict-peer-dependencies` exits 0 | A graph with **none of the three presets installed**. It exercised zero preset peer range.                |
+| "No tsconfig option was lost" — `svelte-check` 0 errors before and after   | That **no current file depends** on a dropped option. `esModuleInterop` was gone either way.              |
+| "This release is verified" — 386 local tests and every doc gate green      | Every gate **that can run without a secret**. `versions:check` needs a registry token, so it ran nowhere. |
+
+The third one is ours, and it is the most expensive: `main` was red for five consecutive runs while
+five releases were cut and broadcast from it, because the failing gate was structurally invisible
+to a local run. `versions.json` advertised `tsconfig@0.4.0` while the registry served `0.5.0` — and
+that file is precisely the fallback you are told to read when you cannot query the registry.
+
+Two consequences for you:
+
+- **A green gate is what makes a delta invisible, not what makes it absent.** When you change a
+  config, state the option-by-option delta even when the gate is green. An adopter who diffed both
+  resolved `extends` chains found nine differing options on one project and thirteen on the other,
+  with a green `svelte-check` on both sides.
+- **Name the checks a run could not perform, not just the ones that passed.** "All gates green" and
+  "all gates ran" are different sentences, and only the second one is usually meant.
+
+Before trusting a verification, ask which of these it was: the check ran and found nothing; the
+check ran against something other than the claim; or the check could not run at all and said so
+quietly.
 
 ### Take patches automatically; take minors as a decision
 

@@ -152,8 +152,12 @@ async function main() {
           .split('\n')
           .map((line) => `  ${line}`)
           .join('\n') +
-        `\n\nThis is not a failure. Cut a release when the set is ready:\n` +
-        `  git tag vX.Y.Z && git push origin vX.Y.Z\n`,
+        `\n\nThis is not a failure. Cut a release when the set is ready, after\n` +
+        `confirming CI is actually green on the commit you are about to tag:\n` +
+        `  npm run release:ready && git tag vX.Y.Z && git push origin vX.Y.Z\n\n` +
+        `Do not substitute a local run for that. \`versions:check\` needs a registry\n` +
+        `token and cannot run on your machine, so a full-green local suite is silent\n` +
+        `about it — which is how five releases were cut off a red main.\n`,
     );
   } else {
     process.stdout.write(`No unreleased consumer-visible changes since ${tag}.\n`);

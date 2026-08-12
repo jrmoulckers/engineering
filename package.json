@@ -27,6 +27,7 @@
     "coverage:list": "node scripts/check-coverage.mjs --list",
     "versions:print": "node scripts/print-versions.mjs",
     "release:check": "node scripts/check-release-lag.mjs",
+    "release:ready": "node scripts/check-release-ready.mjs",
     "docs:contradictions": "node scripts/check-contradictions.mjs",
     "docs:overlap": "node scripts/check-practice-overlap.mjs"
   },
