@@ -14,33 +14,34 @@ How a repository consumes this one. Three layers, adopt in order.
 failure of this document, not of the people reading it — so before reading linearly, search for your
 symptom. Every phrase below is a literal string in this file; search for it rather than scrolling.
 
-| What you are seeing                                         | Search for                                               |
-| ----------------------------------------------------------- | -------------------------------------------------------- |
-| CI fails instantly, no logs, `startup_failure`              | `read the annotation, do not infer`                      |
-| `strictTypeChecked` produced hundreds of findings           | `billing you for two unrelated`                          |
-| `401` on install from Vercel/Netlify/Fly but CI is green    | `applies to GitHub Actions only`                         |
-| A red check you already know about hides a new failure      | `has stopped being a check`                              |
-| Wondering if an extra `permissions:` scope is harmful       | `Under-granting kills the run`                           |
-| Every job fails in ~1s with `steps=0`                       | `The permission ceiling and the billing hold`            |
-| A version bump seems to change nothing                      | `Diffing the increment is not verifying the floor`       |
-| `--print-config` shows rules for a framework you do not use | `Grep the severity, not the name`                        |
-| `npm update` will not take a new minor                      | `Do not use a caret at all`                              |
-| `warn` rules are failing your build                         | `A warn severity is not advisory under`                  |
-| `TS7016` on a config file after enabling `checkJs`          | `Precondition 1: the config file must be`                |
-| Type declarations appear to do nothing                      | `Precondition 2:`                                        |
-| A valid, documented option is rejected as unknown           | `silently overrides the package's shipped types`         |
-| A citation link works but lands at the top of the file      | `cannot 404, so retitling a heading`                     |
-| Unsure which version of a package is actually installable   | `a repository counter, not a package version`            |
-| A "bogus option" check says a typed package has no types    | `does not work on every package`                         |
-| `pnpm` refuses a just-published version                     | `minimumReleaseAgeExclude`                               |
-| `TS5097` / `TS5096` on `.ts` import specifiers              | `allowImportingTsExtensions`                             |
-| Lint is green but you suspect coverage shrank               | `set of files linted, in both directions`                |
-| Your finding count **dropped** after a version bump         | `look in your test files before assuming`                |
-| Unsure which before/after comparison to trust               | `Prefer measuring the artifact over reasoning`           |
-| Go: a wall of `errcheck` findings that CI does not report   | `Compare the set of findings, not the set of rules`      |
-| A rule you expected to fire never fires                     | `A clean `rules-of-hooks` run is not proof of absence`   |
-| Package install returns `401`/`403`                         | `Visibility changes _authorization_, not authentication` |
-| Told adoption is blocked on package access                  | `re-test before deferring further`                       |
+| What you are seeing                                          | Search for                                               |
+| ------------------------------------------------------------ | -------------------------------------------------------- |
+| CI fails instantly, no logs, `startup_failure`               | `read the annotation, do not infer`                      |
+| `strictTypeChecked` produced hundreds of findings            | `billing you for two unrelated`                          |
+| `401` on install from Vercel/Netlify/Fly but CI is green     | `applies to GitHub Actions only`                         |
+| A red check you already know about hides a new failure       | `has stopped being a check`                              |
+| Wondering if an extra `permissions:` scope is harmful        | `Under-granting kills the run`                           |
+| Every job fails in ~1s with `steps=0`                        | `The permission ceiling and the billing hold`            |
+| A version bump seems to change nothing                       | `Diffing the increment is not verifying the floor`       |
+| `--print-config` shows rules for a framework you do not use  | `Grep the severity, not the name`                        |
+| `npm update` will not take a new minor                       | `Do not use a caret at all`                              |
+| `warn` rules are failing your build                          | `A warn severity is not advisory under`                  |
+| `TS7016` on a config file after enabling `checkJs`           | `Precondition 1: the config file must be`                |
+| Type declarations appear to do nothing                       | `Precondition 2:`                                        |
+| A valid, documented option is rejected as unknown            | `silently overrides the package's shipped types`         |
+| A citation link works but lands at the top of the file       | `cannot 404, so retitling a heading`                     |
+| Unsure which version of a package is actually installable    | `a repository counter, not a package version`            |
+| A "bogus option" check says a typed package has no types     | `does not work on every package`                         |
+| Lint went green after swapping a meta-package for its plugin | `Dropping a meta-package for the plugin it wraps`        |
+| `pnpm` refuses a just-published version                      | `minimumReleaseAgeExclude`                               |
+| `TS5097` / `TS5096` on `.ts` import specifiers               | `allowImportingTsExtensions`                             |
+| Lint is green but you suspect coverage shrank                | `set of files linted, in both directions`                |
+| Your finding count **dropped** after a version bump          | `look in your test files before assuming`                |
+| Unsure which before/after comparison to trust                | `Prefer measuring the artifact over reasoning`           |
+| Go: a wall of `errcheck` findings that CI does not report    | `Compare the set of findings, not the set of rules`      |
+| A rule you expected to fire never fires                      | `A clean `rules-of-hooks` run is not proof of absence`   |
+| Package install returns `401`/`403`                          | `Visibility changes _authorization_, not authentication` |
+| Told adoption is blocked on package access                   | `re-test before deferring further`                       |
 
 **If your symptom is not here, say so when you report it.** A report that this guide lacks something
 it already contains is still useful — it means the answer is unfindable, which is the same defect as
@@ -3454,6 +3455,40 @@ gate you have never seen fail is a gate you have not yet tested.
 >
 > So the rule is not only "a repo tag is never an actionable npm specifier" — it is **do not verify
 > at a repo tag either**, unless you read the package version out of the same file.
+
+### Dropping a meta-package for the plugin it wraps loses everything else it bundled
+
+> `eslint-config-next` is a **meta-package**: it bundles `eslint-plugin-react`,
+> `eslint-plugin-jsx-a11y` and `eslint-plugin-react-hooks` as direct dependencies. This preset
+> consumes the bare `@next/eslint-plugin-next` instead, which carries only the `@next/next/*` rules.
+> For one release that meant every Next consumer silently lost **18 `react/*` and 31 `jsx-a11y/*`
+> rules** on adoption.
+>
+> Three things made it invisible, and they generalise to any meta-package swap:
+>
+> - **A rule-by-rule diff of the Next rules scores it as no change.** The `@next/next/*` set is
+>   identical either side. You have to diff the rules you did _not_ think you were changing.
+> - **No unresolved-plugin error is possible.** Removing `eslint-config-next` also removes the only
+>   thing that installed those plugins, so nothing was left to fail. The rules ceased to exist and
+>   lint stayed green — `react/jsx-key`, a real correctness bug, passed.
+> - **The count moves in the direction of success.** Adoption reduces rule count for many good
+>   reasons, so a smaller number after a migration does not read as a regression.
+>
+> A consumer measured the restoration on a real Next application: **95 → 141 active rules**, and
+> **23 accessibility findings across 15 files** — keyboard-inaccessible controls, unlabelled form
+> inputs, uncaptioned media. `react/*` reported **zero**, so the React half is coverage at no cost
+> and the a11y half is where the defects were. For a repository holding itself to WCAG 2.2 AA, that
+> is the whole argument.
+>
+> Fixed by a shared `react-layer.js` that both `reactConfig()` and `nextConfig()` call, plus a
+> parity test asserting `nextConfig()` enables every `react/*`, `jsx-a11y/*` and `react-hooks/*`
+> rule that `reactConfig()` does. The test compares the presets **to each other** rather than to a
+> literal list, so it cannot pass by being updated alongside a regression — and it carries a
+> non-emptiness guard, without which removing a plugin from the shared layer would satisfy it
+> symmetrically.
+>
+> **If you are replacing a meta-package with one of its members, enumerate its dependencies first.**
+> That list is the set of things you are silently dropping.
 
 ### A citation's `#fragment` cannot 404, so retitling a heading breaks it silently
 

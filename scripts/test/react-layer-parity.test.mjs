@@ -61,6 +61,34 @@ test('nextConfig() still carries the Next-specific rules', () => {
   );
 });
 
+// The counts above are quoted in `react-layer.js` and in `docs/adopting.md` as
+// the size of the regression. They were wrong once — recorded as "17 react/* and
+// 6 jsx-a11y/*" from recall rather than measurement, when a consumer measuring a
+// real application found 18 and 31. A prose number that nothing executes drifts
+// silently, so this asserts a floor: the documented figures cannot exceed what
+// the presets actually enable.
+test('the documented rule counts are not larger than the real ones', () => {
+  const react = activeRules(reactConfig(), 'react/');
+  const a11y = activeRules(reactConfig(), 'jsx-a11y/');
+
+  assert.ok(react.size >= 18, `docs claim 18 react/* rules; the preset enables ${react.size}`);
+  assert.ok(a11y.size >= 31, `docs claim 31 jsx-a11y/* rules; the preset enables ${a11y.size}`);
+
+  // The specific rules cited as evidence, by name. A count can hold while the
+  // rule someone was told about disappears.
+  for (const rule of [
+    'react/jsx-key',
+    'jsx-a11y/alt-text',
+    'jsx-a11y/click-events-have-key-events',
+    'jsx-a11y/label-has-associated-control',
+    'jsx-a11y/interactive-supports-focus',
+    'jsx-a11y/media-has-caption',
+  ]) {
+    const family = rule.startsWith('react/') ? react : a11y;
+    assert.ok(family.has(rule), `${rule} is cited as evidence but is not enabled`);
+  }
+});
+
 test('the shared React layer ships in the package tarball', async () => {
   const { readFile } = await import('node:fs/promises');
   const pkg = JSON.parse(
