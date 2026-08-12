@@ -964,6 +964,23 @@ Because the mechanisms differ, a fix for one does not fix the other — the shar
 question, not the remedy: **is the thing I just verified the thing that will be installed?** Ask it
 before believing a green local run, on any channel, including ones added later.
 
+> **The wider class: a missing thing presents as a wrong thing, or as a passing one.** The same
+> consumer unified three failures in this migration that had been recorded separately, and the
+> unification is correct — they are one lesson, not three:
+>
+> | Missing                        | How it presents                                              |
+> | ------------------------------ | ------------------------------------------------------------ |
+> | no registry token              | `401`, textually identical to a wrong or expired token       |
+> | no fetched `.golangci.yml`     | a clean lint run against a strictly smaller default rule set |
+> | a failed fetch writing to disk | an error body saved as config, with exit status `0`          |
+>
+> In each case the absent thing is indistinguishable from a present-but-wrong thing, and in two of
+> them it is indistinguishable from success. **So verify presence before assuming validity**: check
+> the token is non-empty before concluding it is invalid, check the config exists before trusting
+> a clean run, check the fetched body is the shape you expected before moving it into place. An
+> error message describes what failed, not what was missing, and reasoning from the message alone
+> reliably diagnoses the wrong one.
+
 **Byte-identical source across versions still does not license carrying a result forward.** This is
 the part worth internalising, and it comes from that consumer being unusually precise about scope.
 They noted their verification covered only the files their repository actually imports, diffed
@@ -1338,6 +1355,30 @@ reformat — tables, lists, code fences. Paragraph line breaks are left exactly 
 > Raised by the repository whose `.prettierrc.json` was the original source of
 > `proseWrap: 'always'` — so this is the consequence of its own setting being reversed, reported
 > against itself.
+
+> **Citations are unbreakable by construction, and over-width lines containing one are correct.**
+> A markdown link destination cannot be wrapped — there is no legal break point inside it — so a
+> pinned citation is a single atomic token:
+>
+> ```md
+> [`ENG-SEC-001`](https://github.com/jrmoulckers/engineering/blob/v0.2.3/principles/assurance/security-and-privacy.md#secret-lifecycle)
+> ```
+>
+> Measured at `printWidth: 96`, `proseWrap: 'always'` handles that sentence by splitting it into
+> three lines — and the citation line is still **134 characters**. So the reflow destroys the
+> surrounding sentence structure _and_ fails to achieve the width it reflowed for. It is
+> destructive and ineffective in the same operation, which is the strongest single argument
+> against `'always'` in this repository's own documentation style.
+>
+> Two rules follow. **Over-width is expected and acceptable on any line containing a link
+> destination or a table row**, and no gate should be configured to flag it. And **do not "fix" it
+> by shortening the URL**: the pinned tag in a citation path is load-bearing, and trading it for a
+> branch path or a bare anchor buys width by making the link mutable.
+>
+> Worth planning for rather than discovering: **the adoption programme is itself increasing the
+> population of these lines.** Every repository that lands citations acquires lines that wrap
+> badly by nature, and this is the second distinct piece of tooling to meet them at the line level
+> — the first was a `--review` bare-URL defect with the same root cause.
 
 ### Write prose in semantic line breaks
 
@@ -1814,6 +1855,36 @@ settings. The run looks clean locally and goes red in CI, with nothing explainin
 the path makes the file read directly rather than searched for, so its absence fails loudly. Better
 still, wire the fetch and the run into one `make lint` target so the config cannot be missing;
 `--config` is the backstop for anyone bypassing it.
+
+**The blessed `make lint` form.** Treat the fetch as a **prerequisite of linting**, not as a CI
+step that happens to run first — that framing is what keeps a fresh clone or a `git clean` from
+producing a silently weaker run:
+
+```make
+ENGINEERING_REF ?= <latest-tag>
+
+.golangci.yml:
+	@scripts/fetch-golangci.sh
+
+.PHONY: lint
+lint: .golangci.yml
+	golangci-lint run --config .golangci.yml ./...
+
+.PHONY: lint-refresh
+lint-refresh:
+	@rm -f .golangci.yml && $(MAKE) .golangci.yml
+```
+
+Expressing the config as a **file target** rather than a phony step is the part that matters: Make
+creates it when absent and skips the network when present, so `make lint` is correct on a fresh
+clone and cheap afterwards. Keep it gitignored, and use `lint-refresh` to move refs — editing
+`ENGINEERING_REF` alone will not re-fetch an existing file.
+
+**The defaults exclude the linters most worth having.** A consumer measured this on a real rebase:
+running against built-in defaults reported clean, while the pinned config found **five** issues the
+merge was silent about — three `unused` (dead on `main`, invisible to `go vet`), one `errcheck`,
+and one `nilerr`. `nilerr` is **not** in the default set, so a contributor who skipped the fetch
+would have shipped a `nilerr` violation believing they had linted.
 
 **Pin to a tag, never `main`.** An unpinned fetch means an unrelated commit here can turn a
 consumer's build red with no change on their side, which is the same failure mode `GH-ACT-003`
