@@ -254,6 +254,29 @@ consuming repository to be granted access. Either way you must send a token.
 > applied to a diagnostic instead of a gate — and here it inverted the conclusion twice: first
 > mine, then the correction to mine.
 
+> **Assert a positive marker; do not trust a count of zero.** A consumer pointed out that this
+> probe is an absence test whose failure mode is also absence — `0` comes back equally from a
+> private package, a 404, a redirect, or a login wall. They fixed it by asserting GitHub's rendered
+> empty state, which is self-validating because its presence proves the page loaded _and_ showed
+> nothing:
+>
+> ```bash
+> curl -s -o pkgs.html -w '%{http_code}\n' https://github.com/OWNER/REPO/packages
+> grep -q 'Get started with GitHub Packages' pkgs.html && echo 'no packages visible'
+> ```
+>
+> Verified here: `200`, marker present, zero package links. Verified in the other direction too —
+> `home-assistant/core` does **not** contain that string, so the marker discriminates rather than
+> appearing on every page.
+>
+> They also tried to find a positive control and could not: `nodejs/node`, `actions/toolkit` and
+> `github/codeql-action` all return `0`, and they correctly declined to trust an absence test with
+> no reachable positive control. Those three genuinely publish nothing linked. Working positive
+> controls, anonymously: **`home-assistant/core` (28 package links)**, **`renovatebot/renovate`
+> (1)**, **`actions/runner` (1)**.
+>
+> Use both. The marker proves the probe ran; the controls prove the probe can answer.
+
 > **GitHub Packages only supports classic personal access tokens.** Fine-grained PATs are
 > rejected by the npm registry. A fine-grained token fails with a 401 that is indistinguishable
 > from having no token at all, so this is worth getting right the first time.
@@ -1802,6 +1825,45 @@ will be bitten by the next sync that adds a file.
 
 The two checks are complements, not alternatives: the manifest scan catches paths you have and
 forgot; the full recipe catches paths you do not have yet.
+
+**Those two consumers gave opposite advice, and the discriminator is authorship, not presence.**
+One added a path they did not have; another declined to ignore a path they did have, because in
+their repository `.github/copilot-instructions.md` is locally authored rather than synced.
+Ignoring it would exempt a file they maintain from their own formatter. Both are right, and the
+rule that gets both:
+
+- **Never ignore a file you author**, however synced-looking its path. The recipe above is a
+  default for repositories that receive all of it, not a list to apply unread.
+- **List a path you do not have only if you would not author it either.** That is what makes a
+  pre-emptive entry free rather than a future exemption for your own work.
+- **Your sync lock is the authority for what is managed today**; the recipe is the authority for
+  what may arrive tomorrow. Neither replaces reading which files you actually own.
+
+**For a mixed file, fence the region instead of ignoring the file.** A consumer keeps `AGENTS.md`
+formatter-managed and wraps only the synced block in `<!-- prettier-ignore-start -->` /
+`<!-- prettier-ignore-end -->`. That protects the synced bytes while leaving their own prose — the
+larger part of the file — under the formatter. A whole-file entry surrenders the majority to
+protect the minority, and this is the better answer to the owned-file-containing-a-foreign-region
+case raised above.
+
+**Ask the formatter what it will do, rather than reasoning about glob precedence.**
+`--list-different` answers whether a file would change; `--file-info` answers _why_, and separates
+the two ways a file can be quiet:
+
+```bash
+jq -r '.files[].path' .studio-sync.lock.json |
+  xargs -I{} sh -c 'printf "%s " {}; npx prettier --file-info {}'
+```
+
+| Output                                     | Meaning                                         |
+| ------------------------------------------ | ----------------------------------------------- |
+| `"ignored": true`                          | deliberately covered by your ignore list        |
+| `"ignored": false, "inferredParser": null` | **inert only because Prettier cannot parse it** |
+| `"ignored": false, "inferredParser": "…"`  | exposed — it will be reformatted                |
+
+The middle row is the one worth the sweep. A consumer found a synced `.toml` in exactly that
+state: protected by accident, and one Prettier release away from being protected by nothing.
+Re-run the sweep after any canon sync.
 
 > **These exclusions are permanent, and `proseWrap: 'preserve'` does not retire them.**
 > `prettier-config@0.2.0` stopped Prettier rewrapping prose, and it is natural to read that as
