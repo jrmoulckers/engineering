@@ -1678,6 +1678,29 @@ plugins that are mostly not loaded. So `--print-config` on a Svelte file legitim
 `react/*` entries and 39 `vue/*` entries. None of them run. **Grep the severity, not the name**;
 the positive check is whether the rules a release actually adds appear at a non-zero severity.
 
+**And the source diff misleads in the other direction too, which is the case that costs a bump
+rather than hiding one.** A consumer verifying `0.6.0 → 0.7.0` found `react.js` had changed by
+**−67 lines** and was about to report a behavioural change. The resolved config was identical:
+342 rules on both sides, zero differing, compared key by key. The entire diff was an extraction of
+three helpers into a new `hooks.js`, imported back.
+
+So the two failure modes are symmetric and both are invisible from the source:
+
+| What you compare  | What it misses                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| adjacent versions | everything between your pin and the floor                                          |
+| source files      | refactors that change no behaviour, and behaviour that changes with no source edit |
+
+A refactor reads as a behavioural change; a dependency bump or a default flipping in a plugin
+changes behaviour with no diff at all. **Compare resolved configuration between the version you
+have and the floor, and treat the source diff as a hint about where to look, never as the result.**
+
+That consumer drew the right practical conclusion from it: because the resolved config was
+identical, an expensive prior measurement — 317 findings across their repository — **carried over
+without re-running**. That is worth stating precisely, because "this release did not affect you"
+and "this release resolves to an identical configuration for you" sound alike and only the second
+one licenses skipping the re-validation.
+
 > **A retracted claim has to be corrected where it was made, not only where it landed.** A consumer
 > was told by this repository that "any authenticated token may now read the packages; no per-repo
 > access grant is needed". That was wrong. They did not act on it, and when a later message
@@ -3460,6 +3483,23 @@ export default base({ env: 'node' });
 > ```
 >
 > A count that went **down** is the signal. Zero in a category you previously had is this bug.
+>
+> **"You were never affected" is scoped to regressions, and it is read as "nothing here concerns
+> you."** That fix note told `reactConfig` users the hooks bug never reached them, which was true.
+> A consumer nearly closed the release unread on that basis — then checked what they actually had
+> and found their own config sets **no `react-hooks` rules and no `jsx-a11y` rules at all**, with
+> neither plugin in any manifest. They had been linting React with zero hooks coverage and zero
+> accessibility coverage since before the preset existed.
+>
+> So the preset was not preserving a guarantee for them. It was introducing one they had never
+> had — and the two `rules-of-hooks` defects it surfaced had been invisible precisely because no
+> rule in their CI could see them.
+>
+> **Separate regression scope from baseline capability when you write a fix note.** They are
+> different audiences and the sentence that reassures the first dismisses the second, who has
+> strictly more to gain. The consumers with the least existing protection are exactly the ones a
+> "you were never affected" line tells to stop reading, because having never had the rule is
+> indistinguishable, in that sentence, from having never lost it.
 
 Every preset takes `{ ignores, env, rules, extend }`. Product-specific rules — ORM guards, i18n
 literal checks, import boundaries — go in `extend`, so the shared preset stays generic:
