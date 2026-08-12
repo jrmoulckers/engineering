@@ -4157,12 +4157,42 @@ with every consumed file identical between them. So the correct scope statement 
 
 Peer dependencies are not bundled — install the ones your stack needs:
 
-| Stack   | Also install                                                           |
-| ------- | ---------------------------------------------------------------------- |
-| Any     | `eslint prettier typescript`                                           |
-| Svelte  | `eslint-plugin-svelte prettier-plugin-svelte`                          |
-| React   | `eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y` |
-| Next.js | `@next/eslint-plugin-next eslint-plugin-react-hooks`                   |
+| Stack                | Also install                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
+| Any                  | `eslint prettier typescript`                                                                    |
+| Svelte               | `eslint-plugin-svelte prettier-plugin-svelte`                                                   |
+| React                | `eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y`                          |
+| Next.js (`>=0.13.0`) | `@next/eslint-plugin-next eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y` |
+| Next.js (`<=0.12.0`) | `@next/eslint-plugin-next eslint-plugin-react-hooks` — **outdated, see below**                  |
+
+**The Next.js row depends on your version, and the two-plugin form is a symptom, not a recipe.**
+Through `0.12.0`, `nextConfig()` imported only `@next/eslint-plugin-next` and the hooks plugin, so
+two were genuinely all it could load. That was the `nextConfig()` React-rules defect:
+it silently dropped 17 `react/*` and 6 `jsx-a11y/*` rules. From **`0.13.0`** both presets share one
+internal React layer, which imports `eslint-plugin-react` and `eslint-plugin-jsx-a11y` directly — so
+a Next repo needs four.
+
+This table said two for every version until a consumer on `0.9.0` quoted it back, correctly, against
+a broadcast of mine that said three. Both of us were reading a version-dependent fact as a fixed one:
+their two was right for `0.9.0` and wrong for current, my three was wrong for both.
+
+**If you verified the short list by observing that lint passes with `eslint-plugin-react` absent, you
+measured the defect.** A green lint run is evidence about the rules that ran, not about the rules that
+should have. On `<=0.12.0` the React rules are not failing — they are not loaded, and a repository
+with a real `jsx-a11y/alt-text` violation is green because nothing is looking. Confirm with a rule
+count against a known baseline, or by asserting a specific rule is present:
+
+```bash
+npx eslint --print-config app/page.tsx | node -e "
+  let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
+    const r=Object.keys(JSON.parse(s).rules||{});
+    console.log('total',r.length,
+      'react',r.filter(k=>k.startsWith('react/')).length,
+      'a11y',r.filter(k=>k.startsWith('jsx-a11y/')).length);
+  })"
+```
+
+Zero in either column on a Next repo means you are below `0.13.0`, whatever the lint exit code says.
 
 **These are not installed for you, and that is deliberate — but the reason given here was wrong for
 several releases, so read this if you adopted between `0.9.0` and `0.12.0`.**

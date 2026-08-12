@@ -109,6 +109,26 @@ const RETIRED = [
       /pointed away from/i,
     ],
   },
+  {
+    // `nextConfig()` imported only the Next plugin plus hooks through 0.12.0.
+    // From 0.13.0 it composes the shared React layer, which imports
+    // eslint-plugin-react and eslint-plugin-jsx-a11y directly, so a Next repo
+    // needs four plugins. A consumer on 0.9.0 quoted the old two-plugin row
+    // back -- correctly for their version -- against a broadcast of mine that
+    // said three. The fact is version-dependent; any unqualified statement of
+    // it is wrong for some reader.
+    id: 'next-plugin-count-unversioned',
+    pattern:
+      /Next(?:\.js)?[^.\n]{0,40}(?:needs|requires|install(?:s)?)[^.\n]{0,40}(?:two|2) plugins/gi,
+    why: 'nextConfig() composes the React layer from 0.13.0, so a Next repo needs four plugins; the two-plugin form is true only for <=0.12.0 and describes the release that silently dropped 17 react/* and 6 jsx-a11y/* rules.',
+    replacement: 'state the version boundary: two plugins through `0.12.0`, four from `0.13.0`',
+    exempt: [
+      /outdated, see below/i,
+      /Through `0\.12\.0`/i,
+      /their two was right/i,
+      /is a symptom, not a recipe/i,
+    ],
+  },
 ];
 
 const FILES = ['docs/adopting.md', 'versions.json'];
