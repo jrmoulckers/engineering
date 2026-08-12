@@ -3793,11 +3793,18 @@ A consumer widened `^0.8.0` to `>=0.8.0 <1.0.0` so that an eventual `0.9.0` woul
 without a hand edit nobody would be prompted to make. The stranding was real — eight releases went
 by unreachable. But the remedy was wrong, and `eslint-config@0.9.0` is the proof:
 
-| Package version | What changed                                                |
-| --------------- | ----------------------------------------------------------- |
-| `0.9.0`         | **removed** five framework peer dependencies                |
-| `0.16.0`        | **restored** all five                                       |
-| `0.9.0`→ later  | added a `frameworkPlugins` discovery field, then dropped it |
+| Package version    | What changed                                                        |
+| ------------------ | ------------------------------------------------------------------- |
+| `0.9.0`            | **removed** five framework peer dependencies                        |
+| `0.9.0` – `0.11.0` | carried them in a bespoke `frameworkPlugins` field that npm ignores |
+| `0.12.0`           | **restored** all five to `peerDependencies`, as optional            |
+
+**Do not run any of `0.9.0`, `0.10.0` or `0.11.0`.** In those three releases the five framework
+plugins are declared in no field npm reads, while `react.js`, `next.js` and `hooks.js` still
+`import` them at module scope. The result is an install that exits `0`, removes ~90 packages, warns
+about nothing, and fails at first lint with `ERR_MODULE_NOT_FOUND`. Upgrade to `0.12.0` or later,
+where the declaration is back and npm can resolve the plugins for you again. See the correction
+under _Framework plugins_ below for the full diagnosis.
 
 Three consumer-visible changes, all shipped in minors, on a `0.x` package where that is exactly
 where convention puts them. A `>=0.9.0 <1.0.0` range accepts every one of them sight-unseen. Our
