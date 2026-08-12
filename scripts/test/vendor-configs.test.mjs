@@ -137,9 +137,12 @@ describe('vendor-configs failure modes', { skip: OFFLINE }, () => {
     const dir = workspace();
     try {
       const source = variant(dir, (text) =>
-        text.replace("files: ['index.js', 'svelte.js'],", "files: ['../../README.md'],"),
+        text.replace(
+          "files: ['index.js', 'index.d.ts', 'svelte.js', 'svelte.d.ts'],",
+          "files: ['../../README.md'],",
+        ),
       );
-      const { code, out } = run(['v0.14.0', '--set', 'prettier'], dir, source);
+      const { code, out } = run(['v0.115.0', '--set', 'prettier'], dir, source);
       assert.equal(code, 1);
       assert.match(out, /exports nothing/);
       assert.equal(existsSync(join(dir, 'config')), false);
@@ -153,7 +156,7 @@ describe('vendor-configs success path', { skip: OFFLINE }, () => {
   test('writes the files byte-identical and records provenance', () => {
     const dir = workspace();
     try {
-      const { code, out } = run(['v0.14.0', '--set', 'prettier'], dir);
+      const { code, out } = run(['v0.115.0', '--set', 'prettier'], dir);
       assert.equal(code, 0, out);
 
       const vendored = readFileSync(join(dir, 'config/engineering/prettier/index.js'), 'utf8');
@@ -163,7 +166,7 @@ describe('vendor-configs success path', { skip: OFFLINE }, () => {
       assert.doesNotMatch(vendored, /generated|do not edit/i);
 
       const lock = JSON.parse(readFileSync(join(dir, 'engineering-configs.lock.json'), 'utf8'));
-      assert.equal(lock.ref, 'v0.14.0');
+      assert.equal(lock.ref, 'v0.115.0');
       assert.equal(lock.repository, 'jrmoulckers/engineering');
 
       const entry = lock.files['config/engineering/prettier/index.js'];
@@ -179,14 +182,77 @@ describe('vendor-configs success path', { skip: OFFLINE }, () => {
     // upgrade is indistinguishable from a no-op.
     const dir = workspace();
     try {
-      assert.equal(run(['v0.13.0', '--set', 'prettier'], dir).code, 0);
-      const { code, out } = run(['v0.14.0', '--set', 'prettier'], dir);
+      assert.equal(run(['v0.112.0', '--set', 'prettier'], dir).code, 0);
+      const { code, out } = run(['v0.115.0', '--set', 'prettier'], dir);
       assert.equal(code, 0, out);
-      assert.match(out, /Ref moved v0\.13\.0 -> v0\.14\.0/);
+      assert.match(out, /Ref moved v0\.112\.0 -> v0\.115\.0/);
       assert.match(out, /file\(s\) changed content/);
 
       const lock = JSON.parse(readFileSync(join(dir, 'engineering-configs.lock.json'), 'utf8'));
-      assert.equal(lock.ref, 'v0.14.0');
+      assert.equal(lock.ref, 'v0.115.0');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('the prettier set carries the declarations, not only the modules', () => {
+    // A vendored config without its .d.ts fails with TS7016 the moment it is
+    // imported from TypeScript, because allowJs defaults to false and
+    // @jrmoulckers/tsconfig leaves it there. Measured both ways: with the
+    // declarations present tsc exits 0, with them removed it reports TS7016 and
+    // the config widens to `any`.
+    const dir = workspace();
+    try {
+      const { code, out } = run(['v0.115.0', '--set', 'prettier'], dir);
+      assert.equal(code, 0, out);
+
+      for (const file of ['index.d.ts', 'svelte.d.ts']) {
+        const path = join(dir, 'config/engineering/prettier', file);
+        assert.ok(existsSync(path), `${file} was not vendored alongside its module`);
+        assert.match(readFileSync(path, 'utf8'), /export declare const/);
+      }
+
+      const lock = JSON.parse(readFileSync(join(dir, 'engineering-configs.lock.json'), 'utf8'));
+      assert.equal(
+        lock.files['config/engineering/prettier/index.d.ts']?.source,
+        'packages/prettier-config/index.d.ts',
+        'the declaration must be recorded in the lock, or local drift is invisible',
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a ref older than the declarations fails naming the floor, not a typo', () => {
+    // v0.15.1 is a ref a consumer actually planned to vendor. The generic
+    // "check that the path exists" hint sends them hunting for a mistake they
+    // did not make.
+    const dir = workspace();
+    try {
+      const { code, out } = run(['v0.15.1', '--set', 'prettier'], dir);
+      assert.equal(code, 1);
+      assert.match(out, /Declarations ship from v0\.112\.0 onward/);
+      assert.ok(
+        !existsSync(join(dir, 'config/engineering/prettier/index.js')),
+        'nothing may be written when part of the set is unavailable',
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a declaration file that declares nothing is rejected', () => {
+    // Proves the .d.ts branch of the payload check is reached and can fail. A
+    // stub declaration widens every consumer's types to `any` while looking
+    // like a successful vendor.
+    const dir = workspace();
+    try {
+      const source = variant(dir, (text) =>
+        text.replace('^(export )?declare |^export type |^export interface ', '^ZZZ_NEVER_MATCHES '),
+      );
+      const { code, out } = run(['v0.115.0', '--set', 'prettier'], dir, source);
+      assert.equal(code, 1);
+      assert.match(out, /declares nothing/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
