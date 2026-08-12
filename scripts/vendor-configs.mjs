@@ -176,8 +176,13 @@ function parseArgs(argv) {
  * an offline or rate-limited runner is not a staleness signal.
  */
 async function latestRef() {
+  // Seam for tests. Staleness reporting depends on an unauthenticated API call
+  // that is rate-limited to 60/hour per IP, so a test asserting the notice
+  // against the real endpoint passes or fails according to how many other calls
+  // ran that hour. That is a test whose result is not about the code.
+  const api = process.env.VENDOR_API_BASE ?? 'https://api.github.com';
   try {
-    const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+    const response = await fetch(`${api}/repos/${REPO}/releases/latest`, {
       headers: { accept: 'application/vnd.github+json' },
     });
     if (!response.ok) return null;
@@ -430,6 +435,21 @@ async function main() {
   }
 
   await warnIfFormatterWillRewrite(dest);
+
+  // Staleness was only reported by --check, which runs later and on a different
+  // day. The moment a ref is chosen is the moment the choice can still be
+  // changed cheaply, and four repositories have now vendored a ref far behind
+  // latest without anything saying so. Same contract as --check: a newer
+  // release is information, never a failure.
+  const latest = await latestRef();
+  if (latest && latest !== ref) {
+    process.stdout.write(
+      `\nNotice: you vendored ${ref}; the newest release is ${latest}.\n` +
+        `This is not a failure — pinning to an older ref is a valid choice.\n` +
+        `If it was not deliberate, resolve the tag rather than typing one:\n` +
+        `  gh api repos/${REPO}/releases/latest --jq .tag_name\n`,
+    );
+  }
 
   process.stdout.write(`Recorded ref and SHA-256 of each file in ${LOCK}. Commit both.\n`);
 }

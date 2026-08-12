@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import {
   mkdtempSync,
   rmSync,
@@ -24,10 +25,11 @@ const script = fileURLToPath(new URL('../vendor-configs.mjs', import.meta.url));
 // An offline contributor can skip them; CI must not.
 const OFFLINE = process.env.SKIP_NETWORK_TESTS === '1';
 
-function run(args, cwd, source = script) {
+function run(args, cwd, source = script, env = {}) {
   const result = spawnSync(process.execPath, [source, ...args], {
     cwd,
     encoding: 'utf8',
+    env: { ...process.env, ...env },
     // A hung fetch must fail the test rather than the suite.
     timeout: 60_000,
   });
@@ -576,4 +578,99 @@ describe('vendor set covers what the packages ship', () => {
       }
     });
   }
+});
+
+describe('vendor-time staleness notice', () => {
+  // --check reports staleness, but it runs later and on a different day. The
+  // moment the ref is chosen is the moment the choice is still cheap to change.
+  //
+  // These drive the release lookup through a local server. The first version of
+  // these tests hit api.github.com directly and failed against a correct
+  // implementation, because unauthenticated calls are capped at 60/hour per IP
+  // and the rest of this suite had spent them. A test whose result depends on
+  // how many other calls ran that hour is not a test of the code.
+  // spawnSync blocks this process's event loop, so an in-process server can
+  // never answer the child and the child times out. The first version of these
+  // tests deadlocked exactly that way.
+  function runAsync(args, cwd, env) {
+    return new Promise((resolve) => {
+      const child = spawn(process.execPath, [script, ...args], {
+        cwd,
+        env: { ...process.env, ...env },
+      });
+      let out = '';
+      child.stdout.on('data', (d) => (out += d));
+      child.stderr.on('data', (d) => (out += d));
+      child.on('close', (code) => resolve({ code, out }));
+    });
+  }
+
+  async function withApi(tagName, body) {
+    const server = createServer((req, res) => {
+      if (tagName === null) {
+        res.writeHead(403).end('{}');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ tag_name: tagName }));
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const dir = workspace();
+    try {
+      await body((args) => runAsync(args, dir, { VENDOR_API_BASE: base }));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+
+  test('names the newer release when an older ref is vendored', { skip: OFFLINE }, async () => {
+    await withApi('v0.999.0', async (exec) => {
+      const { code, out } = await exec(['v0.113.0']);
+      assert.equal(code, 0, 'a newer release is information, never a failure');
+      assert.match(out, /Notice: you vendored v0\.113\.0; the newest release is v0\.999\.0/);
+      // Point at resolution, never at a literal to copy: copying a literal out
+      // of guidance is how four repositories reached a stale ref.
+      assert.match(out, /releases\/latest --jq \.tag_name/);
+    });
+  });
+
+  test('says nothing when the vendored ref is already the newest', { skip: OFFLINE }, async () => {
+    await withApi('v0.113.0', async (exec) => {
+      const { code, out } = await exec(['v0.113.0']);
+      assert.equal(code, 0);
+      // A notice that always fires is noise, and noise is how a real one gets
+      // scrolled past.
+      assert.doesNotMatch(out, /Notice: you vendored/);
+    });
+  });
+
+  test('stays silent and succeeds when the release lookup fails', { skip: OFFLINE }, async () => {
+    await withApi(null, async (exec) => {
+      const { code, out } = await exec(['v0.113.0']);
+      // A rate-limited or offline runner is not a staleness signal, and must
+      // never turn vendoring into a failure.
+      assert.equal(code, 0);
+      assert.match(out, /Vendored 10 file\(s\)/);
+      assert.doesNotMatch(out, /Notice: you vendored/);
+    });
+  });
+
+  test('stays silent when the API is unreachable', { skip: OFFLINE }, async () => {
+    // A 403 exercises the !response.ok branch; only a refused connection
+    // exercises the catch. Without this, rewriting the catch to rethrow passes
+    // every other test in this file -- verified.
+    const dir = workspace();
+    try {
+      const { code, out } = await runAsync(['v0.113.0'], dir, {
+        VENDOR_API_BASE: 'http://127.0.0.1:9',
+      });
+      assert.equal(code, 0);
+      assert.match(out, /Vendored 10 file\(s\)/);
+      assert.doesNotMatch(out, /Notice: you vendored/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
