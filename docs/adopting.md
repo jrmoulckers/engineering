@@ -17,6 +17,8 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | What you are seeing                                         | Search for                                               |
 | ----------------------------------------------------------- | -------------------------------------------------------- |
 | CI fails instantly, no logs, `startup_failure`              | `read the annotation, do not infer`                      |
+| `401` on install from Vercel/Netlify/Fly but CI is green    | `applies to GitHub Actions only`                         |
+| A red check you already know about hides a new failure      | `has stopped being a check`                              |
 | Wondering if an extra `permissions:` scope is harmful       | `Under-granting kills the run`                           |
 | Every job fails in ~1s with `steps=0`                       | `The permission ceiling and the billing hold`            |
 | A version bump seems to change nothing                      | `Diffing the increment is not verifying the floor`       |
@@ -1132,6 +1134,75 @@ gh run view <run-id> --log | grep '@jrmoulckers/'
 
 A grant is only required if the linked repository is private, or if the package is unlinked. Neither
 is true today.
+
+### The retraction above applies to GitHub Actions only, not to external build hosts
+
+This is the boundary of the correction, and stating the retraction without it substitutes one
+over-broad claim for another. **The inheritance is only reachable by a caller that has a credential
+at all.** GitHub-hosted runners get one for free — every job is issued a `GITHUB_TOKEN`. Vercel,
+Netlify, Cloudflare Pages, Fly, Render and any self-hosted pipeline are **not** issued one, so they
+send an anonymous request, and Packages authenticates every read:
+
+```
+ERR_PNPM_FETCH_401  GET https://npm.pkg.github.com/download/@jrmoulckers/eslint-config/...
+                    Unauthorized - 401
+```
+
+That is the same `401` from the probe table, arriving for the same reason — no credential, not no
+permission. The precise statement is:
+
+> Private packages are readable **wherever a GitHub credential exists**. On GitHub-hosted runners one
+> always does. Off GitHub, one never does unless you install it.
+
+So the two halves of a repository can disagree: CI green, deploys red, same commit, same lockfile.
+A consumer hit exactly this — Actions installing all three packages happily while every Vercel build
+died at install.
+
+Remedy on the host, not in the repository. Add a classic PAT with `read:packages` as an environment
+variable and point the package manager at it:
+
+```ini
+# .npmrc committed to the repo; the token comes from the host's env
+@jrmoulckers:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NPM_TOKEN}
+```
+
+The cost is one credential per external host per repository, and it is a **classic** PAT — the
+registry does not accept fine-grained tokens. That cost is the strongest argument for making the
+packages public: it is the one change that removes the credential from every external host at once.
+
+Audit before you assume this is someone else's problem, because a host can be connected to a
+repository with **no configuration file committed** — checking for `vercel.json` will miss it. Read
+the statuses and deployments instead:
+
+```bash
+sha=$(gh api "repos/OWNER/REPO/commits?per_page=1" --jq '.[0].sha')
+gh api "repos/OWNER/REPO/commits/$sha/status" --jq '[.statuses[].context] | unique'
+gh api "repos/OWNER/REPO/deployments?per_page=10" \
+  --jq '.[] | "\(.environment)  \(.performed_via_github_app.name // "external")"'
+```
+
+A deployment reporting `GitHub Actions` as its app is credentialed and unaffected. A commit status
+from a third-party context, or a deployment with no app, is the exposed case.
+
+### A check that is already failing has stopped being a check
+
+The consumer above found this bug **after** merging, and the reason generalises well beyond
+registries. Their Vercel status was already red for an unrelated account-level build rate limit. When
+the adoption PR went red on Vercel too, it read as the known noise — correctly, on the evidence
+available, because both conditions surface as **one status with one colour**. No build had yet
+reached `pnpm install`, so the `401` did not exist anywhere to be found.
+
+The rule to take from it:
+
+> Adopting anything underneath an already-red check means you have lost that check as a signal for
+> the adoption. Clear the known failure first, or verify against a specific named build — do not
+> read the aggregate status.
+
+Establishing it took walking the deployment list and diffing `package.json` at each deployed SHA to
+find that the last **successful** deploy predated the adoption. That is the reliable move when a
+status is untrustworthy: find the last green run and ask what it actually contained. It is the same
+principle this guide applies to configs — measure the artifact, not the summary of it.
 
 > **Historical note, kept because the reasoning is still correct where it applies.** If a package
 > _is_ genuinely unreachable, the options are a per-package grant — the package's _Manage Actions
