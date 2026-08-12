@@ -3975,6 +3975,46 @@ prove that a literal we retired is really gone — which is precisely where all 
 Retiring guidance means adding it there in the same commit, so the next reintroduction fails a check
 instead of reaching a consumer.
 
+### Search before you write, not after (`ENG-ARCH-001`)
+
+A contributor was asked to write native-profiling guidance. They wrote it carefully, corrected two
+of their own citations while doing so, and opened a PR. Six of its seven sections already existed in
+`practices/native-profiling.md`, heading for heading, because their branch predated the two pull
+requests that wrote it. The reviewer's premise was stale, not theirs, and the whole cost of that
+landed on the contributor.
+
+The measured shape of the duplication is worth stating, because it is not what you would guess:
+
+| Their heading                                   | The section it duplicated                         | Heading-word overlap |
+| ----------------------------------------------- | ------------------------------------------------- | -------------------- |
+| Profile to diagnose, benchmark to gate          | _identical title_                                 | 100%                 |
+| A profiler is a lab instrument                  | Lab and field are different instruments           | 17%                  |
+| Name the baseline device in the budget          | Profile release builds on named baseline hardware | 11%                  |
+| Carry the correlation identifier into the trace | Correlate traces with the observability seam      | 0%                   |
+
+**Two well-written headings on one topic share almost no words.** So `npm run docs:overlap` catches
+the first row and misses the other three, and it says so rather than implying coverage it does not
+have. Citation overlap was measured as an alternative signal and **rejected**: on a clean tree
+`native-profiling.md` and `performance-budgets.md` already share four principles legitimately, as do
+`go.md` and `testing.md`. A gate built on it would fire on correct cross-references, which is worse
+than no gate.
+
+There is no mechanical check for _this was already written, differently worded_. So the rule is
+procedural and belongs before the work, not after it:
+
+- **Before writing a practice section, `npm run principles:find <ID>` for the principle you intend
+  to cite, and read what already cites it.** The principle is the identity of the claim; the
+  heading is only a name for it.
+- **Before asking somebody else to write one, do the same, and say what you found.** A request to
+  write is a claim that it is unwritten.
+- **Check the base is current before commissioning, not before merging.** `git rev-list --count
+<their-base>..origin/main` costs nothing and is the whole defect here.
+
+If a section turns out to be written already, the salvage is the part that is new. Two paragraphs
+survived that review — proving a field channel can fail by breaking it on purpose once, and naming a
+baseline device by model and OS version rather than a tier label — and they were worth more than the
+six sections around them.
+
 ### Take patches automatically; take minors as a decision
 
 **This reverses guidance given here earlier, and the counter-example is one of our own releases.**
