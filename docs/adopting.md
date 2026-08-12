@@ -273,22 +273,51 @@ consuming repository to be granted access. Either way you must send a token.
 > `github/codeql-action` all return `0`, and they correctly declined to trust an absence test with
 > no reachable positive control. Those three genuinely publish nothing linked. Working positive
 > controls, anonymously: **`home-assistant/core` (28 package links)**, **`renovatebot/renovate`
-> (1)**, **`actions/runner` (1)**.
+> (1)**, **`actions/runner` (1)**. A third consumer independently found a fourth:
+> **`super-linter/super-linter` (1)**, which they ran precisely because their own first reading was
+> a false zero. Two consumers reaching for a positive control unprompted, after being burned, is
+> the strongest argument for keeping one in the recipe.
+>
+> **The HTML tab is not merely the easiest probe — for the token that needs to ask, it is the only
+> one.** `gh api "/user/packages?package_type=npm"` returns
+> `403 You need at least read:packages scope to list packages`, so the API route is closed to
+> exactly the credential that has the question. Anonymous HTML needs no credential at all, which is
+> why it can answer when nothing else can.
 >
 > Use both. The marker proves the probe ran; the controls prove the probe can answer.
 >
-> **A second consumer hit the failure this marker is for, and proposed a weaker fix.** They got a
-> 301 stub of 960 bytes where the real page is ~195 KB, grepped it, counted zero, and read that as
-> _private_ — from a page that never loaded. They suggested pinning `curl -L` plus a body-size
-> assertion (fail under ~50 KB).
+> **Two consumers measured the same page, got the same wrong number, and diagnosed two different
+> causes from it.** This one is worth reading closely, because the measurement error produced a
+> plausible number rather than an obvious one.
 >
-> Pin `-L` by all means, but **it is not the fix, and their diagnosis of the cause does not
-> reproduce**: this exact URL returns `200` and the full 195,677-byte page here with and without
-> `-L`, byte-identical. Whatever produced their 301 was environment-specific — a proxy, a
-> corporate interceptor, a differing URL form — which is precisely why a fix aimed at the cause is
-> the wrong shape. A size threshold is a guess that needs retuning whenever GitHub's page weight
-> changes, and it still cannot tell a login wall from an empty state.
+> Both ran the probe from PowerShell. `curl.exe` output binds as an **array of lines**, so `.Length`
+> returns the line count, not the byte count:
 >
+> ```powershell
+> $out = curl.exe -s https://github.com/OWNER/REPO/packages
+> $out.GetType().Name        # Object[]
+> $out.Length                # 960      <-- the line count
+> ($out -join "`n").Length   # 195667   <-- the actual body
+> ```
+>
+> The page was fully fetched, fully rendered, `200`, marker present. Nothing was wrong with it.
+>
+> One consumer read `960` and concluded **"empty page"**; they caught it by running a positive
+> control. The other read `960` and concluded **"301 redirect stub"**, then proposed pinning
+> `curl -L` and asserting a body size over ~50 KB. That fix targets a redirect that never happened —
+> which is why it does not reproduce anywhere the probe is run with `curl -w '%{size_download}'`,
+> where the number comes from curl rather than from PowerShell.
+>
+> **A wrong measurement does not announce itself as wrong; it produces a number, and the number
+> then gets explained.** Two competent readings of one artifact yielded two confident and
+> incompatible diagnoses, and one of them became a proposed change to this guide. Ask the tool that
+> did the work for the figure — `-w '%{size_download}'`, `-o file` plus the file's length — rather
+> than measuring whatever your shell handed back.
+>
+> This is also the concrete argument for the marker over any size threshold: `960` passes a
+> "did it load" eyeball test and fails a `> 50000` assertion, while the marker is correct in both
+> readings because it does not depend on the units.
+
 > The marker answers all of these at once: a 301 stub does not contain it, a login wall does not
 > contain it, and a real page with packages does not contain it either. **Assert what the page must
 > say, not how big it is or how it got there.**
