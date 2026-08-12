@@ -87,6 +87,14 @@ the fleet ends up mixed.
 - Repositories with no ESLint dependency — Go services, docs sites — need no registry access at
   all. This is a strict improvement for them.
 - Repositories using all three still need a token, but only for one package.
+- **Verifying "no token needed" requires a cold cache.** npm satisfies an install from its
+  local cache without contacting the registry at all, so a machine that has ever authenticated
+  once will install the remaining registry package with every credential removed and exit 0. One
+  adopter measured exactly this: `npm ci` passed with 599 packages added, and the same tree with
+  an empty cache returned `E401 ... authentication token not provided`. The pass was real and the
+  conclusion drawn from it was false. Verify with `npm ci --cache <fresh-dir>`, because CI always
+  has a cold cache and the first contributor will too — which is precisely the onboarding
+  regression this decision exists to remove.
 - A vendored file can be edited locally. The lock file makes that visible as a hash mismatch.
   Originally nothing forced a check; `scripts/vendor-configs.mjs --check` now does, and consumers
   should run it in CI. It fails on drift and only warns on staleness — a tag pushed here must

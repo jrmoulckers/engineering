@@ -1,10 +1,19 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import {
+  mkdtempSync,
+  rmSync,
+  readFileSync,
+  existsSync,
+  writeFileSync,
+  mkdirSync,
+  readdirSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SETS } from '../vendor-configs.mjs';
 import { createHash } from 'node:crypto';
 
 const script = fileURLToPath(new URL('../vendor-configs.mjs', import.meta.url));
@@ -529,4 +538,42 @@ describe('vendor-configs lock validation', () => {
       },
     );
   });
+});
+
+describe('vendor set covers what the packages ship', () => {
+  // The two delivery channels must carry the same files. If a config is added to
+  // a package and not to SETS, npm consumers get it and vendoring consumers
+  // silently do not -- and nothing fails, because every file SETS names still
+  // fetches successfully. That is a divergence no existing check can see.
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+  // package.json and README.md are packaging metadata, not configuration.
+  const NOT_CONFIG = new Set(['package.json', 'README.md']);
+
+  for (const [name, set] of Object.entries(SETS)) {
+    test(`${name}: SETS lists every config file in ${set.from ?? 'packages/prettier-config'}`, () => {
+      const from = set.from ?? 'packages/prettier-config';
+      const shipped = readdirSync(join(ROOT, from), { withFileTypes: true })
+        .filter((e) => e.isFile() && !NOT_CONFIG.has(e.name))
+        .map((e) => e.name)
+        .sort();
+
+      assert.deepEqual(
+        [...set.files].sort(),
+        shipped,
+        `${from} and SETS.${name} disagree. Add the file to SETS, or it reaches ` +
+          `npm consumers only.`,
+      );
+    });
+
+    test(`${name}: every file SETS names exists`, () => {
+      const from = set.from ?? 'packages/prettier-config';
+      for (const file of set.files) {
+        assert.ok(
+          existsSync(join(ROOT, from, file)),
+          `SETS.${name} names ${file}, which does not exist in ${from}`,
+        );
+      }
+    });
+  }
 });

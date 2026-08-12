@@ -32,11 +32,12 @@
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const REPO = 'jrmoulckers/engineering';
 const LOCK = 'engineering-configs.lock.json';
 
-const SETS = {
+export const SETS = {
   tsconfig: {
     // `extends` between these is relative, so a partial fetch produces a config
     // that resolves to nothing. The set is all-or-nothing on purpose.
@@ -433,11 +434,16 @@ async function main() {
   process.stdout.write(`Recorded ref and SHA-256 of each file in ${LOCK}. Commit both.\n`);
 }
 
-try {
-  await main();
-} catch (error) {
-  if (!(error instanceof VendorError)) throw error;
-  process.stderr.write(`error: ${error.message}\n`);
-  if (error.hint) process.stderr.write(`       ${error.hint}\n`);
-  process.exitCode = 1;
+// Running `main()` on import would make the module untestable and would fire a
+// network fetch on any `import`. The guard keeps the CLI behaviour identical
+// while letting tests read SETS directly rather than regex the source.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  try {
+    await main();
+  } catch (error) {
+    if (!(error instanceof VendorError)) throw error;
+    process.stderr.write(`error: ${error.message}\n`);
+    if (error.hint) process.stderr.write(`       ${error.hint}\n`);
+    process.exitCode = 1;
+  }
 }
