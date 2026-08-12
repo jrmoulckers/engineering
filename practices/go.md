@@ -64,11 +64,42 @@ surrounding prose says about it, because the prose is read once and the ref is r
 
 ```bash
 latest=$(gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name)
-[ "$latest" = "$ENGINEERING_REF" ] || echo "::notice::pinned $ENGINEERING_REF; newest is $latest"
+
+# Speak only when the reported tag genuinely sorts ABOVE the pin. `releases/latest`
+# is the most recently *published* release, not the greatest version: a patch
+# backported to an older line and published after a newer minor is returned as
+# latest. A bare `!=` then advises every consumer to move their pin backwards at
+# once, confidently and wrongly.
+newer=$(printf '%s\n%s\n' "$ENGINEERING_REF" "$latest" | sort -V | tail -1)
+if [ -n "$latest" ] && [ "$newer" != "$ENGINEERING_REF" ]; then
+  # Compare the bytes, not the tags. Most releases here do not touch this file,
+  # and a notice that fires on every release is one you stop reading -- at which
+  # point it hides the release that mattered.
+  new_sum=$(curl -fsSL "https://raw.githubusercontent.com/jrmoulckers/engineering/${latest}/configs/golangci.yml" | sha256sum | cut -d' ' -f1)
+  cur_sum=$(sha256sum .golangci.yml | cut -d' ' -f1)
+  [ "$new_sum" = "$cur_sum" ] ||
+    echo "::notice::your rules are behind: pinned $ENGINEERING_REF, newest is $latest"
+fi
 ```
 
 `::notice::`, never a non-zero exit. A tag pushed here must not redden an unrelated PR, or pinning
 stops being a decision and becomes a default someone bumps to get green.
+
+> **Both guards above exist because a consumer ran this recipe and reported what it does.** The
+> version-ordering bug was live in the snippet as published; they caught it by checking the property
+> rather than by observing a failure, which is the only way it surfaces, since the misleading output
+> is indistinguishable from correct output.
+>
+> The hash comparison answers their second finding, and it is the more useful of the two. A
+> tag-only notice fires on **every** release forever, including the 26 consecutive tags that did not
+> touch this file — so the pattern silently charges a re-pin per release, or trains you to ignore
+> the signal. Comparing bytes turns _"you are 13 tags behind"_ into _"your rules are 13 tags
+> behind,"_ which is the question you actually have. It would have stayed silent across all 26
+> no-op tags and still fired at `v0.2.17` and `v0.10.0`.
+>
+> Note the pin and your **citation refs** are different things and should not be swept together. The
+> pin selects which bytes are enforced; a citation records the text you read at a tag. Conflating
+> them makes every re-pin a large diff across every citing file, for no change in enforcement.
 
 Three details are load-bearing:
 

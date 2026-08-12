@@ -54,6 +54,22 @@ IDs (`ENG-*`) are the only fleet-wide identifiers; if a decision needs to bind m
 repository it belongs in a principle or in `jrmoulckers/.github`, not in an ADR that another
 repository is expected to follow.
 
+> **The collision is not hypothetical, and the qualifier is required rather than tidy.** `ADR-0003`
+> currently denotes at least two different decisions — `jrmoulckers/.github`'s and a product
+> repository's `0003-decky-v1-abi-preservation.md` — and this repository's `ADR-0001` (two-channel
+> delivery) collides with another repository's two-tree topology.
+>
+> A consumer had to point out that this section's own two rules — numbers are repo-local, and
+> decisions are cited by ID — make a bare `ADR-NNNN` **ambiguous by construction**. It had already
+> misled a reader into looking for a third repository's record. Bare numbers are safe **only inside
+> the repository that owns them**, which is why the fenced examples elsewhere in these docs show
+> consumers writing bare IDs in their own files.
+>
+> Two places the rule is easy to break because they do not look like documents: **anything written
+> to another repository** — a message, a review comment, an issue — and **any document a consumer
+> reads**, such as `docs/adopting.md`. Both are cross-repository citations even when the file lives
+> here, and a bare number in either is resolved against the reader's repository, not the author's.
+
 **Rename and link rewrite land in one commit.** Dropping an `adr-` prefix is a one-line change per
 file and a large number of dead links otherwise — one repository counted 49 inbound occurrences
 across 9 files, most of them in a single architecture overview. Grep for the old form before
