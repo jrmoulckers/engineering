@@ -1554,6 +1554,62 @@ The mitigation that consumer applies is worth copying: **comment each entry with
 so the next person to tidy the ignore file can see that removing a line has an owner on the other
 end rather than looking like dead weight.
 
+> **These exclusions are permanent, and `proseWrap: 'preserve'` does not retire them.**
+> `prettier-config@0.2.0` stopped Prettier rewrapping prose, and it is natural to read that as
+> making synced files safe to format again — the two changes arrive close together. They are
+> unrelated. A consumer re-measured 55 synced files under `--prose-wrap preserve --print-width 96`
+> and got **55**, unchanged. Reproduced here on a minimal file: Prettier inserts a blank line after
+> the closing `---` of YAML frontmatter, and reformats tables and lists. No Prettier option
+> suppresses any of that, because none of it is prose wrapping.
+>
+> `preserve` governs how prose is wrapped. It does not exempt a file from being formatted. Delete
+> these entries and the next sync reports drift against content nobody authored.
+
+### Confirm your check can fail before you trust that it passed
+
+A consumer measured their synced paths with `prettier --no-config --list-different` and got **0**,
+which reads as "these files are already clean." **`--no-config` disables the config file but still
+honours `.prettierignore`.** All 55 files were skipped. The command measured nothing and reported
+it as a pass.
+
+Reproduced exactly — same tree, same paths, only the ignore handling varying:
+
+| invocation                                     | files listed | exit  |
+| ---------------------------------------------- | ------------ | ----- |
+| `--list-different <paths>`                     | 0            | 0     |
+| `--no-config --list-different <paths>`         | **0**        | **0** |
+| `--ignore-path empty --list-different <paths>` | 1            | 1     |
+
+To measure files you have deliberately ignored, bypass the ignore file explicitly:
+
+```bash
+: > /tmp/empty-ignore
+prettier --ignore-path /tmp/empty-ignore --list-different .github/agents AGENTS.md
+```
+
+**Prettier reports the two empty cases differently, and the difference is worth knowing.** Point it
+at a directory containing no supported files and it fails loudly — `[error] No supported files were
+found in the directory`, exit **2**. Point it at files that are all _ignored_ and it prints
+`All matched files use Prettier code style!` and exits **0**. That sentence is true over the empty
+set and reads exactly like a passing measurement. The vacuity guard exists; it just does not cover
+the ignore path, which is the case you are most likely to hit deliberately.
+
+**This is a category, not an anecdote.** The same shape has now produced four separate wrong
+conclusions in this migration:
+
+| what was run                                         | why it proved nothing                      |
+| ---------------------------------------------------- | ------------------------------------------ |
+| `--no-config --list-different` on ignored paths      | ignore file still applied; 0 files checked |
+| `link:` / workspace resolution instead of `npm pack` | tested the working tree, not the tarball   |
+| `registry-url` on a workflow that never installs     | inert input; nothing authenticated         |
+| a preset diff that never passed the new option       | absent key destructures to `undefined`     |
+
+Each returned green. None exercised the thing being claimed. **Before believing a green result,
+make it go red once** — delete a line, break a file, revoke the token — and confirm the check
+notices. A gate you have never seen fail is a gate you have not yet tested. That is cheaper than
+any of the four investigations above, and it is the only step that distinguishes "this passed" from
+"this ran."
+
 > **The sharpest case is a file you own that contains a region you don't — and whole-file
 > exclusion is the expensive answer to it.** A consumer hit this when `main` grew a synced
 > `studio:base` region inside `.github/copilot-instructions.md`, a file that is locally authored
