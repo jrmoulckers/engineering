@@ -3484,6 +3484,60 @@ This is the same shape as two other traps in this guide — a clean `rules-of-ho
 lab-only performance channel. In each, a tool reports nothing and the absence is read as
 correctness when it only means the check was never made.
 
+#### The sharper question: does this check read the thing you are asserting?
+
+A consumer refined the framing above, and the refinement is more useful than the original. "Beware a
+green run" is a warning; it does not tell you which green runs to distrust. The precise fault is
+that **the evidence offered was about a different object than the claim.**
+
+| Claim being made              | What the evidence actually measured                    |
+| ----------------------------- | ------------------------------------------------------ |
+| "our peer ranges are fine"    | rule behaviour — nothing in lint reads a peer range    |
+| "we have no hooks defects"    | violations of the shape one rule can recognise         |
+| "we meet the P95 budget"      | synthetic lab conditions, not the field distribution   |
+| "the vendored config is used" | the files are pristine, not that anything imports them |
+
+`eslint . && prettier --check . && svelte-check` cannot surface an unmet peer range no matter how it
+is configured, because none of those tools parses a peer range. The run was not weak evidence for
+the claim — it was **not evidence for the claim at all**. That is why
+`--strict-peer-dependencies --lockfile-only` is the right check: it is the first one that reads the
+compatibility contract rather than the code.
+
+So before accepting a green gate as support for a claim, ask the decidable question: **which artifact
+does this check parse, and is it the artifact my claim is about?** If the answer is no, the result
+is not reassuring — it is silent, and adding more of the same check will keep it silent.
+
+### Generate the lockfile locally if you like — do not commit it before CI can install
+
+A consumer with a `read:packages` PAT confirmed that all three packages resolve and their tarballs
+extract cleanly, which means **a lockfile can be produced on a workstation well before CI is able to
+install anything.** That is a genuinely useful capability — it lets you complete and verify the whole
+configuration migration while the access grant is still outstanding — but it comes with an ordering
+rule that is easy to get backwards.
+
+**Do not commit that lockfile until CI can resolve the same packages.** The asymmetry is the point:
+
+- Leaving the packages out of `package.json` parks _one half_ of the adoption. Lint keeps running on
+  your existing config; every other job stays green.
+- Committing a lockfile CI cannot resolve fails the **install step**, which every job depends on. A
+  parked half-migration becomes a fully red repository, and the redness is unrelated to the change
+  under review in whatever PR happens to be open.
+
+The failure also misdirects: it looks like a lockfile problem, so the natural response is to
+regenerate or delete the lockfile, neither of which touches the cause.
+
+**Widening workflow permissions does not fix this, and looks like it should.** A private package
+owned by `jrmoulckers/engineering` cannot be read by a consuming repository's `GITHUB_TOKEN`, which
+is scoped to that repository, no matter what `permissions:` block the workflow declares. The remedy
+is the package-level grant — _Manage Actions access_ → add the consuming repository — or a
+visibility change. Both are owner actions. Time spent enlarging `permissions:` is time spent on the
+wrong axis, and because the symptom is identical either way, it can absorb an afternoon without
+producing a single decidable result.
+
+So the supported adoption order when the grant is outstanding is: migrate the configuration, verify
+it locally against a resolved copy of the packages, keep the manifest and lockfile changes on the
+branch, and land them in the same commit that becomes installable in CI.
+
 ### Take patches automatically; take minors as a decision
 
 **This reverses guidance given here earlier, and the counter-example is one of our own releases.**
