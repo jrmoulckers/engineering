@@ -713,6 +713,26 @@ steps:
 > Billing exhaustion hits private repositories only, because public-repository Actions minutes are
 > not billed. That is why the visibility split appears at all, and why it will look like a
 > configuration difference between two repositories whose configuration is identical.
+>
+> **The permission ceiling and the billing hold are mechanically distinguishable, and not by the
+> figure you would reach for first.** A consumer proposed separating them on `total_ms`, expecting
+> the permission failure to list jobs and report time. It does the opposite. Both arms measured
+> here — the permission case from the controlled experiment above, the billing case from a
+> consumer's failing run:
+>
+> | Cause                     | `/jobs` returns | `/timing` `.billable`                     |
+> | ------------------------- | --------------- | ----------------------------------------- |
+> | caller grant below callee | **`0` jobs**    | **`{}`** — empty, `run_duration_ms: null` |
+> | billing / spending limit  | **`8` jobs**    | `UBUNTU` present, `total_ms: 0`           |
+>
+> The cleaner discriminator is therefore **whether jobs exist at all**, not how long they ran. It
+> also matches the mechanism: a caller asking for more than it holds is rejected before any job is
+> created, whereas a billing hold creates every job and then refuses to allocate a runner — which
+> is exactly why its per-job `duration_ms` is `0` rather than absent. Read it as: **no jobs means it
+> was never admitted; jobs with zero time means it was admitted and never ran.**
+>
+> Prefer the annotation regardless. It states the cause outright, and neither counting exercise has
+> to be interpreted.
 
 > **The blast radius is the whole workflow file, not the one misconfigured job.** A second,
 > unrelated, perfectly valid job in the same file was added to that measurement and it did not run
@@ -922,22 +942,36 @@ part that catches people. `reusable-perf-budget` consumes a build artifact and r
 so `packages: read` looks obviously irrelevant and gets left off — and the whole workflow dies
 at startup in about a second. Match this table exactly, per callee you call:
 
-| Callee                      | Permissions the caller must grant                         |
-| --------------------------- | --------------------------------------------------------- |
-| `reusable-ci-lint`          | `contents: read`, `packages: read`, `pull-requests: read` |
-| `reusable-ci-web`           | `contents: read`, `packages: read`                        |
-| `reusable-deploy-pages`     | `contents: read`, `packages: read`, `id-token: write`     |
-| `reusable-deploy-preview`   | `contents: read`, `packages: read`                        |
-| `reusable-perf-budget`      | `contents: read`, `packages: read` — **installs nothing** |
-| `reusable-smoke-test`       | `contents: read`, `packages: read`                        |
-| `reusable-security-ci`      | `contents: read`                                          |
-| `reusable-change-detection` | `contents: read`                                          |
+| Callee                      | Permissions the caller must grant                                     |
+| --------------------------- | --------------------------------------------------------------------- |
+| `reusable-ci-lint`          | `contents: read`, `packages: read`, `pull-requests: read`             |
+| `reusable-ci-web`           | `contents: read`, `packages: read`                                    |
+| `reusable-deploy-pages`     | `contents: read`, `packages: read`, `pages: write`, `id-token: write` |
+| `reusable-deploy-preview`   | `contents: read`, `packages: read`                                    |
+| `reusable-perf-budget`      | `contents: read`, `packages: read` — **installs nothing**             |
+| `reusable-smoke-test`       | `contents: read`, `packages: read`                                    |
+| `reusable-security-ci`      | `contents: read`                                                      |
+| `reusable-change-detection` | `contents: read`                                                      |
 
-A caller with **no** `permissions:` block at all inherits the repository default and is
-unaffected by any of this. The failure only appears once you write the block down.
+A caller with **no** `permissions:` block does **not** escape this. Omitting the block inherits the
+repository default, and the restricted default (`read`) supplies only `contents` and `packages` —
+below what `reusable-ci-lint` and `reusable-deploy-pages` declare. Measured both ways on a
+repository with that default: no block `startup_failure`s against a callee needing
+`pull-requests: read`; an explicit block granting it succeeds. **Writing the block down is what
+lets you fix this, not what causes it.**
 
-`actionlint` does not model caller-callee permission ceilings and passes on both sides, so this
-is not caught before it runs.
+Two details in that table are easy to lose. `reusable-deploy-pages` declares its permissions
+across **two jobs** — `contents`/`packages` on one, `pages`/`id-token` on the other — so the union
+is what the caller must supply, and reading only the first job under-counts. And both of its extra
+entries are **`write`**, not `read`: granting `pages: read` fails exactly like omitting it.
+
+`actionlint` does not model caller-callee permission ceilings and passes on both sides, so this is
+not caught before it runs. The reason is structural rather than a gap to be filed: **the invariant
+is not expressible in either file.** It holds between a repository you own and one you do not, at a
+pinned SHA, so no single-file linter can see it. One consequence follows directly and is worth
+expecting — **it can break with no local change.** A callee that adds a declared scope invalidates
+every caller pinned to the new SHA, so the failure arrives attached to a re-pin and looks like the
+re-pin caused it.
 
 The token is resolved as
 `inputs.registry-url != '' && (secrets.NODE_AUTH_TOKEN || github.token) || ''`, so it is only
