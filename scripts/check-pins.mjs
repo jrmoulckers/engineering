@@ -91,7 +91,8 @@ function admits(range, version) {
     return cmp(v, lo) >= 0 && cmp(v, [lo[0], lo[1] + 1, 0]) < 0;
   }
 
-  // `>=a.b.c <x.y.z`, the form versions.json records.
+  // `>=a.b.c <x.y.z`. versions.json recorded this form until the caret
+  // reversal; consumers still have it in their manifests, so it stays parsed.
   const pair = /^>=\s*(\d+\.\d+\.\d+)\s+<\s*(\d+\.\d+\.\d+)$/.exec(r);
   if (pair) {
     const lo = parseVersion(pair[1]);

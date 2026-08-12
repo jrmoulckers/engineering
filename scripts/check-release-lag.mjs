@@ -58,6 +58,14 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // under `docs/architecture/` that consumers are told to cite.
 const FETCHED_PATHS = [
   'scripts/vendor-configs.mjs',
+  // adopting.md tells consumers to curl this one directly, and it reads
+  // versions.json over HTTPS at main. Both are therefore fetched at a ref by
+  // somebody else's CI, and a change to either is consumer-visible even though
+  // neither is a package. Found the same way 'docs/' was: by running this
+  // check after a commit that plainly changed what consumers get, and being
+  // told there was nothing to release.
+  'scripts/check-pins.mjs',
+  'versions.json',
   'configs/',
   'practices/',
   'principles/',
