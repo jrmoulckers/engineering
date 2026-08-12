@@ -28,6 +28,9 @@ import { sharedIgnores, toolingFiles } from './ignores.js';
  * @param {boolean} [options.typeAware] Supply type information so type-aware rules can run.
  * @param {boolean} [options.strictTypeChecked] Layer the type-checked and stylistic-type-checked
  *   rule sets. Implies `typeAware`.
+ * @param {string[]} [options.untypedFiles] Extra globs for files a TypeScript project never
+ *   covers. Type-aware rules are disabled for them, after `extend`. Presets pass their own
+ *   file types here; `.svelte` is not a TypeScript project member even when its script block is.
  * @returns {import('eslint').Linter.Config[]}
  */
 export function base(options = {}) {
@@ -38,6 +41,7 @@ export function base(options = {}) {
     extend = [],
     typeAware = false,
     strictTypeChecked = false,
+    untypedFiles = [],
   } = options;
 
   const wantsTypeInformation = typeAware || strictTypeChecked;
@@ -107,6 +111,19 @@ export function base(options = {}) {
             languageOptions: { parserOptions: { projectService: false } },
             rules: tseslint.configs.disableTypeChecked.rules,
           },
+          // Preset-supplied file types with the same property. A preset cannot
+          // fix this itself: its own entries go through `extend`, which is
+          // inserted *above* these blocks, so anything it adds is outranked by
+          // the very defaults it needs to override. The glob has to arrive here.
+          ...(untypedFiles.length > 0
+            ? [
+                {
+                  files: untypedFiles,
+                  languageOptions: { parserOptions: { projectService: false } },
+                  rules: tseslint.configs.disableTypeChecked.rules,
+                },
+              ]
+            : []),
         ]
       : []),
   );

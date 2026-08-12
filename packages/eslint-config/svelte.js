@@ -67,6 +67,12 @@ export function svelteConfig(options = {}) {
 
   return base({
     ...rest,
+    // `.svelte` is not a member of a TypeScript project even when its script
+    // block is TypeScript, and this preset opts it out of `projectService`
+    // above. Under `strictTypeChecked` the type-checked sets are applied
+    // unscoped, so without this every type-aware rule reaches `.svelte` with no
+    // project behind it and the first component aborts the entire run.
+    untypedFiles: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
     extend: [
       ...flatConfigs('recommended'),
       ...flatConfigs('prettier'),

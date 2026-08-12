@@ -223,6 +223,51 @@ describe('base strictTypeChecked (ENG-TEST-008)', () => {
     const { projectService } = resolveFor(base({ strictTypeChecked: true }), 'src/a.ts');
     assert.equal(projectService, true);
   });
+
+  test('untypedFiles disables the type-aware rules for globs base cannot know about', () => {
+    const config = base({ strictTypeChecked: true, untypedFiles: ['**/*.svelte'] });
+    const { rules, projectService } = resolveFor(config, 'src/App.svelte');
+    assert.notEqual(projectService, true);
+    for (const rule of STRICT_RULES)
+      assert.ok(!enabled(rules[rule]), `${rule} left on for an untyped file`);
+  });
+
+  test('untypedFiles outranks extend, which is where a preset would otherwise put it', () => {
+    // The reason `untypedFiles` exists rather than presets handling this
+    // themselves: `extend` is spliced in above the trailing disable blocks, so
+    // an entry passed there cannot turn a type-aware rule back off.
+    const config = base({
+      strictTypeChecked: true,
+      untypedFiles: ['**/*.svelte'],
+      extend: [
+        { files: ['**/*.svelte'], rules: { '@typescript-eslint/no-floating-promises': 'error' } },
+      ],
+    });
+    const { rules } = resolveFor(config, 'src/App.svelte');
+    assert.ok(!enabled(rules['@typescript-eslint/no-floating-promises']));
+  });
+
+  test('no preset leaves a type-aware rule on a file type it opts out of projectService', () => {
+    // Generalises the plain-.js case. A preset that excludes a file type from
+    // the TypeScript project must also disable the rules that need one; doing
+    // only the first aborts the entire run on the first such file.
+    const cases = [
+      [
+        svelteConfig({ strictTypeChecked: true }),
+        ['src/App.svelte', 'src/s.svelte.ts', 'src/s.svelte.js'],
+      ],
+      [base({ strictTypeChecked: true }), ['src/a.js', 'src/a.mjs']],
+    ];
+    for (const [config, paths] of cases) {
+      for (const p of paths) {
+        const { rules, projectService } = resolveFor(config, p);
+        for (const rule of STRICT_RULES) {
+          if (enabled(rules[rule]))
+            assert.equal(projectService, true, `${p} enables ${rule} with no project service`);
+        }
+      }
+    }
+  });
 });
 
 describe('published package contents', () => {
