@@ -210,7 +210,46 @@ fi
 ```
 
 `sort -V`, not `sort`: a lexical sort puts `v0.99.0` above `v0.115.0`, so the naive form picks a
-tag nearly a hundred releases old and still looks like it resolved something.
+tag nearly a hundred releases old and still looks like it resolved something. A consumer confirmed
+this reproduces on PowerShell too — it is not a shell-specific footgun, it is every naive sort.
+
+#### Instructions resolve; evidence pins
+
+The rule above is about **instructions**, and a consumer was right to object that applying it
+everywhere is wrong. A ref inside a recipe should be resolved, because a stale one propagates
+guidance a later release reversed. A ref inside a **measurement** must stay literal:
+"verified with the checker at `v0.2.11`" is a claim about a specific tool version, and swapping in a
+resolver silently re-points it at different code on every read — turning a reproducible result into
+an unfalsifiable one.
+
+So: **a ref you are telling someone to use should resolve; a ref recording what you ran should not.**
+When a literal is deliberate, say which it is, because the two are indistinguishable on sight and a
+later reader tidying up "stale pins" will helpfully destroy the evidence.
+
+#### Do not confirm a tag exists from one page of the API
+
+The same consumer caught this repository reporting that a tag they cite "never existed". It exists.
+The mechanism, reproduced here rather than guessed:
+
+```bash
+gh api repos/jrmoulckers/engineering/tags --jq '.[].name' | wc -l   # 30
+```
+
+The REST API paginates at **30 items** and returns `200 OK` with a perfectly valid list. Against 154
+real tags that is a **80.5% false-negative rate** for an existence check — and the page holds the
+_newest_ tags, so everything invisible is old. That is precisely the population an audit of stale
+pins examines, which makes the error maximally correlated with the question being asked.
+
+There is no error to notice. A membership test against that list is confidently, silently wrong.
+
+```bash
+gh api --paginate repos/<owner>/<repo>/tags --jq '.[].name'   # 155
+git ls-remote --tags origin                                   # 155, and needs no token
+```
+
+`git ls-remote` is the better instrument: one round trip, no pagination, no auth. **A false "this
+tag does not exist" is worse than no finding**, because the consumer acts on it by rewriting a pin
+that was correct.
 
 The declarations are not cosmetic for a vendoring consumer, and the precondition is the opposite of
 the one most people assume. **The trigger is `allowJs: false`, not `checkJs`** — and `allowJs` is
@@ -463,6 +502,35 @@ The two outcomes deliberately differ in severity:
   and learned as noise. Vendoring runs once, in a session where someone has just typed a ref by hand
   and can still cheaply correct it — which is exactly when a newer release is worth an interruption
   whatever its contents.
+
+#### `--no-remote` when the gate must be hermetic
+
+`--check` does two unrelated things behind one flag, and they are easy to conflate. An adopter
+stated the distinction better than this guide had: **a green `--check` means your tree matches the
+lock, not that your pin is current.** Only the hash comparison is authoritative, and only it is
+offline. The staleness half is an unauthenticated call to `api.github.com` on every run — careful
+and fail-open, but invisible at the call site, which is a problem for anyone who has to declare
+egress.
+
+```yaml
+- run: node scripts/vendor-configs.mjs --check --no-remote
+```
+
+With `--no-remote` the command is hermetic: no network, drift still fatal, and it says so rather
+than simply going quiet —
+
+```
+6 vendored file(s) match engineering-configs.lock.json at v0.117.0.
+Staleness not checked (--no-remote). This says nothing about whether v0.117.0 is current.
+```
+
+**Unattributed silence is the failure this avoids.** A quiet run that omitted the staleness check
+is indistinguishable from one that ran it and found nothing, so the flag names its own gap. Pair it
+with an occasional full `--check` — a scheduled job, or the vendor step itself — if you want the
+staleness signal without putting a network call in a lint gate.
+
+`--no-remote` is rejected when vendoring rather than ignored, because vendoring fetches files and
+cannot be offline; accepting it there would promise a guarantee that does not exist.
 
 **A checker validates its input before it trusts it.** Two adopters arrived at the same rule from
 opposite directions, and it is the single most useful thing to know about `--check`: assert the

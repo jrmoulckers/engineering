@@ -1273,6 +1273,61 @@ describe('the staleness notice reports how big the gap is', { skip: OFFLINE }, (
       assert.match(out, /set of files may have changed/);
     });
   });
+
+  test('--no-remote makes no network call at all', async () => {
+    // Proving hermeticity by reading the code is not proving it. Point the API
+    // seam at a port nothing is listening on: without --no-remote the lookup is
+    // attempted (and fails open, silently), with it the lookup must not happen.
+    // A consumer with egress review has to be able to state this, and "I read
+    // the source" is not a statement they can put in a supply-chain ledger.
+    const dead = 'http://127.0.0.1:1';
+    await withApi(api('v0.115.0', ['v0.115.0', 'v0.15.4']), async (exec, dir) => {
+      assert.equal((await exec(['v0.15.4', '--set', 'tsconfig'])).code, 0);
+
+      const offline = await runAsyncIn(dir, ['--check', '--no-remote'], {
+        VENDOR_API_BASE: dead,
+      });
+      assert.equal(offline.code, 0, offline.out);
+      assert.match(offline.out, /6 vendored file\(s\) match/);
+      assert.match(offline.out, /Staleness not checked \(--no-remote\)/);
+      // The silence has to be attributed. An unqualified quiet run is exactly
+      // what a consumer would misread as "my pin is current".
+      assert.match(offline.out, /says nothing about whether v0\.15\.4 is current/);
+    });
+  });
+
+  test('--no-remote still fails on drift, because that half is the guarantee', async () => {
+    // The offline half is the authoritative one. If --no-remote also softened
+    // drift detection it would be a way to make the gate pass, not a way to
+    // make it hermetic. Built from a synthetic lock so it needs no network at
+    // all -- which is the property under test.
+    const dir = workspace();
+    try {
+      writeFileSync(join(dir, 'vendored.json'), '{"a":1}', 'utf8');
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v1.0.0',
+          files: { 'vendored.json': { source: 'x', sha256: 'deadbeef' } },
+        }),
+        'utf8',
+      );
+      const { code, out } = await runAsyncIn(dir, ['--check', '--no-remote'], {
+        VENDOR_API_BASE: 'http://127.0.0.1:1',
+      });
+      assert.equal(code, 1);
+      assert.match(out, /content differs from the lock/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('--no-remote is rejected when vendoring, which cannot be offline', async () => {
+    const dir = workspace();
+    const { code, out } = await runAsyncIn(dir, ['v0.15.4', '--no-remote']);
+    assert.equal(code, 1);
+    assert.match(out, /--no-remote only applies to --check/);
+  });
 });
 
 describe('vendored ESM carries its module type', { skip: OFFLINE }, () => {
