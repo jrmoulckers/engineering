@@ -403,6 +403,12 @@ describe('vendor-configs --check', () => {
 
 describe('vendor-configs lock coverage', () => {
   test("warns when a previous run's files are left untracked on disk", { skip: OFFLINE }, () => {
+    // This originally moved the tree with `--dest` and asserted the warning was
+    // enough. A consumer proved it was not: retargeting the lock also resets
+    // `references` to empty, which downgrades the orphan check from fatal to a
+    // "not wired up yet" notice, and `--check` then passes on a wired tree that
+    // has been edited. Retargeting is refused outright now, so the remaining way
+    // to strand files at the same destination is a narrowed `--set`.
     const dir = workspace();
     try {
       const first = run(['v0.115.0', '--dest', 'config/engineering'], dir);
@@ -411,20 +417,23 @@ describe('vendor-configs lock coverage', () => {
       // this the warning could fire always and the test below would still pass.
       assert.doesNotMatch(first.out, /no longer tracked/);
 
-      const moved = run(['v0.115.0', '--dest', 'vendor/engineering'], dir);
-      assert.equal(moved.code, 0);
-      assert.match(
-        moved.out,
-        new RegExp(String.raw`${ALL_FILES} file\(s\) from the previous run are no longer tracked`),
-      );
-      assert.match(moved.out, /config\/engineering\/tsconfig\/base\.json/);
-      // The old tree is still on disk and --check now covers none of it, which
-      // is why this has to be said out loud rather than silently dropped.
-      assert.ok(existsSync(join(dir, 'config/engineering/tsconfig/base.json')));
+      const narrowed = run(['v0.115.0', '--dest', 'config/engineering', '--set', 'tsconfig'], dir);
+      assert.equal(narrowed.code, 0);
+      assert.match(narrowed.out, /file\(s\) from the previous run are no longer tracked/);
+      assert.match(narrowed.out, /config\/engineering\/prettier\//);
+      // The dropped tree is still on disk and --check now covers none of it,
+      // which is why this has to be said out loud rather than silently dropped.
+      assert.ok(existsSync(join(dir, 'config/engineering/prettier/index.js')));
       const lock = JSON.parse(readFileSync(join(dir, 'engineering-configs.lock.json'), 'utf8'));
+      const keys = Object.keys(lock.files);
       assert.equal(
-        Object.keys(lock.files).some((k) => k.startsWith('config/engineering/')),
+        keys.some((k) => k.startsWith('config/engineering/prettier/')),
         false,
+        'the narrowed run must stop tracking the set it dropped',
+      );
+      assert.ok(
+        keys.some((k) => k.startsWith('config/engineering/tsconfig/')),
+        'the set it still vendors must remain tracked',
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1492,6 +1501,63 @@ describe('the staleness notice reports how big the gap is', { skip: OFFLINE }, (
     const { code, out } = await runAsyncIn(dir, ['v0.15.4', '--no-remote']);
     assert.equal(code, 1);
     assert.match(out, /--no-remote only applies to --check/);
+  });
+
+  test('a --dest run cannot retarget an existing lock', async () => {
+    // Reported by a consumer and reproduced against a real repository before
+    // being fixed: `--dest` rewrote the canonical lock to a tree nothing
+    // referenced, which recorded `references: []`, which turned the orphan
+    // check's fatal branch into its benign "not wired up yet" notice. The wired
+    // tree could then be edited freely while --check still printed "N vendored
+    // file(s) match" and exited 0. Neither half looks wrong alone.
+    const dir = workspace();
+    try {
+      orphanFixture(dir, { wired: true });
+      const lockPath = join(dir, 'engineering-configs.lock.json');
+      const before = readFileSync(lockPath, 'utf8');
+
+      const { code, out } = await runAsyncIn(dir, ['v0.15.4', '--dest', 'config/elsewhere'], {
+        VENDOR_API_BASE: 'http://127.0.0.1:1',
+      });
+
+      assert.equal(code, 1, 'retargeting the lock must be refused');
+      assert.match(out, /already records config\/engineering/);
+      assert.match(out, /retarget it to config\/elsewhere/);
+      // Refused before the payload is fetched: the ref here is unreachable, so
+      // reaching the retarget message at all proves the check runs first. A
+      // refusal that downloads eleven files before answering would also leave a
+      // half-populated directory the consumer did not ask for.
+      assert.doesNotMatch(out, /HTTP|returned|ECONN/);
+      assert.equal(
+        readFileSync(lockPath, 'utf8'),
+        before,
+        'the refused run must leave the lock exactly as it found it',
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a --dest run matching the recorded dest is not refused', async () => {
+    // The guard above must not make a custom vendor location unusable. Only a
+    // *change* of destination is a decision; re-running the same one is a
+    // refresh, and refusing it would push consumers toward deleting the lock,
+    // which is the one action that really does discard the record.
+    const dir = workspace();
+    try {
+      orphanFixture(dir, { wired: true });
+      const lockPath = join(dir, 'engineering-configs.lock.json');
+      const dest = JSON.parse(readFileSync(lockPath, 'utf8')).dest;
+      assert.equal(typeof dest, 'string');
+
+      const { out } = await runAsyncIn(dir, ['v0.15.4', '--dest', dest], {
+        VENDOR_API_BASE: 'http://127.0.0.1:1',
+      });
+
+      assert.doesNotMatch(out, /would retarget it/, 'the same dest is a refresh, not a retarget');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
