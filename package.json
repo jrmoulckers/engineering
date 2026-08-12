@@ -24,7 +24,8 @@
     "pins:check": "node scripts/check-pins.mjs",
     "coverage:list": "node scripts/check-coverage.mjs --list",
     "versions:print": "node scripts/print-versions.mjs",
-    "release:check": "node scripts/check-release-lag.mjs"
+    "release:check": "node scripts/check-release-lag.mjs",
+    "docs:contradictions": "node scripts/check-contradictions.mjs"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^16.3.0",
