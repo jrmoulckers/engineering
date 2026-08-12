@@ -896,6 +896,33 @@ and treat the fetch as part of the command rather than as something you did earl
 > `curl` the raw `versions.json`, costs one command and invalidates the entire investigation if it
 > disagrees.
 
+> **Your tooling goes stale the same way your packages do, and it is the channel nobody checks.** A
+> consumer hand-verified all 18 of their linked citations against each principle's `source` field,
+> reported `0 mismatched`, and offered to add that comparison to `check-citations.mjs` — describing
+> it as "the thing your tool still doesn't cover." The checker has done exactly that since PR #54,
+> on by default, with `--no-links` to turn it off. On a deliberately broken fixture it reports the
+> wrong target, prints the expected path, and explains the very area-prefix trap they had
+> independently rediscovered.
+>
+> Three things make this worth recording rather than laughing off:
+>
+> - **A correct manual result raises no alarm.** Their hand-check returned `0 mismatched` — the
+>   same answer the tool gives. Nothing in a correct outcome signals that the labour was
+>   unnecessary. Had they got a _wrong_ answer they would have investigated and found the flag.
+> - **Tools get assumed where packages get probed.** This consumer had verified peer ranges by
+>   executing resolved trees, and measured a formatter by running it twice under controlled
+>   conditions. They did not run `--help` on the checker. A dependency invites a version question;
+>   a script that ran once and worked does not.
+> - **The countermeasure already existed and still did not land.** Every clean run prints
+>   `checker v9; checks run: IDs, stated names, range members, link paths` — added precisely so a
+>   silent check could not be mistaken for a missing one. A self-report can only correct you if you
+>   run the current build. It cannot reach someone who never re-ran it, and it cannot reach someone
+>   reasoning about the tool from memory.
+>
+> So treat the tooling as a pinned dependency with a version worth checking: re-fetch
+> `check-citations.mjs` from `main` and read the `checks run:` line before concluding a category is
+> uncovered — and before writing a checker that already exists.
+
 Their general point survives the correction and is worth keeping: **a satisfiable range is not the
 same as a working range.** The preset's `eslint-plugin-react: ^7.37.0` does permit versions that
 need the `settings` workaround to run at all, so the config compensates for a plugin defect the
