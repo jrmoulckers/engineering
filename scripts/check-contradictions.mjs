@@ -41,6 +41,8 @@ const RETIRED = [
       /recommended\s*$/i,
       /Topic\s*\| Correction lived in/i,
       /Grep for the artefact/i,
+      /a test used to REJECT carets/i,
+      /WHAT CHANGED, AND WHY/i,
     ],
   },
   {
@@ -55,9 +57,21 @@ const RETIRED = [
       /wrong as a general rule/i,
     ],
   },
+  {
+    // versions.json is the file consumers are told to paste from, and its legend
+    // instructed them not to use a caret while the values six lines below it were
+    // carets and the test enforcing those values required carets. Anyone following
+    // the legend would have rewritten a correct value into the retired one.
+    id: 'anti-caret-instruction',
+    pattern:
+      /(?:Do not rewrite it as a caret|rejects caret(?: and tilde)? forms|records an explicit upper bound)/gi,
+    why: 'versions.json now records a caret and its test requires one; staleness is closed by pins:check, not by a wider range.',
+    replacement: 'copy the recorded range literally, whatever shape it has',
+    exempt: [/used to/i, /WHAT CHANGED/i, /it now records/i],
+  },
 ];
 
-const FILES = ['docs/adopting.md'];
+const FILES = ['docs/adopting.md', 'versions.json'];
 
 const isExempt = (line, entry) => entry.exempt.some((r) => r.test(line));
 

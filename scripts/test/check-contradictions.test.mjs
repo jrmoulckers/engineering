@@ -10,17 +10,23 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..');
 const SCRIPT = join(REPO, 'scripts', 'check-contradictions.mjs');
 
-// The checker reads docs/adopting.md relative to its own location, so a case is
-// built by copying the script into a throwaway repo alongside a synthetic doc.
-// That keeps these tests from depending on the real document's wording, which is
+// The checker reads the files it guards relative to its own location, so a case is
+// built by copying the script into a throwaway repo alongside synthetic targets.
+// That keeps these tests from depending on the real documents' wording, which is
 // the thing most likely to change underneath them.
-function runAgainst(body) {
+function runAgainst(body, opts = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'contradictions-'));
   try {
     mkdirSync(join(dir, 'scripts'), { recursive: true });
     mkdirSync(join(dir, 'docs'), { recursive: true });
     copyFileSync(SCRIPT, join(dir, 'scripts', 'check-contradictions.mjs'));
-    writeFileSync(join(dir, 'docs', 'adopting.md'), body, 'utf8');
+    if (body !== null) writeFileSync(join(dir, 'docs', 'adopting.md'), body, 'utf8');
+    // A case must supply every file the checker guards. Omitting one is how this
+    // suite first went red: the script grew a second target and the harness was
+    // still writing one file.
+    if (opts.versions !== null) {
+      writeFileSync(join(dir, 'versions.json'), opts.versions ?? '{ "packages": {} }\n', 'utf8');
+    }
     try {
       const stdout = execFileSync(
         process.execPath,
@@ -90,7 +96,25 @@ describe('check-contradictions', () => {
   });
 
   test('the real document passes its own check', () => {
-    const r = runAgainst(readFileSync(join(REPO, 'docs', 'adopting.md'), 'utf8'));
+    const r = runAgainst(readFileSync(join(REPO, 'docs', 'adopting.md'), 'utf8'), {
+      versions: readFileSync(join(REPO, 'versions.json'), 'utf8'),
+    });
     assert.equal(r.code, 0, r.out);
+  });
+
+  // A checker that goes green when its target is gone is worse than no checker,
+  // because the green is now evidence of nothing while still reading as evidence.
+  test('a missing target fails rather than passing vacuously', () => {
+    const r = runAgainst(null);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /file not found/);
+  });
+
+  test('guards versions.json too, not only the adoption guide', () => {
+    const r = runAgainst('# Adopting\n', {
+      versions: '{ "$comment": ["Copy range literally. Do not rewrite it as a caret."] }\n',
+    });
+    assert.equal(r.code, 1);
+    assert.match(r.out, /versions\.json/);
   });
 });
