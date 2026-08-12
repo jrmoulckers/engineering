@@ -792,6 +792,39 @@ steps:
 >
 > Prefer the annotation regardless. It states the cause outright, and neither counting exercise has
 > to be interpreted.
+>
+> **A consumer proposed `runner_name` as the discriminator instead. It works, but not for the
+> stated reason, and the value they named selects the wrong jobs.** Measured on both arms:
+>
+> | Cause                     | Failed jobs' `runner_name`    |
+> | ------------------------- | ----------------------------- |
+> | caller grant below callee | **not readable — no jobs**    |
+> | billing / spending limit  | `""` — empty string, not null |
+>
+> Two corrections. First, in the permission case there is nothing to read: `/jobs` returns
+> `total_count: 0`, so `runner_name` is not `null` and not `""` — the field does not exist, because
+> the job does not. The discriminator is really **"is it readable at all"**, which is the
+> jobs-exist test again wearing a different hat.
+>
+> Second, and the practical trap: in a billing-held run, **`null` and `""` both appear, and they
+> track `conclusion`.** Measured on a 10-job run:
+>
+> ```console
+> failure   ""     Server image builds
+> failure   ""     lint / Lint and format
+> skipped   null   lint / Semantic PR title
+> skipped   null   perf
+> ```
+>
+> `null` belongs to the **skipped** jobs — the ones that never had a chance to be assigned because a
+> dependency failed. A check written as `runner_name == null` therefore matches the jobs that are
+> not evidence of anything and misses every job that actually failed. Use `runner_name == ""` on
+> jobs whose `conclusion` is `failure`, or read the annotation and skip the inference entirely.
+>
+> **A rerun is a genuine control, though.** Rerunning re-tests the same commit, so a failure that
+> survives it cannot be transient scheduling. That is a good instinct and worth borrowing: when a
+> symptom has several candidate causes, look for the cheap operation that eliminates one of them
+> outright.
 
 > **The blast radius is the whole workflow file, not the one misconfigured job.** A second,
 > unrelated, perfectly valid job in the same file was added to that measurement and it did not run
@@ -1072,6 +1105,14 @@ callee needing a **write** scope, failing as an unreadable `startup_failure` tha
 `id-token` nor `pages`. "Smallest and least critical" and "needs the most unusual scope" are
 independent axes, and ordering a migration by the first tells you nothing about the second. Check
 the declaration before picking the pilot.
+
+**And `id-token: write` is the scope a careful caller removes on purpose.** Another consumer made
+the same observation from the other side: a reviewer trimming permissions will scrutinise write
+scopes first and read `id-token: write` on a docs-deploy job as obviously excessive. So
+`reusable-deploy-pages` is not merely the row most likely to be missed — it is the row most likely
+to be broken by someone **doing the right thing**, arriving as a `startup_failure` immediately
+after a commit whose stated purpose was tightening permissions. That is the most confusing possible
+pairing of cause and effect, and it is worth pre-empting in the review rather than diagnosing after.
 
 Two details in that table are easy to lose. `reusable-deploy-pages` declares its permissions
 across **two jobs** — `contents`/`packages` on one, `pages`/`id-token` on the other — so the union
