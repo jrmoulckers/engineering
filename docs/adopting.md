@@ -32,6 +32,7 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | Go: a wall of `errcheck` findings that CI does not report   | `Compare the set of findings, not the set of rules`      |
 | A rule you expected to fire never fires                     | `A clean `rules-of-hooks` run is not proof of absence`   |
 | Package install returns `401`/`403`                         | `Visibility changes _authorization_, not authentication` |
+| Told adoption is blocked on package access                  | `re-test before deferring further`                       |
 
 **If your symptom is not here, say so when you report it.** A report that this guide lacks something
 it already contains is still useful — it means the answer is unfindable, which is the same defect as
@@ -1091,16 +1092,59 @@ steps:
 > source propagates a maintainer's arithmetic slip to every repository at once, and none of them
 > can detect it locally, because each one's configuration is individually plausible.
 
-**The packages are private today, so `GITHUB_TOKEN` is not enough on its own**: each consuming
-repository must also be added under the package's **Manage Actions access** settings with
-**Read**. That is one grant per repository per package, so seven repositories across three
-packages is twenty-one grants to create and maintain.
+**The packages are labelled private, but that does not mean a consuming repository needs a grant —
+and this guide told the fleet otherwise for several rounds.** Two consumers falsified it
+independently by reading their own passing CI logs:
 
-> **If "Manage Actions access" is not on the package settings page, this is why.** All three
-> packages were published _linked_ to `jrmoulckers/engineering`, and a linked package **inherits
-> the access permissions of its repository by default**. While it inherits, the granular settings
-> — including **Manage Actions access** — are not shown at all. You must first remove the
-> inherited permissions, after which the package's own access list becomes editable.
+```
++ @jrmoulckers/eslint-config 0.11.0     # public consumer, GITHUB_TOKEN only
++ @jrmoulckers/eslint-config 0.12.0     # a second consumer, same
+```
+
+No secret, no PAT, no per-package grant — the job's own `GITHUB_TOKEN` with `packages: read` on the
+caller. Six jobs in one run, across install, lint, E2E and Lighthouse.
+
+**The mechanism is stated two paragraphs below and I failed to follow my own note to its
+conclusion.** All three packages were published _linked_ to `jrmoulckers/engineering`, and a linked
+package inherits the access permissions of its repository. `jrmoulckers/engineering` is **public**.
+So the inherited permission is public-read, and any authenticated token can resolve the package
+regardless of the `private` label on the packages tab.
+
+Every observation is consistent with this and none of them required the grant:
+
+| Probe                                  | Result  | Why                                            |
+| -------------------------------------- | ------- | ---------------------------------------------- |
+| Anonymous `GET` of the packument       | `401`   | Packages authenticates **every** read          |
+| `GITHUB_TOKEN` from another repository | **200** | inherits the linked repository's public read   |
+| Packages tab                           | private | the label describes the package, not the grant |
+
+So the `401` that started this — a genuine finding — was an authentication failure being read as an
+authorization failure. That distinction is drawn correctly elsewhere in this guide, and I still drew
+the wrong conclusion from it, because I reasoned from the settings page instead of from a log.
+
+**If you have deferred adoption on package access, re-test before deferring further.** The check is
+one line in a passing job:
+
+```bash
+gh run view <run-id> --log | grep '@jrmoulckers/'
+```
+
+A grant is only required if the linked repository is private, or if the package is unlinked. Neither
+is true today.
+
+> **Historical note, kept because the reasoning is still correct where it applies.** If a package
+> _is_ genuinely unreachable, the options are a per-package grant — the package's _Manage Actions
+> access_ → add the consuming repository — or a visibility flip. That is one grant per repository
+> per package, so seven repositories across three packages would be twenty-one grants to create and
+> maintain. That cost was real and is what motivated the recommendation; it simply was not being
+> paid, because the inheritance made it unnecessary.
+
+> **If "Manage Actions access" is not on the package settings page, this is why.** A linked package
+> **inherits the access permissions of its repository by default**. While it inherits, the granular
+> settings — including **Manage Actions access** — are not shown at all. You must first remove the
+> inherited permissions, after which the package's own access list becomes editable. **Do not do
+> this to "fix" access.** Removing the inheritance is what would break the working setup described
+> above, and the button's absence is the signal that inheritance is active and doing its job.
 >
 > The npm registry does support this. It is one of the registries with granular, user-scoped
 > permissions, alongside the Container, NuGet and RubyGems registries; only the Maven and Gradle
@@ -3219,6 +3263,30 @@ source-shape guard goes back to matching against quotes and wrapping that no lon
 Two guards in that repository re-broke exactly this way after being fixed once, asserting against
 the literal text of a config file and a Markdown doc. They failed loudly only because the earlier
 non-zero anchors were already in place. Without those, they would have rejoined the silent set.
+
+**Guards that slice between two literal markers degrade worse than guards that match a pattern.**
+Another repository had four break at once, and the instructive part is that they failed in two
+different ways. The one carrying an anti-vacuity assertion failed loudly and named the cause. The
+one slicing between a start and end marker did not: when a marker stops matching, the slice yields
+`""`, and the assertion that follows compares an empty string to an expected value. That reports a
+**value mismatch** — as though the content were wrong — when the real fault is that the marker was
+never found. The reader debugs the content and not the marker.
+
+The symmetric case is worse and invisible: if the assertion is "the slice does not contain X", an
+empty slice **passes**. So a marker-slicing guard silently becomes a no-op the moment a formatter
+moves a quote. Assert that the slice is non-empty before asserting anything about what is in it.
+
+**Land the reformat as its own pull request, merged the same day.** A repository-wide format pass
+cannot survive an active `main`. One consumer rebased three times in a single sitting while `main`
+moved three and then five commits, and a route-scoped refactor landing in parallel conflicted with
+the reformat across **40 files**. Every conflict was formatting-versus-content and resolved
+mechanically — take upstream, re-run Prettier — but the work is proportional to how long the branch
+stays open, and a busier repository can thrash indefinitely.
+
+Separating the two also makes both reviewable: a config change mixed into a 40-file reformat cannot
+be read, and the reformat cannot be verified as content-neutral while a behavioural change is
+hiding in it. Land the formatting alone, merge it immediately, then open the configuration change
+on top.
 
 Fix it at the read, not at the assertion — normalise quotes and collapse whitespace as the file is
 loaded, so the guard is insensitive to formatting by construction rather than by being re-patched
