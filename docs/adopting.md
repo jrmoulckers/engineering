@@ -1617,21 +1617,63 @@ found in the directory`, exit **2**. Point it at files that are all _ignored_ an
 set and reads exactly like a passing measurement. The vacuity guard exists; it just does not cover
 the ignore path, which is the case you are most likely to hit deliberately.
 
-**This is a category, not an anecdote.** The same shape has now produced four separate wrong
-conclusions in this migration:
+**This is a category, not an anecdote.** The same shape has now produced five separate wrong
+conclusions in this migration, and the unifying description is a consumer's: **absence presenting
+as something other than absence.**
 
-| what was run                                         | why it proved nothing                      |
-| ---------------------------------------------------- | ------------------------------------------ |
-| `--no-config --list-different` on ignored paths      | ignore file still applied; 0 files checked |
-| `link:` / workspace resolution instead of `npm pack` | tested the working tree, not the tarball   |
-| `registry-url` on a workflow that never installs     | inert input; nothing authenticated         |
-| a preset diff that never passed the new option       | absent key destructures to `undefined`     |
+| what you see                             | what is actually true                                             |
+| ---------------------------------------- | ----------------------------------------------------------------- |
+| `--no-config --list-different` reports 0 | ignore file still applied; zero files were checked                |
+| npm registry `401`                       | token absent, empty or wrong — indistinguishable                  |
+| npm `401`/`403` on a package             | says nothing about whether the package is private                 |
+| `startup_failure` with no logs           | missing `packages: read`; reads like a platform outage            |
+| lint "passes" with no config present     | the linter fell back to built-in defaults silently                |
+| a fetch step exits 0                     | an error body was written to the destination as config            |
+| a preset diff shows no change            | the new option did not exist; the key destructured to `undefined` |
+| `link:` resolution succeeds              | the working tree was tested, never the tarball                    |
 
-Each returned green. None exercised the thing being claimed. **Before believing a green result,
-make it go red once** — delete a line, break a file, revoke the token — and confirm the check
-notices. A gate you have never seen fail is a gate you have not yet tested. That is cheaper than
-any of the four investigations above, and it is the only step that distinguishes "this passed" from
-"this ran."
+Each row is a green result produced by something not being there. **Choose a probe whose result
+varies with the property you are testing**, and assert the artifact exists and is well-formed
+before trusting an exit code. Concretely: **make the check go red once** — delete a line, break a
+file, revoke the token, point the fetch at a ref that does not exist — and confirm it notices. A
+gate you have never seen fail is a gate you have not yet tested.
+
+> **A config the repository ignores can still be the config CI enforces — I got this wrong.** A Go
+> consumer gitignores `.golangci.yml` and fetches it from this repository at a pinned tag in the job
+> immediately before linting, with the action running `config verify` on the fetched file every run.
+> I read the gitignore as meaning nothing enforced it. The ignored path and the enforced file are
+> **different copies**: ignoring it is precisely what stops a stale local fork being the thing that
+> lints, which is the no-vendored-normative-text rule working as intended.
+>
+> Their fetch fails closed on three conditions — non-200, empty body, and a payload missing
+> top-level `version:`/`linters:` — and writes the destination only after all three pass, so a
+> truncated transfer cannot leave a valid-looking config that lints nothing. Verified against a
+> nonexistent ref: exit 1, no file written, job stops. Anonymous `raw.githubusercontent.com` fetch
+> of a public repository returns **200** regardless of any package's visibility — repository content
+> and package content are separate visibility systems, so a Go consumer is not blocked by the npm
+> access work.
+>
+> **The real gap is the complement of the obvious worry.** CI is airtight; the **developer's local
+> run** is not, because golangci-lint does not error on a missing config — it falls back to built-in
+> defaults, which enforce less without saying so. Ship a `make lint` target that performs the fetch
+> as a prerequisite. That asymmetry — verified machine path, unverified human path — is worth
+> checking wherever a config arrives at runtime.
+
+> **A 404 on a citation link usually means the path was never right, not that something moved.** A
+> consumer reported `principles/testing.md` returning 404 at an old tag and attributed it to a tree
+> reorganisation. There was no reorganisation: `git log --all --diff-filter=A` shows that path was
+> **never added in any commit on any branch**, and the tree under `principles/` is byte-identical
+> between that tag and `main`. The correct path has always been `principles/assurance/testing.md`,
+> and `index.json` has always said so in each principle's `source`.
+>
+> The invented path is plausible, which is the whole problem — an area-prefixed ID like
+> `ENG-TEST-001` suggests a file named for the area, and the real layout nests it under a category
+> directory. **Resolve the link from `source` in `index.json` rather than composing it from the ID**;
+> `check-citations.mjs` does this by default and reports the expected path on mismatch.
+>
+> The general shape is one this migration keeps producing: a symptom that names a cause. A 404
+> names a path, a stack trace names the frame that threw, and a `startup_failure` names nothing at
+> all — in none of those cases is the named thing reliably the cause.
 
 > **The sharpest case is a file you own that contains a region you don't — and whole-file
 > exclusion is the expensive answer to it.** A consumer hit this when `main` grew a synced
