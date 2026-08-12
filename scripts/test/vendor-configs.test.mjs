@@ -376,6 +376,65 @@ describe('vendor-configs --check', () => {
     }
   });
 
+  test('a lock with no tool entry says so instead of passing silently', () => {
+    // A fleet audit found four adopters here, one vendored at a ref far newer
+    // than the release that added tool tracking -- `lock.ref` is the ref asked
+    // for, not the age of the script that wrote the lock.
+    const dir = workspace();
+    try {
+      const body = '{"a":1}';
+      const hash = createHash('sha256').update(body, 'utf8').digest('hex');
+      writeFileSync(join(dir, 'vendored.json'), body, 'utf8');
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v0.134.0',
+          files: { 'vendored.json': { source: 'x', sha256: hash } },
+        }),
+        'utf8',
+      );
+      const { code, out } = run(['--check', '--no-remote'], dir);
+      assert.equal(code, 0, 'an old lock is not a failure');
+      assert.match(out, /Unverified:/);
+      assert.match(out, /not the age of the script/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a lock that does record its tool stays quiet about it', () => {
+    // The control that keeps the notice above worth reading. A signal that
+    // fires on healthy repositories is the cadence notice all over again.
+    const dir = workspace();
+    try {
+      const body = '{"a":1}';
+      const hash = createHash('sha256').update(body, 'utf8').digest('hex');
+      writeFileSync(join(dir, 'vendored.json'), body, 'utf8');
+      // A path inside the workspace: an absolute path outside cwd is rejected
+      // by the escape guard, which would fail this test for an unrelated reason.
+      const toolText = readFileSync(script, 'utf8');
+      writeFileSync(join(dir, 'vendor-copy.mjs'), toolText, 'utf8');
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v0.134.0',
+          files: { 'vendored.json': { source: 'x', sha256: hash } },
+          tool: {
+            path: 'vendor-copy.mjs',
+            source: 'scripts/vendor-configs.mjs',
+            sha256: createHash('sha256').update(toolText, 'utf8').digest('hex'),
+          },
+        }),
+        'utf8',
+      );
+      const { code, out } = run(['--check', '--no-remote'], dir);
+      assert.equal(code, 0);
+      assert.doesNotMatch(out, /Unverified:/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('passes when disk matches the lock, and never fails on staleness', () => {
     const dir = workspace();
     try {
