@@ -54,7 +54,7 @@ missing. Both get fixed here.
 ## 1. Cite principles by ID
 
 Replace restated rules with a citation. Under
-[ADR-0003](https://github.com/jrmoulckers/.github/blob/main/docs/architecture/0003-four-authority-topology.md),
+[.github ADR-0003](https://github.com/jrmoulckers/.github/blob/main/docs/architecture/0003-four-authority-topology.md),
 no authority may copy another's normative text — a copy drifts and hides who owns the rule.
 
 ```diff
@@ -310,7 +310,8 @@ config also passes. Delete it in the same change.
 
 #### Vendor in the change that adopts, not before it
 
-ADR-0001 says which packages are vendored. It does not say _when_, and the obvious reading — fetch
+[engineering ADR-0001](architecture/0001-two-channel-config-delivery.md) says which packages are
+vendored. It does not say _when_, and the obvious reading — fetch
 both sets at once, since the token barrier is gone — is wrong.
 
 A vendored config that nothing `extends` extends nothing: it fails no gate, is exercised by no CI,
@@ -418,7 +419,7 @@ The two outcomes deliberately differ in severity:
 - **Drift fails.** A vendored file that was edited by hand, or has gone missing, is a local
   integrity problem — the config no longer matches what the lock claims, so "verified at ref X"
   stops meaning anything. Without this, vendoring quietly reintroduces the drift the registry
-  channel prevents, which is [ADR-0001](architecture/0001-two-channel-config-delivery.md)'s main
+  channel prevents, which is [engineering ADR-0001](architecture/0001-two-channel-config-delivery.md)'s main
   cost. This closes it.
 - **Staleness only warns**, and exits 0:
 
@@ -5281,15 +5282,38 @@ satisfy rules that had already been withdrawn.
   is the CI-verified authority.
 - One consumer audited a stale `origin/main` and re-reported a deviation they had themselves fixed.
 
-The notice is four lines and belongs beside every fetch:
+The notice belongs beside every fetch, and both guards in it are load-bearing:
 
 ```bash
 latest=$(gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name)
-[ "$latest" = "$ENGINEERING_REF" ] || echo "::notice::pinned $ENGINEERING_REF; newest is $latest"
+
+# `releases/latest` is the most recently published release, not the greatest
+# version. A bare `!=` prompts a DOWNGRADE the first time a backport is
+# published after a newer minor. Speak only when the tag sorts above the pin.
+newer=$(printf '%s\n%s\n' "$ENGINEERING_REF" "$latest" | sort -V | tail -1)
+if [ -n "$latest" ] && [ "$newer" != "$ENGINEERING_REF" ]; then
+  # Compare bytes, not tags: most releases do not touch the file you fetched.
+  new_sum=$(curl -fsSL "https://raw.githubusercontent.com/jrmoulckers/engineering/${latest}/configs/golangci.yml" | sha256sum | cut -d' ' -f1)
+  [ "$new_sum" = "$(sha256sum .golangci.yml | cut -d' ' -f1)" ] ||
+    echo "::notice::your rules are behind: pinned $ENGINEERING_REF, newest is $latest"
+fi
 ```
 
 `::notice::`, never a non-zero exit — a tag pushed here must not redden an unrelated PR, or pinning
 stops being a decision and becomes a default someone bumps to get green.
+
+**Compare the bytes you fetched, not the tag you pinned.** A tag-only notice fires on every release
+forever, including the 26 consecutive tags that did not touch the Go config. A signal that always
+fires stops being read — and then it is worse than no signal, because the habituated ignore also
+covers the run where it mattered. It also silently charges a re-pin per release for no change in
+enforcement. Hashing the candidate answers the question a consumer actually has: not _"are you 13
+tags behind"_ but _"are your rules 13 tags behind."_ Against this repository's history it would have
+stayed silent across all 26 no-op tags and still fired at `v0.2.17` and `v0.10.0`.
+
+**A pin and a citation ref are different things.** The pin selects which bytes are enforced; a
+citation records the text you read at a tag. Sweeping both on every re-pin produces a large diff
+across every citing file for no change in behaviour, which is how re-pinning became expensive enough
+to skip.
 
 **Compare against the newest release, not the next tag.** Adjacent tags are usually identical, so a
 diff against `N+1` almost always shows nothing and is read as "my pin is current". That is precisely
