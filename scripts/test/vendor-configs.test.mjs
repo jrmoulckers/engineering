@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SETS, isNewerRef, escapesCwd } from '../vendor-configs.mjs';
 import { createHash } from 'node:crypto';
 
@@ -24,6 +24,14 @@ const script = fileURLToPath(new URL('../vendor-configs.mjs', import.meta.url));
 // only exist over the network and a stubbed transport would assert the stub.
 // An offline contributor can skip them; CI must not.
 const OFFLINE = process.env.SKIP_NETWORK_TESTS === '1';
+
+// Derived, never written down. A literal here was already wrong once: adding the
+// module-type marker changed the total and four assertions kept asserting the old
+// number, which is the same defect this suite exists to catch one level up.
+const ALL_FILES = Object.values(SETS).reduce(
+  (n, set) => n + set.files.length + (set.moduleType ? 1 : 0),
+  0,
+);
 
 function run(args, cwd, source = script, env = {}) {
   const result = spawnSync(process.execPath, [source, ...args], {
@@ -405,7 +413,10 @@ describe('vendor-configs lock coverage', () => {
 
       const moved = run(['v0.115.0', '--dest', 'vendor/engineering'], dir);
       assert.equal(moved.code, 0);
-      assert.match(moved.out, /10 file\(s\) from the previous run are no longer tracked/);
+      assert.match(
+        moved.out,
+        new RegExp(String.raw`${ALL_FILES} file\(s\) from the previous run are no longer tracked`),
+      );
       assert.match(moved.out, /config\/engineering\/tsconfig\/base\.json/);
       // The old tree is still on disk and --check now covers none of it, which
       // is why this has to be said out loud rather than silently dropped.
@@ -654,7 +665,7 @@ describe('vendor-time staleness notice', () => {
       // A rate-limited or offline runner is not a staleness signal, and must
       // never turn vendoring into a failure.
       assert.equal(code, 0);
-      assert.match(out, /Vendored 10 file\(s\)/);
+      assert.match(out, new RegExp(String.raw`Vendored ${ALL_FILES} file\(s\)`));
       assert.doesNotMatch(out, /Notice: you vendored/);
     });
   });
@@ -668,7 +679,7 @@ describe('vendor-time staleness notice', () => {
     await withApi('v0.15.7', async (exec) => {
       const { code, out } = await exec(['v0.115.0']);
       assert.equal(code, 0);
-      assert.match(out, /Vendored 10 file\(s\)/);
+      assert.match(out, new RegExp(String.raw`Vendored ${ALL_FILES} file\(s\)`));
       assert.doesNotMatch(
         out,
         /Notice: you vendored/,
@@ -696,7 +707,7 @@ describe('vendor-time staleness notice', () => {
         VENDOR_API_BASE: 'http://127.0.0.1:9',
       });
       assert.equal(code, 0);
-      assert.match(out, /Vendored 10 file\(s\)/);
+      assert.match(out, new RegExp(String.raw`Vendored ${ALL_FILES} file\(s\)`));
       assert.doesNotMatch(out, /Notice: you vendored/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1178,5 +1189,88 @@ describe('the staleness notice reports how big the gap is', { skip: OFFLINE }, (
       assert.equal(code, 0);
       assert.match(out, /2 release\(s\) newer/);
     });
+  });
+});
+
+describe('vendored ESM carries its module type', { skip: OFFLINE }, () => {
+  // Vendoring copies files but not the `"type": "module"` that tells Node how to
+  // parse them. In a consumer whose root package.json has no `type` field, the
+  // vendored ESM is nominally CommonJS and `export default` is a syntax error.
+  //
+  // Node >=22.7 hides this by retrying a failed CJS parse as ESM, so the bug is
+  // invisible on a modern runtime and hard on an older one -- and it is invisible
+  // to the hash check either way, since every file can be byte-identical and
+  // correct and the result still not load. A consumer found it, not this suite.
+  const REF = 'v0.115.0';
+
+  function typelessWorkspace() {
+    const dir = workspace();
+    writeFileSync(join(dir, 'package.json'), '{ "name": "probe", "version": "1.0.0" }');
+    return dir;
+  }
+
+  test('an ESM set emits a package.json marker beside its files', () => {
+    const dir = typelessWorkspace();
+    const r = run([REF, '--set', 'prettier'], dir);
+    assert.equal(r.code, 0, r.out);
+
+    const marker = join(dir, 'config/engineering/prettier/package.json');
+    assert.ok(existsSync(marker), 'no module-type marker was written');
+    assert.equal(JSON.parse(readFileSync(marker, 'utf8')).type, 'module');
+  });
+
+  test('the vendored config actually loads from a typeless package', async () => {
+    // The assertion that matters. Reading the marker only proves a file was
+    // written; importing proves the failure it exists to prevent is gone.
+    const dir = typelessWorkspace();
+    assert.equal(run([REF, '--set', 'prettier'], dir).code, 0);
+
+    const target = pathToFileURL(join(dir, 'config/engineering/prettier/index.js')).href;
+    const mod = await import(target);
+    assert.equal(typeof mod.default, 'object');
+    assert.ok(mod.default.printWidth > 0, 'vendored prettier config did not load');
+  });
+
+  test('the marker is covered by the lock, not left beside it', () => {
+    // A marker outside the lock is the unhashed workaround this replaces: it
+    // would drift, be reformatted, or be deleted with nothing reporting it.
+    const dir = typelessWorkspace();
+    assert.equal(run([REF, '--set', 'prettier'], dir).code, 0);
+
+    const lock = JSON.parse(readFileSync(join(dir, 'engineering-configs.lock.json'), 'utf8'));
+    const key = 'config/engineering/prettier/package.json';
+    assert.ok(lock.files[key], 'the marker is not tracked in the lock');
+    assert.match(lock.files[key].source, /prettier-config\/package\.json#type$/);
+  });
+
+  test('editing the marker is reported as drift', () => {
+    const dir = typelessWorkspace();
+    assert.equal(run([REF, '--set', 'prettier'], dir).code, 0);
+
+    writeFileSync(join(dir, 'config/engineering/prettier/package.json'), '{"type":"commonjs"}\n');
+    const r = run(['--check'], dir);
+    assert.equal(r.code, 1, 'a hand-edited module type passed --check');
+    assert.match(r.out, /prettier\/package\.json/);
+  });
+
+  test('a JSON-only set gets no marker', () => {
+    // tsconfig has no module semantics. Emitting a marker there would be a file
+    // the consumer must explain and the lock must carry for no reason.
+    const dir = typelessWorkspace();
+    assert.equal(run([REF, '--set', 'tsconfig'], dir).code, 0);
+    assert.ok(!existsSync(join(dir, 'config/engineering/tsconfig/package.json')));
+  });
+
+  test('a declared module type that upstream contradicts fails loudly', () => {
+    // The literal in SETS can silently diverge from the package it mirrors. An
+    // explicitly wrong type is worse than none: it defeats Node's own fallback,
+    // turning a runtime that would have coped into one that cannot.
+    const dir = typelessWorkspace();
+    const mutated = variant(dir, (s) =>
+      s.replace("moduleType: 'module'", "moduleType: 'commonjs'"),
+    );
+    const r = run([REF, '--set', 'prettier'], dir, mutated);
+    assert.equal(r.code, 1, 'the script emitted a module type upstream disagrees with');
+    assert.match(r.out, /declares type 'module'.*emits 'commonjs'/s);
   });
 });

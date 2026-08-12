@@ -62,6 +62,21 @@ export const SETS = {
     // TypeScript reads the .js directly and infers a usable type, so the
     // failure disappears; measured both ways before writing this.
     files: ['index.js', 'index.d.ts', 'svelte.js', 'svelte.d.ts'],
+    // These files are ESM, and upstream says so via `"type": "module"` in the
+    // package we publish. Vendoring copies the files but leaves that behind,
+    // so in a consumer whose root package.json has no `type` field the files
+    // are nominally CommonJS and `export default` is a syntax error.
+    //
+    // Node >=22.7 masks this by retrying a failed CJS parse as ESM, so it
+    // works while warning MODULE_TYPELESS_PACKAGE_JSON. On older Node, or any
+    // resolver without that fallback, it is a hard SyntaxError raised at the
+    // tool -- far from the vendoring step that caused it.
+    //
+    // Emitting the marker beside the files keeps module type a property of
+    // what we vendored rather than of the consumer's root package.json, which
+    // we must not edit. Note this is invisible to the hash check: every file
+    // can be byte-identical and correct and the result still not load.
+    moduleType: 'module',
   },
 };
 
@@ -518,11 +533,50 @@ async function main() {
   // report success.
   const staged = [];
   for (const name of names) {
-    const { from, files } = SETS[name];
+    const { from, files, moduleType } = SETS[name];
     for (const file of files) {
       const path = `${from}/${file}`;
       const text = await fetchFile(ref, path);
       staged.push({ name, path, file, text, dest: join(dest, name, file) });
+    }
+    if (moduleType) {
+      // The declared type is a literal here, so it can silently diverge from
+      // the package it claims to mirror. Check it against the ref rather than
+      // trusting it: a marker that confidently states the wrong module type is
+      // worse than none, because it defeats Node's own detection fallback.
+      const upstream = await fetchFile(ref, `${from}/package.json`, false).catch(() => null);
+      if (upstream === null) {
+        process.stderr.write(
+          `\nwarning: could not read ${from}/package.json at ${ref}.\n` +
+            `Emitting "type": "${moduleType}" unverified. If upstream changed its module\n` +
+            `type, the marker now states the wrong one, which is worse than omitting it:\n` +
+            `an explicit wrong type defeats Node's own CJS/ESM detection fallback.\n`,
+        );
+      } else {
+        let declared;
+        try {
+          declared = JSON.parse(upstream).type;
+        } catch {
+          declared = undefined;
+        }
+        if (declared !== moduleType) {
+          fail(
+            `${from} declares type '${declared ?? 'none'}' at ${ref}, but this script emits '${moduleType}'`,
+            'Upstream changed its module type. Update SETS to match before vendoring.',
+          );
+        }
+      }
+      staged.push({
+        name,
+        // Derived from upstream's package.json rather than copied from it, so
+        // it carries a distinct source key. It is staged like any other file
+        // so the lock covers it -- a marker outside the lock is exactly the
+        // unhashed workaround this replaces.
+        path: `${from}/package.json#type`,
+        file: 'package.json',
+        text: `${JSON.stringify({ type: moduleType }, null, 2)}\n`,
+        dest: join(dest, name, 'package.json'),
+      });
     }
   }
 
