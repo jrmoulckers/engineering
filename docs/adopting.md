@@ -814,6 +814,24 @@ This is the sixth repository to lose work to the `0.x` caret, and the first wher
 verification pass ran, succeeded, and confirmed nothing about currency. It belongs with the other
 instances in which **a missing thing presents as a passing one**.
 
+> **A stale pin hides the fix for the bug you are about to report.** The sharpest instance so far:
+> a Svelte repository held `prettier-config` at `^0.2.0` deliberately, and in the same message
+> escalated — as an open upstream defect — that the package's `prettier-plugin-svelte` peer of
+> `^3.2.0` was stale against the `4.1.1` it runs. Release `0.3.0`, the one release that caret
+> excludes, is exactly the one that widened that peer to `^3.2.0 || ^4.0.0`.
+>
+> The bug report and its remedy were separated by the version range alone. That is worse than an
+> ordinary stale pin, because it is **self-sealing**: the range does not merely withhold the fix,
+> it makes the fix unobservable, since the release carrying it is never fetched and never read.
+> Nothing in the repository can distinguish "not fixed yet" from "fixed in a version my range
+> forbids", so the natural next step is to escalate — and the escalation is unfalsifiable from
+> inside the pin.
+>
+> Three separate repositories have now reported a peer range as a live upstream defect when the
+> widening had already shipped. Before filing one, resolve the current version and read the peer
+> **there**: `curl -fsSL https://raw.githubusercontent.com/jrmoulckers/engineering/main/versions.json`,
+> then check the peer at that release rather than at your pinned one.
+
 **Use that, not `npm view`, and not `git show`.** This table went stale within one release of being
 written — twice — and the verification command previously recommended here was `npm view`, which
 requires registry access, the one thing the repositories most likely to be stale do not have. A
