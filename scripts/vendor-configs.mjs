@@ -32,7 +32,7 @@
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, dirname, relative, resolve, isAbsolute } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
 const REPO = 'jrmoulckers/engineering';
 const LOCK = 'engineering-configs.lock.json';
@@ -326,10 +326,38 @@ async function check() {
     if (sha256(text) !== expected) drifted.push(`${dest}: content differs from the lock`);
   }
 
+  // The tool is verified on the same terms as what it produced. Absent on locks
+  // written before it was recorded, and skipping is deliberate: failing would
+  // break every existing consumer over a key their vendor run never wrote, and
+  // the next refresh adds it. A key that is present but unusable is not skipped
+  // — that is the malformed-lock case, and it must not read as clean.
+  if (lock.tool !== undefined) {
+    const tool = lock.tool;
+    if (typeof tool?.path !== 'string' || typeof tool?.sha256 !== 'string') {
+      drifted.push('tool: lock entry is malformed, so the vendoring script cannot be verified');
+    } else if (escapesCwd(tool.path)) {
+      drifted.push(`tool: ${tool.path} is outside ${process.cwd()}`);
+    } else {
+      try {
+        const text = await readFile(tool.path, 'utf8');
+        if (sha256(text) !== tool.sha256) {
+          drifted.push(`${tool.path}: the vendoring script has changed since it vendored`);
+        }
+      } catch {
+        drifted.push(`${tool.path}: missing`);
+      }
+    }
+  }
+
   if (drifted.length > 0) {
+    // The tool is not a generated file — a consumer may legitimately update it —
+    // so a blanket "do not edit" would be wrong about the one entry most likely
+    // to have changed on purpose. Re-running is the remedy either way: it
+    // restores generated files and re-records the tool's hash.
     fail(
-      `${drifted.length} vendored file(s) drifted from ${LOCK}:\n  ${drifted.join('\n  ')}`,
-      `These files are generated. Do not edit them — re-run: node scripts/vendor-configs.mjs ${lock.ref}`,
+      `${drifted.length} tracked file(s) drifted from ${LOCK}:\n  ${drifted.join('\n  ')}`,
+      `Vendored configs are generated — do not edit them. Re-running restores them and ` +
+        `re-records the script's hash: node scripts/vendor-configs.mjs ${lock.ref}`,
     );
   }
 
@@ -386,7 +414,13 @@ function assertPayload(path, text) {
   }
 }
 
-async function fetchFile(ref, path) {
+/**
+ * `validate` applies the config-payload assertions. They are right for the
+ * files being vendored and wrong for anything else: the vendoring script is not
+ * required to export anything, and asserting that it does rejected a perfectly
+ * good download.
+ */
+async function fetchFile(ref, path, validate = true) {
   const url = `https://raw.githubusercontent.com/${REPO}/${ref}/${path}`;
   let response;
   try {
@@ -411,7 +445,7 @@ async function fetchFile(ref, path) {
     );
   }
   const text = await response.text();
-  assertPayload(path, text);
+  if (validate) assertPayload(path, text);
   return text;
 }
 
@@ -459,6 +493,7 @@ async function main() {
     ref,
     fetchedAt: new Date().toISOString(),
     refresh: `node scripts/vendor-configs.mjs <newer-ref>`,
+    tool: await toolEntry(ref),
     files: Object.fromEntries(
       staged.map((item) => [lockKey(item.dest), { source: item.path, sha256: sha256(item.text) }]),
     ),
@@ -528,6 +563,69 @@ async function main() {
   await reportStaleness(ref);
 
   process.stdout.write(`Recorded ref and SHA-256 of each file in ${LOCK}. Commit both.\n`);
+}
+
+/**
+ * Record the vendoring script itself alongside what it vendored.
+ *
+ * `--check` verified the config files but not the tool that produced them, and
+ * that asymmetry is silent in one direction: reformat a vendored file and every
+ * hash breaks loudly, reformat this script and nothing breaks at all — it forks
+ * from the upstream copy it exists to reproduce, and the only thing that would
+ * catch it is the byte comparison the reformat has already corrupted.
+ *
+ * Two different questions, so two different reports. The lock stores the hash
+ * of the script **as run**, which is what `--check` compares against, so it
+ * answers "has anything changed since you vendored?" with no false alarms for
+ * a consumer deliberately running a newer tool. Whether that tool matches the
+ * ref is asked here instead, at vendor time, where the answer is actionable.
+ */
+async function toolEntry(ref) {
+  const source = 'scripts/vendor-configs.mjs';
+  const self = fileURLToPath(import.meta.url);
+  const path = lockKey(relative(process.cwd(), self));
+
+  // A script outside the working directory cannot be recorded for the same
+  // reason a vendored file outside it cannot: the lock is read relative to the
+  // directory it sits in. Recording it would reintroduce the absolute-path bug.
+  if (escapesCwd(self)) return undefined;
+
+  let local;
+  try {
+    local = await readFile(self, 'utf8');
+  } catch {
+    return undefined;
+  }
+
+  // `.catch(() => null)` here swallowed a real error and printed nothing: the
+  // config-payload assertions rejected the script for "exporting nothing", so
+  // the comparison never ran and its silence was indistinguishable from a
+  // match. A check that cannot run has to say so — that is the whole failure
+  // class this entry was added to close, reproduced inside the fix for it.
+  let upstream = null;
+  let reason = null;
+  try {
+    upstream = await fetchFile(ref, source, false);
+  } catch (error) {
+    reason = error?.message ?? String(error);
+  }
+
+  if (reason !== null) {
+    process.stderr.write(
+      `\nwarning: could not compare ${source} against ${ref}: ${reason}\n` +
+        `The vendored configs are unaffected — they came from the ref. This only means\n` +
+        `the script itself was not checked against upstream on this run.\n`,
+    );
+  } else if (sha256(upstream) !== sha256(local)) {
+    process.stderr.write(
+      `\nwarning: the script you ran is not ${source} at ${ref}.\n` +
+        `It still vendored ${ref} correctly — the config files come from the ref, not from\n` +
+        `this file — but a fix or check present upstream may be missing here. Refresh it:\n` +
+        `  curl -fsSL https://raw.githubusercontent.com/${REPO}/${ref}/${source} -o ${path}\n`,
+    );
+  }
+
+  return { source, path, sha256: sha256(local) };
 }
 
 /**

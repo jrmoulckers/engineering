@@ -911,3 +911,172 @@ describe('the no-commitment probe leaves the repository alone', { skip: OFFLINE 
     }
   });
 });
+
+describe('the lock covers the tool that produced it', () => {
+  // Reformat a vendored file and every hash breaks loudly. Reformat the script
+  // and nothing broke at all -- it forked from the copy it exists to reproduce,
+  // and the only thing that would have caught it is the byte comparison the
+  // reformat had already corrupted.
+  test('--check detects a changed vendoring script', () => {
+    const dir = workspace();
+    try {
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      const copy = join(dir, 'scripts/vendor-configs.mjs');
+      const body = readFileSync(script, 'utf8');
+      writeFileSync(copy, body, 'utf8');
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v1.0.0',
+          tool: {
+            source: 'scripts/vendor-configs.mjs',
+            path: 'scripts/vendor-configs.mjs',
+            sha256: createHash('sha256').update(body).digest('hex'),
+          },
+          files: {
+            'x.json': { source: 'y', sha256: createHash('sha256').update('{}').digest('hex') },
+          },
+        }),
+        'utf8',
+      );
+      writeFileSync(join(dir, 'x.json'), '{}', 'utf8');
+
+      assert.equal(run(['--check'], dir).code, 0, 'clean tree must pass');
+
+      writeFileSync(copy, `${body}\n// reformatted\n`, 'utf8');
+      const { code, out } = run(['--check'], dir);
+      assert.equal(code, 1);
+      assert.match(out, /the vendoring script has changed/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Locks written before the tool was recorded must keep working: failing over
+  // a key their vendor run never wrote would break every existing consumer.
+  test('a lock with no tool entry still passes', () => {
+    const dir = workspace();
+    try {
+      writeFileSync(join(dir, 'x.json'), '{}', 'utf8');
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v1.0.0',
+          files: {
+            'x.json': { source: 'y', sha256: createHash('sha256').update('{}').digest('hex') },
+          },
+        }),
+        'utf8',
+      );
+      assert.equal(run(['--check'], dir).code, 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Absent is skipped; present-but-unusable must not read as clean. Those are
+  // different states and only one of them is a decision.
+  test('a malformed tool entry fails rather than being skipped', () => {
+    const dir = workspace();
+    try {
+      writeFileSync(join(dir, 'x.json'), '{}', 'utf8');
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v1.0.0',
+          tool: { source: 'scripts/vendor-configs.mjs' },
+          files: {
+            'x.json': { source: 'y', sha256: createHash('sha256').update('{}').digest('hex') },
+          },
+        }),
+        'utf8',
+      );
+      const { code, out } = run(['--check'], dir);
+      assert.equal(code, 1);
+      assert.match(out, /malformed/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a tool path outside the working directory is refused', () => {
+    const dir = workspace();
+    const root = process.platform === 'win32' ? 'C:/elsewhere' : '/elsewhere';
+    try {
+      writeFileSync(join(dir, 'x.json'), '{}', 'utf8');
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v1.0.0',
+          tool: { source: 's', path: `${root}/vendor-configs.mjs`, sha256: 'a'.repeat(64) },
+          files: {
+            'x.json': { source: 'y', sha256: createHash('sha256').update('{}').digest('hex') },
+          },
+        }),
+        'utf8',
+      );
+      const { code, out } = run(['--check'], dir);
+      assert.equal(code, 1);
+      assert.match(out, /outside/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('vendor time records and compares the tool', { skip: OFFLINE }, () => {
+  test('records the script it ran, and --check then covers it', () => {
+    const dir = workspace();
+    try {
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      const copy = join(dir, 'scripts/vendor-configs.mjs');
+      writeFileSync(copy, readFileSync(script, 'utf8'), 'utf8');
+      const { code, out } = run(['v0.115.0', '--set', 'tsconfig'], dir, copy);
+      assert.equal(code, 0, out);
+
+      const lock = JSON.parse(readFileSync(join(dir, 'engineering-configs.lock.json'), 'utf8'));
+      assert.equal(lock.tool.path, 'scripts/vendor-configs.mjs');
+      assert.match(lock.tool.sha256, /^[0-9a-f]{64}$/);
+      assert.equal(run(['--check'], dir, copy).code, 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // The first version swallowed this with `.catch(() => null)`: the config
+  // payload assertions rejected the script for "exporting nothing", so the
+  // comparison never ran and its silence looked exactly like a match.
+  test('says so when it cannot compare the script, rather than going quiet', () => {
+    const dir = workspace();
+    try {
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      const copy = join(dir, 'scripts/vendor-configs.mjs');
+      const body = readFileSync(script, 'utf8').replace(
+        "const source = 'scripts/vendor-configs.mjs';",
+        "const source = 'scripts/no-such-file.mjs';",
+      );
+      assert.notEqual(body, readFileSync(script, 'utf8'), 'source string moved');
+      writeFileSync(copy, body, 'utf8');
+
+      const { code, out } = run(['v0.115.0', '--set', 'tsconfig'], dir, copy);
+      assert.equal(code, 0, 'an unrunnable comparison is informational, not fatal');
+      assert.match(out, /could not compare/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('warns when the script run is not the script at the ref', () => {
+    const dir = workspace();
+    try {
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      const copy = join(dir, 'scripts/vendor-configs.mjs');
+      writeFileSync(copy, `${readFileSync(script, 'utf8')}\n// local fork\n`, 'utf8');
+      const { code, out } = run(['v0.115.0', '--set', 'tsconfig'], dir, copy);
+      assert.equal(code, 0);
+      assert.match(out, /is not scripts\/vendor-configs\.mjs at v0\.115\.0/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

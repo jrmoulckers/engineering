@@ -246,6 +246,39 @@ A file the previous lock never recorded is reported as **newly tracked**, not as
 it as changed would overstate the diff exactly when `--dest` or `--set` moved, which is when the
 number is read most closely.
 
+#### The lock covers the script too
+
+`--check` verifies the vendored configs **and the script that produced them**. The lock carries a
+`tool` entry recording the script's own SHA-256:
+
+```json
+"tool": {
+  "source": "scripts/vendor-configs.mjs",
+  "path": "scripts/vendor-configs.mjs",
+  "sha256": "…"
+}
+```
+
+This closes an asymmetry that was silent in one direction. Reformat a vendored config and every
+hash breaks loudly. Reformat **the script** and nothing broke at all: it forked from the upstream
+copy it exists to reproduce, and the only thing that would have caught it is the byte comparison
+the reformat had already corrupted. Prettier-ignoring the script works, but it is a convention a
+consumer can forget, and the failure is invisible when they do — so the lock enforces it instead.
+
+Two different questions, answered in two places:
+
+- **`--check`** compares the script against the hash recorded **when you vendored**. It answers
+  "has anything changed since?" and never fires for a consumer deliberately running a newer tool.
+- **Vendor time** compares the script you ran against the script at the ref, and warns if they
+  differ. Your configs are still correct — they come from the ref, not from the script — but a fix
+  present upstream may be missing locally.
+
+Locks written before this existed have no `tool` key and still pass; the next refresh adds it. A
+`tool` key that is present but unusable **fails**, because absent and unusable are different states
+and only one of them was a decision.
+
+Raised by an adopter who noticed the script was the one fetched artifact its own lock did not cover.
+
 #### Evaluating a new ref without committing to it
 
 To see what a ref would change before adopting it, vendor it to a scratch directory:
