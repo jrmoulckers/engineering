@@ -1974,6 +1974,36 @@ import { base } from '@jrmoulckers/eslint-config';
 export default base({ env: 'node' });
 ```
 
+> **`nextConfig()` includes the React and accessibility rules — do not compose it with
+> `reactConfig()`.** Through `eslint-config@0.12.0` it did not. It imported only
+> `@next/eslint-plugin-next` plus hooks, so adopting it dropped 17 `react/*` and 6 `jsx-a11y/*`
+> rules relative to the `eslint-config-next` you migrate off, which bundles `eslint-plugin-react`
+> and `eslint-plugin-jsx-a11y` as direct dependencies. `react/jsx-key` and `jsx-a11y/alt-text`
+> both stopped firing. Fixed in **0.13.0**; both presets now share one internal layer.
+>
+> **The comment above the import argued for the fix and shipped without it.** It read "Next.js is
+> React, and `eslint-config-next` bundles `eslint-plugin-react-hooks`. Omitting it here would
+> silently drop rules with no signal at the call site" — correct reasoning, correct failure mode,
+> applied to one of the three plugins that sentence describes. A rationale is not a test: it
+> records what someone intended at the time, and nothing re-checks it when the code beneath it
+> changes.
+>
+> **It also could not fail loudly, by construction.** Removing `eslint-config-next` removes the
+> only thing that installed those two plugins, so no unresolved-plugin error was left to raise. A
+> missing plugin is noisy; a missing plugin _and_ the rules that referenced it is silent. Lint
+> stayed green and coverage shrank — that regression surfaces months later as a bug, not as a lint
+> failure.
+>
+> **If you adopted a preset expecting parity with the config you replaced, count rules rather than
+> reading the preset.** On the same file, before and after:
+>
+> ```bash
+> npx eslint --print-config path/to/a/component.tsx > after.json
+> node -e "const r=require('./after.json').rules, on=k=>{const v=r[k];const s=Array.isArray(v)?v[0]:v;return s!=='off'&&s!==0}; const c=p=>Object.keys(r).filter(k=>k.startsWith(p)&&on(k)).length; console.log('react',c('react/'),'a11y',c('jsx-a11y/'),'hooks',c('react-hooks/'))"
+> ```
+>
+> A count that went **down** is the signal. Zero in a category you previously had is this bug.
+
 Every preset takes `{ ignores, env, rules, extend }`. Product-specific rules — ORM guards, i18n
 literal checks, import boundaries — go in `extend`, so the shared preset stays generic:
 
