@@ -6756,8 +6756,8 @@ prose (`per ENG-SEC-008 — never a real record`) is untouched. That restraint i
 an early version also parsed em-dashed text and produced a false positive on that exact line,
 and a checker that cries wolf is a checker somebody turns off.
 
-**Known ambiguity: every principle record currently contradicts itself about its own status.**
-All 66 records in `principles/` carry both of these lines:
+**Resolved: the catalog said `Ratified` and `Draft` at once. It now says `Ratified`.**
+Every one of the 66 records in `principles/` used to carry both of these lines:
 
 ```text
 - Status: Ratified
@@ -6765,19 +6765,23 @@ All 66 records in `principles/` carry both of these lines:
     only the repository owner may change it to Ratified.
 ```
 
-`Status` says the record is ratified; the ratification line describes it as a Draft awaiting the
-owner's change _to_ Ratified. It is uniform — 66 of 66, not a scattering of per-record errors —
-which reads like boilerplate that survived the ratification flip rather than a considered claim.
+`Status` said ratified; the ratification line described the same record as a Draft awaiting the
+owner's change _to_ Ratified. It was uniform — 66 of 66, not a scattering of per-record errors —
+which is what identified it as boilerplate that survived the ratification flip rather than a
+considered claim.
 
-This is the repository owner's call, not Engineering's, so it is recorded here rather than fixed.
-Two things follow for you meanwhile:
+The repository owner has settled it: **`Ratified` is correct**, and the ratification clause was
+stale. It now reads `Engineering owns this <X> mechanism; only the repository owner may change a
+ratified principle.` The authority is unchanged — Engineering may propose, only the owner may
+ratify — but the record no longer contradicts itself about which state it is in.
 
-- **Do not build an argument on the distinction.** Any proposal whose reasoning depends on a repo
-  holding an Accepted decision _against a Ratified principle_ being visibly in a different
-  position than one held against a Draft is resting on a word the catalog does not yet settle.
-- **Cite the ID and the obligation, not the status.** The Statement and Evidence are unambiguous
-  regardless of which half of the status wording turns out to be authoritative, and that is what a
-  reviewer checks against your repository anyway.
+Two consequences, if you deferred work on this:
+
+- **Arguments that turned on the distinction can proceed.** A proposal resting on a repo holding an
+  Accepted decision against a _Ratified_ principle is now resting on a word the catalog settles.
+- **The advice to cite the ID and the obligation rather than the status still stands**, for a
+  different reason: the Statement and Evidence are what a reviewer checks your repository against,
+  and they were unambiguous throughout.
 
 **Re-run the checker after upgrading to v0.133.0 — earlier runs did not read your source files.**
 Until `v0.133.0` the scanner's extension set was prose-only (`.md`, `.txt`, `.yml`, `.json` and
