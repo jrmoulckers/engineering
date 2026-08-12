@@ -17,6 +17,7 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | What you are seeing                                         | Search for                                               |
 | ----------------------------------------------------------- | -------------------------------------------------------- |
 | CI fails instantly, no logs, `startup_failure`              | `read the annotation, do not infer`                      |
+| Wondering if an extra `permissions:` scope is harmful       | `Under-granting kills the run`                           |
 | Every job fails in ~1s with `steps=0`                       | `The permission ceiling and the billing hold`            |
 | A version bump seems to change nothing                      | `Diffing the increment is not verifying the floor`       |
 | `--print-config` shows rules for a framework you do not use | `Grep the severity, not the name`                        |
@@ -1365,6 +1366,51 @@ permissions map still gets `Metadata: read`. Metadata cannot be dropped. Reposit
 `{}` at the top level and describe it as deny-all are describing something the platform does not
 implement — harmless in itself, but it means "we grant nothing globally" is not a safe premise to
 reason from.
+
+### Under-granting kills the run; over-granting does nothing at all
+
+The failure is **not** symmetric, and this document's framing — "grant less than the callee declares
+and the run dies" — leaves the other direction ambiguous. A consumer asked outright, having granted
+`packages: read` to a job whose callee declares only `contents: read`, and reasoned that the caller's
+grant is a ceiling which the callee's own block restricts further. That is correct. It is also
+directly readable, so it should not be left as reasoning:
+
+| Direction                                   | Effect                                                  |
+| ------------------------------------------- | ------------------------------------------------------- |
+| caller grants **less** than callee declares | `startup_failure`, **zero jobs**, no log, no annotation |
+| caller grants **more** than callee declares | nothing — the extra scope never reaches the token       |
+
+Measured on a green run, reading the `GITHUB_TOKEN Permissions` group of two jobs in the same
+workflow, one over-granting and one exact:
+
+```text
+Security / Package audit          Performance / Performance budget
+  caller grants: contents,          caller grants: contents, packages
+                 packages           callee declares: contents, packages
+  callee declares: contents
+  ---                               ---
+  Contents: read                    Contents: read
+  Metadata: read                    Metadata: read
+                                    Packages: read
+```
+
+The over-granted job's token carries **no `Packages`**. The caller asked for it, the callee did not
+declare it, and the intersection is what the job runs with. So an unnecessary scope is inert rather
+than merely harmless-in-principle — there is no token to leak it through.
+
+**The practical consequence is a diagnostic limit, and it runs the opposite way to the one people
+expect.** Because the group prints the _intersection_, a caller that over-grants and a caller that
+matches exactly produce **byte-identical output**. You cannot audit your own `permissions:` blocks by
+reading job logs; the log shows you what the callee declared, not what you wrote. Diff the two files
+if you want to know. Note the direction of the risk this creates: the log will never tell you that a
+scope you granted was pointless, so over-grants accumulate silently across re-pins as callees drop
+scopes — untidy, never breaking, and invisible to every check.
+
+Both halves matter when you read that table. The exact-match job **installs nothing** and still needs
+`packages: read`, for the reason given above; the over-granting job **does** install and still
+resolves the packages fine on `{contents, metadata}` alone, because its audit command does not reach
+the scoped registry. Neither job's grant is predictable from what it does, which is why the callee
+table is the input rather than intuition.
 
 **And do not respond to this failure by deleting the `permissions:` block.** The framing above —
 that the failure appears only once you write the block down — invites exactly that, and for the two
