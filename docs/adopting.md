@@ -423,6 +423,7 @@ consuming repository to be granted access. Either way you must send a token.
 > it is satisfying the earlier check and re-running — at which point `200` versus `403` is exactly
 > the discriminator you wanted.
 
+> **The two `403`s are different outcomes and the body text separates them.** A consumer caught
 > this guide collapsing them into one row, which is a real defect: they mean opposite things and
 > only one of them is the owner's problem. Measured:
 >
@@ -1296,8 +1297,35 @@ This repository is also a Svelte repository, which lands it in the trap describe
 above: `^0.2.0` on `prettier-config` excludes `0.3.0`, the single release that widened
 `prettier-plugin-svelte` to `^4.0.0`.
 
-**So make the registry the authority, never a message and never this document.** One command, and
-it answers about your tree rather than your intent:
+**So make the registry the authority, never a message and never this document — but date the read.**
+A consumer followed that instruction exactly, ran a registry query, and quoted the result as
+"read from the registry just now". The list was ~30 hours old:
+
+| Package           | Their registry read    | Actually published        |
+| ----------------- | ---------------------- | ------------------------- |
+| `eslint-config`   | `…0.2.1, 0.3.0, 0.4.0` | `…0.11.0, 0.12.0, 0.13.0` |
+| `tsconfig`        | `0.1.0, 0.2.0, 0.3.0`  | `…0.3.0, 0.4.0`           |
+| `prettier-config` | `0.1.0, 0.2.0`         | `…0.2.0, 0.3.0`           |
+
+Each list is missing exactly its newest entries, and all three truncate at the **same instant** —
+after `eslint-config@0.4.0` and before `0.5.0`, which is a 58-minute window. That is the signature
+of a cached packument, not three coincidences. A stale read is indistinguishable from a fresh one:
+it is well-formed, plausibly ordered, and ends in a real version.
+
+The cost was not the version numbers. On the strength of that snapshot they re-reported a defect
+as still open — a preset missing its React and a11y layers — which had been fixed **four minors
+inside the range their read could not see**. So the stale read did not merely leave them behind;
+it manufactured a live bug report about resolved work, with a registry query as its evidence.
+
+```bash
+npm view @jrmoulckers/eslint-config version --prefer-online
+npm view @jrmoulckers/eslint-config time.modified --prefer-online   # when the registry last changed
+```
+
+**`--prefer-online` is the whole fix**, and it is worth making a habit rather than a remedy: the
+one command everybody reaches for to escape staleness has a cache in front of it. Publishing
+timestamps are the cross-check — if `time.modified` predates a release you were told about, you
+are reading a copy, not the registry.
 
 ```bash
 npm ls @jrmoulckers/eslint-config @jrmoulckers/tsconfig @jrmoulckers/prettier-config
@@ -1306,6 +1334,7 @@ npm view @jrmoulckers/eslint-config version   # what actually exists right now
 
 Reading `package.json` back to yourself confirms what you declared, which was never the question.
 
+**A lockfile generated against the live registry is not evidence of currency.** Two repositories
 reached for a real `npm ci` / `pnpm install` against GitHub Packages as the rigorous answer, and
 both produced a lockfile with genuine registry URLs and genuine `sha512` integrity hashes — for a
 stale version. The manifest range caps resolution before the registry is ever consulted about
@@ -1917,7 +1946,31 @@ migrating, the `'detect'` line is usually the only thing you need to delete; kee
 > **And treat a correction that arrives without its evidence as unverified, whatever its source.**
 > The consumer's decision to check before acting is what stopped this, and it is the generally
 > correct response — including when the correction comes from the authority you are adopting.
+>
+> **The instruction was then sent a third time, after being corrected with evidence.** That moves
+> it out of "a summary lost the evidence" and into a structural point: the wrong version lived in a
+> tracking note, and the note had been marked resolved. A resolved item is never re-derived, so the
+> error was recopied each round while the correction sat one message away in the thread. **Fix the
+> record, not just the message** — a correction applied only to the reply will be overwritten by
+> the next restatement from the same source.
+>
+> **And the successful fix erased the evidence that justified it.** After the collision was
+> resolved by a squash merge that renamed one record, the command recommended above returns the
+> _same_ timestamp for both files, because the renumbering commit is now the commit that added
+> them:
+>
+> ```console
+> $ gh api 'repos/O/R/commits?path=docs/architecture/0003-multi-creator-recipes.md&direction=asc' --jq '.[0].commit.author.date'
+> 2026-08-11T22:37:17Z
+> $ gh api 'repos/O/R/commits?path=docs/architecture/0004-account-erasure.md&direction=asc' --jq '.[0].commit.author.date'
+> 2026-08-11T22:37:17Z   # identical — the rename is the add
+> ```
+>
+> Anyone re-checking afterwards finds the ordering unknowable and may re-open a settled question.
+> **Record the outcome where it cannot be flattened by a later commit** — the PR numbers that
+> introduced each record survive any amount of squashing, and belong in the ADR body.
 
+**`.npmrc` has no Prettier parser — but whether that breaks `format:check` depends on how your
 script targets files, not on `.npmrc` being present.** The advice previously given here — add it to
 `.prettierignore` — is a no-op for most repositories and insufficient for the rest. Measured on
 Prettier 3.9.6:
@@ -2568,6 +2621,49 @@ Hard wrapping rewraps every following line in the paragraph, so a one-word chang
 multi-line diff and the real edit has to be hunted for. A single unbroken line avoids that but
 collides on any concurrent edit, since every change touches the same line. Semantic breaks avoid
 both — and `proseWrap: 'always'` destroys them on write, which is why it is not the default.
+
+> **A reflow that lands is permanent, and nothing downstream will ever flag it.** I told a
+> consumer that if they had already landed a reflow, no action was needed. That was wrong, and
+> the correction is worth stating as a property of the setting rather than as an apology:
+>
+> **`proseWrap: 'preserve'` does not undo an existing reflow.** It leaves authored breaks alone —
+> including the wrong ones `always` just wrote. Measured, one file, `printWidth: 60`:
+>
+> | Stage             | Content                                              |
+> | ----------------- | ---------------------------------------------------- |
+> | authored          | one semantic line + a second short line              |
+> | after `'always'`  | rewrapped **and the two lines joined into one flow** |
+> | then `'preserve'` | **byte-identical to the `'always'` output**          |
+>
+> `preserve` is not a repair, and it is not the opposite of `always`. It is "do nothing", which
+> when applied to damage means "keep the damage". So the fleet splits in two: repos that had not
+> yet reflowed are protected by the default, and repos that already reflowed are permanently
+> altered and will never be told. **"No action needed if you already landed one" is true for
+> breakage and false for destruction** — a green `format:check` afterwards is not evidence the
+> content survived, it is evidence that `preserve` is idempotent.
+>
+> If you landed a reflow under `0.1.x`, restore the affected files from the pre-adoption commit
+> and re-run `format:check` under `>=0.2.0`. It should pass **untouched** — that is the proof the
+> reflow was never required in the first place.
+
+> **Do not audit a reflow with `git diff -w`.** It reports the whole file as changed. Rewrapping
+> moves words _across_ lines rather than altering whitespace _within_ a line, so from git's point
+> of view every line genuinely differs and `-w` has nothing to ignore. Measured on a pure rewrap
+> where not one word changed:
+>
+> ```console
+> $ git diff -w --stat
+>  a.md | 5 +++--
+>  1 file changed, 3 insertions(+), 2 deletions(-)
+>
+> $ git diff --word-diff=porcelain a.md | grep -c '^[+-][^+-]'
+> 0
+> ```
+>
+> `-w` says three lines were added; `--word-diff` says zero words changed. **Use
+> `--word-diff`**, which is the tool that answers the question actually being asked — did any
+> prose change, or did it only move. Auditing 25 reflowed files with `-w` produces 25 hits and
+> invites the conclusion that content was rewritten when none was.
 
 **Read the last column before using this table in an argument.** Adjacent edits conflict under
 every regime, because git needs an unchanged context line between two changes and no wrapping
@@ -3354,6 +3450,7 @@ its four platforms are native and no principle addresses them at all. Silence th
 agreement; it is absence. When you report which principles you decline, say which areas had nothing
 to decline, or a reader will count an unwritten rule as an accepted one.
 
+**A cited range is verified at its endpoints only, and the checker never resolves the IDs between
 the two you wrote.** `ENG-OBS-001`–`ENG-OBS-007` was scanned as two citations; the five in between
 were never resolved, never compared against anything, and counted toward a clean result. That is
 the worst possible shape for a blind spot: a range asserts something about **every** member while
@@ -3484,6 +3581,7 @@ alone, that consumer would have raised two false positives — `ENG-SEC-007` "Se
 unrelated to rejecting a short API token until the statement says "reject unsafe configuration before
 service" — while missing the one real defect.
 
+**The checker reads the working tree, not git history.** It walks files on disk and never shells
 out to git, so a miscitation already merged to `main` is invisible from a feature branch that does
 not touch that file. A clean run means _the tree you are standing in_ is clean. To clear a
 repository rather than a branch, run it against a checkout of `main` as well — the repository that
