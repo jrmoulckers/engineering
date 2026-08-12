@@ -233,6 +233,38 @@ consuming repository to be granted access. Either way you must send a token.
 > rejected by the npm registry. A fine-grained token fails with a 401 that is indistinguishable
 > from having no token at all, so this is worth getting right the first time.
 
+> **One request separates a credential problem from an access problem — and from a package that
+> was never published.** The REST endpoints return a uniform `404` whether the package is private,
+> absent, or your token is wrong, which is why they cost people an hour. The npm registry
+> discriminates. A consumer noticed the 401/403 split; adding the existence control makes it a
+> three-way answer. Measured against `https://npm.pkg.github.com/@jrmoulckers%2f<name>`:
+>
+> | Credential | Package                  | Status  | What it proves                                    |
+> | ---------- | ------------------------ | ------- | ------------------------------------------------- |
+> | none       | real                     | **401** | credential never arrived                          |
+> | garbage    | real                     | **401** | credential arrived and failed                     |
+> | valid      | real, private            | **403** | **auth succeeded; package exists; access denied** |
+> | valid      | name that does not exist | **404** | not in GitHub Packages at all                     |
+>
+> Read it as: **401 is about you, 403 is about permissions, 404 is about the package.** The `403`
+> arm is positive evidence in two directions at once — it confirms your token is fine _and_ that
+> the publish landed, neither of which the REST `404` can tell you.
+>
+> The `404` arm is the one worth keeping in mind, because it catches a different bug entirely: a
+> valid token plus `404` means the package was never published under that name, so no amount of
+> visibility work will help. Note that a public package from the wider ecosystem also returns
+> `404` here — GitHub Packages does not proxy npmjs, it serves only what was published to it.
+>
+> This pairs with the finding above that unset, empty and wrong tokens are indistinguishable in
+> the error _text_. They are — but they are all `401`, and the 401/403 boundary is the axis that
+> actually separates "fix my credential" from "ask the owner for access."
+>
+> ```bash
+> curl -o /dev/null -s -w '%{http_code}\n' \
+>   -H "Authorization: Bearer $GH_TOKEN" \
+>   https://npm.pkg.github.com/@jrmoulckers%2feslint-config
+> ```
+
 ### `.npmrc` — commit this
 
 ```ini
