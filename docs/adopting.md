@@ -989,6 +989,24 @@ widened `prettier-plugin-svelte` from `^3.2.0` to `^3.2.0 || ^4.0.0` — and the
 Svelte repository. The pin blocked precisely the change most relevant to it, and every check it
 ran stayed green.
 
+**A lockfile generated against the live registry is not evidence of currency.** Two repositories
+reached for a real `npm ci` / `pnpm install` against GitHub Packages as the rigorous answer, and
+both produced a lockfile with genuine registry URLs and genuine `sha512` integrity hashes — for a
+stale version. The manifest range caps resolution before the registry is ever consulted about
+what is newest, so the lock faithfully records the newest version _the range permits_. Measured on
+one such lockfile:
+
+| Declared | Resolved and hashed | Published |
+| -------- | ------------------- | --------- |
+| `^0.8.0` | `0.8.0`             | `0.13.0`  |
+| `^0.3.0` | `0.3.0`             | `0.4.0`   |
+| `^0.2.0` | `0.2.0`             | `0.3.0`   |
+
+The integrity hash is the trap: it is real, it verifies, and it attests only that the bytes match
+the version that was asked for. **A lockfile answers "did I get what I declared", never "did I
+declare the right thing."** Check the range against `versions.json` first; a lock built on a stale
+range is a stale lock with a verified checksum.
+
 So the resolved version is its own assertion, and it is the one behavioural verification cannot
 supply:
 
