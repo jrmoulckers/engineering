@@ -943,6 +943,29 @@ missing entry point or an unpublished directory fails the way it would in CI. Th
 narrower than "packing is a trap" — it is that the packed tree can be stale, and that **neither**
 local method consults your declared range.
 
+> **Generate the lockfile with the same package-manager major CI runs, and check which that is.**
+> A consumer regenerated a lockfile against the real registry on npm 11.16.0, verified it locally,
+> and CI rejected it: the reusable workflows run Node 22 / npm 10.9.8, and npm 10 read the npm-11
+> lockfile as out of sync — `Missing: picomatch@4.0.5 from lock file`. The manifest and the
+> resolved versions were correct; only the lockfile's internal placement differed. Regenerating on
+> npm 10.9.8 fixed it in 15 insertions / 72 deletions with no manifest change.
+>
+> **`lockfileVersion: 3` does not imply cross-major compatibility.** Both majors write v3, and the
+> version field is unchanged by the incompatibility, so the file looks portable and is not.
+>
+> **It is also graph-dependent, so do not try to predict it.** Reproducing this on a minimal
+> `svelte-check` tree did **not** fail: an npm-11 lockfile installed cleanly under
+> `npm@10.9.8 ci`. Whether a given dependency graph trips it is not something you can reason about
+> in advance, which is the argument for matching the major rather than for knowing when it
+> matters. Pin the manager in `packageManager`, or read the Node version the reusable workflow
+> actually uses, and generate to match.
+>
+> **This is not a source of dependency-count differences.** Measured directly, because it was a
+> plausible explanation for a long-running bloat report: installing a package declaring three
+> optional peers into an identical tree adds exactly one directory under **both** npm 10.9.8 and
+> npm 11.16.0, and installs none of the optional peers under either. Optional-peer behaviour does
+> not vary across these majors; lockfile placement does.
+
 **The general rule, which is not npm-specific: verify against the resolved artifact, not a
 convenient local stand-in.** This framing came from the one consumer with no npm surface at all,
 and it is better than the packaging-flavoured version above because it survives a change of
