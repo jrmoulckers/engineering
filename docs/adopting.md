@@ -1,5 +1,12 @@
 # Adopting Engineering practice
 
+> **Read this document at `main`, never at the tag you vendored.** Pinning is right for
+> configuration and wrong for guidance, and the difference is not cosmetic — see
+> [Pin the configs. Do not pin the guidance.](#pin-the-configs-do-not-pin-the-guidance) A consumer
+> reading this file at the ref their vendored snapshot names was told, in a passage that no longer
+> exists, that a defect which broke installation was **intentional and measured**. Their pin was
+> correct; their copy of this page was not.
+
 How a repository consumes this one. Three layers, adopt in order.
 
 | Layer                                           | What you get                         | Transport                                       |
@@ -32,6 +39,7 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | `TS7016` on a config file after enabling `checkJs`           | `Precondition 1: the config file must be`                |
 | Type declarations appear to do nothing                       | `Precondition 2:`                                        |
 | A valid, documented option is rejected as unknown            | `silently overrides the package's shipped types`         |
+| Unsure whether the advice you are reading is still current   | `Pin the configs. Do not pin the guidance.`              |
 | A citation link works but lands at the top of the file       | `cannot 404, so retitling a heading`                     |
 | Unsure which version of a package is actually installable    | `a repository counter, not a package version`            |
 | A "bogus option" check says a typed package has no types     | `does not work on every package`                         |
@@ -365,6 +373,58 @@ The width change is live for fences and tables and inert for prose.
 the `prettier` field in `package.json`. Leave the old file in place and the repository looks adopted
 while the previous config is silently still in force — and the gate stays green, because the old
 config also passes. Delete it in the same change.
+
+#### Pin the configs. Do not pin the guidance.
+
+A vendored snapshot names a ref, and the natural next step is to read this document at that same
+ref — it is the version your files came from, so it should be the version that describes them.
+**That inference is wrong, and it is the most expensive mistake in this section**, because it
+fails in the one direction you will not check: it makes stale advice look deliberate.
+
+The two artefacts have opposite requirements.
+
+| Artefact              | Pin it?              | Because                                                                                                             |
+| --------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Vendored config files | **Yes** — by SHA-256 | Reproducibility. A config that changes under you is a silent behaviour change.                                      |
+| This guide            | **No** — read `main` | Corrections only exist ahead of your pin. Old copies do not merely lack them; they still assert what was corrected. |
+
+The concrete case. A repository pinned its vendored snapshot at a tag and, correctly and
+deliberately, treated that pin as immutable. Every config file in that snapshot was later verified
+**byte-identical** to `main` — the pin was sound, and no re-vendor was warranted. But the copy of
+this guide at that same tag was **1,118 lines against 6,106 today**, and the missing 82% was not
+padding. It was where a defect got discovered. At that ref this page said, of the release family
+that silently skipped installing every framework plugin:
+
+> **From `0.9.0` these are genuinely not installed for you, and that is the point.**
+
+...supported by a real measurement (a 75 MB → 36.6 MB install). The measurement was true. The
+conclusion was wrong, and the defect it vouched for made `eslint` fail at first run with
+`ERR_MODULE_NOT_FOUND`. **A reader at that tag is not under-informed, they are confidently
+misinformed, and the evidence in front of them is genuine.** No amount of care while reading
+recovers from that; only reading a later copy does.
+
+This is why "consult `adopting.md` at the version you pinned" is not the cautious choice it sounds
+like. Staleness in a _config_ is loud — a hash mismatch, a failing gate. Staleness in _prose_ is
+silent, and prose is the artefact that carries the retractions.
+
+So:
+
+- **Vendored files**: pin, hash, and refresh deliberately. `--check` tells you when they drift.
+- **This guide, `principles/`, and every recommended version floor**: read at `main` every time.
+  If you cached a recommendation, re-read it before acting rather than after.
+- If you cite this document in an ADR or a code comment, a pinned URL is still correct — a citation
+  should name what you actually read. Add the retrieval date beside it so the next reader knows how
+  far back the claim is anchored.
+
+The check that costs nothing:
+
+```bash
+git -C <engineering-checkout> fetch --tags
+git -C <engineering-checkout> rev-list --count <your-pinned-tag>..origin/main
+```
+
+A number in the hundreds does not mean your vendored configs are wrong. It means every sentence
+you have read about them may be.
 
 #### Vendor in the change that adopts, not before it
 
