@@ -21,7 +21,8 @@
     "format:check": "prettier --check .",
     "coverage:check": "node scripts/check-coverage.mjs",
     "versions:check": "node scripts/check-published-versions.mjs",
-    "coverage:list": "node scripts/check-coverage.mjs --list"
+    "coverage:list": "node scripts/check-coverage.mjs --list",
+    "versions:print": "node scripts/print-versions.mjs"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^16.3.0",
