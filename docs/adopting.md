@@ -1248,7 +1248,21 @@ shape. Exclude them **before** the first repo-wide `prettier --write`, not after
 .github/prompts/
 .github/instructions/
 vendor/
+AGENTS.md
+.github/copilot-instructions.md
+.studio-sync.lock.json
 ```
+
+**The single files at the bottom of that list are the sharper trap, and they were missing from it
+until a consumer said so.** A synced _directory_ is obvious once you have had the thought about
+syncing at all — the whole path is foreign. A synced _file_ sitting among authored ones looks
+exactly like a file you own, and `AGENTS.md` is both the most likely of them to be hand-edited
+and the one whose managed region is easiest to reformat by accident. Directory exclusions are
+discoverable by inspection; file exclusions are not.
+
+The mitigation that consumer applies is worth copying: **comment each entry with who owns it**,
+so the next person to tidy the ignore file can see that removing a line has an owner on the other
+end rather than looking like dead weight.
 
 If you hold signed manifests, lockfiles with recorded integrity, golden or snapshot fixtures, or
 vendored third-party sources, apply the same reasoning before your first format pass — the first
@@ -1772,6 +1786,16 @@ emitting consumer with `TS5096` as shown above.
 
 State the delta in the PR description. "Adopted the shared base" hides a regression; "adopted
 the shared base; server moves to `node.json` to keep `.ts` specifiers working" does not.
+
+**And keep each verification inside the tool it was run with.** A consumer who proved their ESLint
+migration lost **zero rules** — a real, careful, rule-by-rule resolved-config diff — flagged that
+the same number was at risk of being quoted as though it covered their toolchain. It does not. A
+rule-level diff says nothing about `tsconfig`, and that repository's own `allowImportingTsExtensions`
+gap is the counter-example: ESLint lossless, TypeScript config not. A clean typecheck under the new
+flags is likewise a statement about the _code_, not about whether the config is a superset.
+
+Three separate claims, three separate proofs: rules preserved, options preserved, code still
+compiles. Report them separately or the strongest one silently vouches for the other two.
 
 **On TypeScript 6, `baseUrl` stops the compiler before it checks anything — and the run looks
 clean.** This is the single most dangerous interaction with these presets, because it produces a
@@ -2837,6 +2861,27 @@ diagnostic in production found no active crash. Left as a bare number, that repo
 twenty-five times more alarming than the one with nineteen real bugs. Someone comparing the two
 would reasonably conclude the flag is unusable and switch it off, which is the outcome this whole
 section exists to prevent.
+
+**A fifth repository measured zero, and it explains all four other numbers.** It applied the
+shared base's genuinely-new flags — `moduleDetection: force`, `noUnusedLocals`,
+`noUnusedParameters` — and typechecked four workspaces including `svelte-check
+--fail-on-warnings`: **0 diagnostics**. Not a small repository, and not a lucky one. It already
+set `noUncheckedIndexedAccess` in its own base, and had for longer than this migration.
+
+That converts the whole range from a planning risk into a **one-command precheck**:
+
+```bash
+grep -rn 'noUncheckedIndexedAccess' --include='tsconfig*.json' .
+```
+
+A repository that already sets it measures approximately zero, because it has been paying this
+debt continuously all along. A repository that does not measures somewhere in 109–2,691, and the
+spread within that band is the shape question below, not a size question. Nothing else in the
+shared base produces diagnostics at that scale.
+
+So the honest planning advice is not a range at all — it is: **run the grep, and only then decide
+whether you need a migration slot.** Four repositories reported counts before anyone asked the
+question that predicts them.
 
 **What separates the two is the shape of the read, not the number of them.** The same repository
 supplied the discriminator after sampling its own worst cases: an index read is dangerous when it
