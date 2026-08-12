@@ -48,6 +48,20 @@ changes. Comparing that against the newest release answers "has anything I care 
 without diffing the file — and a fetched copy with no marker at all is older than the marker,
 which is itself the answer.
 
+**A staleness signal cannot notify the people who pinned before it existed, and they are exactly
+the people who need it.** The marker landed in `v0.27.0`. Every consumer pinned below that sees
+no marker, no revision bump, and no diff worth reading — the mechanism built to surface staleness
+is invisible precisely in proportion to how stale you are. `v0.2.3` remains a live pin in at least
+one repository as of `v0.109.0`, carrying `check-blank: true` and no marker, and it reports zero
+findings today, so nothing about it looks wrong until someone writes `_ = f()`.
+
+Two consequences worth acting on. **A pin below the marker is itself the signal** — treat a
+fetched config whose header has no `config-revision:` as out of date without further checking.
+And **do not use a version number as a cautionary example**: the sentence above warning that
+`v0.2.3` told consumers to copy the file is, as far as this repository can tell, the most likely
+source of the `v0.2.3` pin still in use. A literal ref in a document gets copied whatever the
+surrounding prose says about it, because the prose is read once and the ref is read every time.
+
 ```bash
 latest=$(gh api repos/jrmoulckers/engineering/releases/latest --jq .tag_name)
 [ "$latest" = "$ENGINEERING_REF" ] || echo "::notice::pinned $ENGINEERING_REF; newest is $latest"
@@ -74,21 +88,54 @@ explicitly.
 
 Since `jrmoulckers/engineering` is public, the fetch needs no token.
 
-**Always pass `--config` explicitly. A missing config does not fail — it lints less.** This is the
+**Always pass `--config` explicitly. A missing config does not fail — it lints differently.** This is the
 sharpest edge in the whole pattern, because the fetched file is deliberately untracked: a
 contributor who clones and runs `golangci-lint run` before running the fetch has no
 `.golangci.yml` at all. golangci-lint does not error on that. It treats the absence as
-`ConfigFileNotFoundError`, swallows it, and proceeds with its **built-in defaults** — roughly
+`ConfigFileNotFoundError`, swallows it, and proceeds with its **built-in defaults** — exactly
 `errcheck`, `govet`, `ineffassign`, `staticcheck` and `unused`, with none of this config's
-settings. Everything the shared config adds on top, including `errorlint`, `nilerr`, `revive`,
-`misspell` and `unconvert`, is silently absent.
+settings. Everything the shared config adds on top — `bodyclose`, `errorlint`, `nilerr`,
+`rowserrcheck` and `misspell` — is silently absent.
 
-The result is the worst available outcome: a plausible, clean, **locally green** run against a
-smaller rule set, then a red CI, with nothing on screen connecting the two. It is the same class as
-the truncated-config case above — a step reporting success while checking less than you think.
+**The symptom is not a clean local run, and describing it that way sends people looking for the
+wrong thing.** An earlier revision of this section claimed the unfetched contributor gets a
+"plausible, clean, locally green run", and also listed `revive` and `unconvert` among the linters
+lost. Both were wrong, and both were written from the documentation rather than from a run. A
+consumer measured it:
 
-Naming the file converts that into a hard failure, because an explicitly supplied path is read
-directly rather than searched for, so its absence surfaces as an error instead of a fallback:
+```
+golangci-lint run --no-config ./...   ->  20 issues (all errcheck)
+golangci-lint run --config .golangci.yml ./...   ->   0 issues
+```
+
+`revive` and `unconvert` are not in this config at all. And the unfetched run is **noisier**, not
+quieter, because the defaults include `errcheck` without this config's `std-error-handling`
+exclusions or its `_test.go` rule. All 20 findings were on correct code: 14 deferred `Close`
+calls, 3 `fmt.Fprintf`, 3 `os.Remove`, 6 of them inside tests.
+
+So the failure mode is **noisy in one direction and silent in the other**, which is worse than a
+clean run:
+
+- **False alarms.** 20 findings on code that is right. The natural response is to "fix" them by
+  adding `_ =` churn — which, on a config pinned before `v0.10.0`, `check-blank: true` then
+  rejects in CI. A contributor can spend an afternoon making the code worse and still not
+  reproduce CI.
+- **Real misses.** The five added linters still never run.
+
+The searchable symptom is _"a wall of `errcheck` findings that do not appear in CI"_. Note this
+looks like the shared config is **more permissive** than the local default, which is the opposite
+of the truth, and is why people misdiagnose it.
+
+**Compare the set of findings, not the set of rules.** A rule-by-rule diff scores the unfetched
+case as "minus five linters, strictly looser" and misses that it is simultaneously _stricter_ in
+what it reports, because exclusions are configuration too. A config can be stricter in coverage
+and looser in exclusions at the same time, and only a findings diff sees both. It is also cheaper
+than reasoning about it — `--no-config` versus `--config`, count and diff. The same rule covers
+the npm presets, where a rule-by-rule diff scores zero while the set of _files_ linted changes.
+
+Naming the file converts the whole class into a hard failure, because an explicitly supplied path
+is read directly rather than searched for, so its absence surfaces as an error instead of a
+fallback:
 
 ```bash
 golangci-lint run --config .golangci.yml ./...

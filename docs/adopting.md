@@ -2340,9 +2340,22 @@ channel. The failure has the same shape everywhere it appears:
 
 The Go instance is worth stating because the mechanism is completely different and the symptom is
 identical: golangci-lint does not error on a missing config, it silently falls back to its defaults.
-A contributor who has not run the fetch loses `nilerr`, `errorlint`, `revive`, `misspell` and
-`unconvert`, gets a **clean local run**, and is red in CI with no local reproduction. In the rebase
-that surfaced this, a `nilerr` violation would have shipped for exactly that reason.
+A contributor who has not run the fetch loses `bodyclose`, `errorlint`, `nilerr`, `rowserrcheck`
+and `misspell`. In the rebase that surfaced this, a `nilerr` violation would have shipped for
+exactly that reason.
+
+**An earlier revision of this paragraph said they also get a "clean local run", and named `revive`
+and `unconvert` among the losses. Both were wrong**, and both were written from documentation
+rather than from a run. Measured: `--no-config` produces **20 errcheck findings** where the shared
+config produces **0**, because the defaults include `errcheck` without the config's
+`std-error-handling` exclusions. `revive` and `unconvert` are not in the shared config at all.
+
+That correction generalises past Go. **Compare the set of findings, not the set of rules.** A
+rule-by-rule diff scores the unfetched Go case as "minus five linters, strictly looser" and misses
+that it is simultaneously stricter in what it reports, because exclusions are configuration too.
+The npm presets fail the same diff from the other side: identical rules, different set of files
+linted. A findings diff is the only comparison neither mechanism can hide from, and it is cheaper
+than reasoning about either.
 
 Because the mechanisms differ, a fix for one does not fix the other — the shared discipline is the
 question, not the remedy: **is the thing I just verified the thing that will be installed?** Ask it
