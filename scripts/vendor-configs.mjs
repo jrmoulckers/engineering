@@ -203,10 +203,13 @@ function parseArgs(argv) {
       i += 1;
     } else if (arg === '--check') {
       flags.check = true;
+    } else if (arg === '--no-remote') {
+      flags.noRemote = true;
     } else if (arg.startsWith('--')) {
       fail(
         `unknown option ${arg}`,
-        'Usage: vendor-configs.mjs <ref> [--dest <dir>] [--set a,b] | vendor-configs.mjs --check',
+        'Usage: vendor-configs.mjs <ref> [--dest <dir>] [--set a,b] | ' +
+          'vendor-configs.mjs --check [--no-remote]',
       );
     } else {
       positional.push(arg);
@@ -376,7 +379,7 @@ async function changedAtRef(ref, lock, entries) {
   return { changed, compared, toolChanged };
 }
 
-async function check() {
+async function check(noRemote = false) {
   let raw;
   try {
     raw = await readFile(LOCK, 'utf8');
@@ -488,6 +491,24 @@ async function check() {
   }
 
   process.stdout.write(`${entries.length} vendored file(s) match ${LOCK} at ${lock.ref}.\n`);
+
+  // Two behaviours live behind one flag and they are easy to conflate: the hash
+  // comparison above is authoritative and offline, while everything below is an
+  // advisory network lookup. A consumer put it exactly right — a green --check
+  // means the tree matches the lock, NOT that the pin is current.
+  //
+  // --no-remote exists because the network half is invisible at the call site.
+  // A repository with egress review has to declare an unauthenticated call to
+  // api.github.com on every lint run, and the only thing a gate wants is the
+  // half that can fail. Separating them makes the guarantee statable: with
+  // --no-remote the command is hermetic, and its silence about staleness is a
+  // choice rather than an unreported failure.
+  if (noRemote) {
+    process.stdout.write(
+      `Staleness not checked (--no-remote). This says nothing about whether ${lock.ref} is current.\n`,
+    );
+    return;
+  }
 
   const latest = await latestRef();
   if (!isNewerRef(latest, lock.ref)) return;
@@ -621,8 +642,17 @@ async function main() {
     if (positional.length > 0) {
       fail('--check takes no ref', 'It verifies the ref already recorded in the lock file.');
     }
-    await check();
+    await check(flags.noRemote === true);
     return;
+  }
+  // --no-remote only means something for --check. Vendoring has to reach the
+  // network to fetch anything at all, so accepting it silently there would
+  // promise a hermetic run that cannot exist.
+  if (flags.noRemote) {
+    fail(
+      '--no-remote only applies to --check',
+      'Vendoring fetches files, so it cannot run without network access.',
+    );
   }
   const ref = positional[0];
   if (!ref) {
