@@ -805,6 +805,39 @@ read looks exactly like a fresh one.
 authentication, since this repository is public. If you prefer `git`, run `git fetch origin` first
 and treat the fetch as part of the command rather than as something you did earlier.
 
+> **Reading the source is not more current than reading a manifest. Currency is a property of the
+> ref, not of the method.** A consumer opened with _"confirmed against source, not transcribed"_ —
+> exactly the right instinct — and read `packages/eslint-config/package.json` at tag `v0.4.0`. They
+> found `eslint: ^9.0.0`, correctly derived that their `eslint@10` tree would `ERESOLVE`, and filed
+> it as a second blocker independent of package visibility. Every step was sound and the conclusion
+> was false: the current release peers `^9.0.0 || ^10.0.0`, and had for nine minors.
+>
+> They then went further, resolving the preset from that source and _executing_ it — the strongest
+> form of verification anyone in this migration has used — and reported that the `react` subpath
+> throws on ESLint 10 because `eslint-plugin-react` calls the removed `context.getFilename()`. That
+> diagnosis is exactly right, and it is the same one that produced the fix already shipped: the
+> preset sets a concrete `settings.react.version` instead of `'detect'`, which is what triggers the
+> removed API. Reproduced on their exact versions — `eslint@10.6.0`, `eslint-plugin-react@7.37.5` —
+> the current `reactConfig()` loads and `react/jsx-no-target-blank` fires.
+>
+> **Executing the code does not rescue you from reading it at the wrong ref**, and it is worth
+> saying plainly because the effort is what makes it convincing. Running a thing feels categorically
+> stronger than reading about it, so a result obtained by execution gets less scrutiny about
+> _which_ thing was run. This is the same failure as the stale-pin case above with the direction
+> reversed: there, current source and a stale install; here, a stale checkout executed faithfully.
+> Both produce a true statement about the wrong artifact.
+>
+> Check the ref before checking the code. `git fetch origin && git describe --tags origin/main`, or
+> `curl` the raw `versions.json`, costs one command and invalidates the entire investigation if it
+> disagrees.
+
+Their general point survives the correction and is worth keeping: **a satisfiable range is not the
+same as a working range.** The preset's `eslint-plugin-react: ^7.37.0` does permit versions that
+need the `settings` workaround to run at all, so the config compensates for a plugin defect the
+manifest cannot express. Only executing the resolved tree shows that — which is why the repository
+runs its preset tests under an ESLint 9 **and** an ESLint 10 matrix rather than trusting the peer
+range to describe reality.
+
 A test asserts that every version range printed in this document matches `versions.json`, so the
 table above cannot drift again without failing CI.
 
