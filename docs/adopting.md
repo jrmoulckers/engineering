@@ -739,6 +739,32 @@ rather than trusting this table, which is a literal and therefore ages:
 curl -s https://raw.githubusercontent.com/jrmoulckers/engineering/main/versions.json
 ```
 
+**Verifying the behaviour does not verify the version, and this is the way the caret survives a
+careful adoption.** One repository adopted `@jrmoulckers/prettier-config@^0.2.0` and checked it
+properly — not package metadata but the _effective resolved config_: `proseWrap: preserve` and
+`printWidth: 96` on Markdown, `parser: svelte` on a component, `format:check` green. Every
+assertion was true. The pin was still a minor behind, because `^0.2.0` is `>=0.2.0 <0.3.0` and
+`0.3.0` was published.
+
+A stale version passes a behavioural test **because it behaves correctly**. What it lacks is not
+wrong behaviour but absent capability, and no test you write against the features you already use
+can see a feature you do not use yet. In this instance the excluded release was the one that
+widened `prettier-plugin-svelte` from `^3.2.0` to `^3.2.0 || ^4.0.0` — and the repository was a
+Svelte repository. The pin blocked precisely the change most relevant to it, and every check it
+ran stayed green.
+
+So the resolved version is its own assertion, and it is the one behavioural verification cannot
+supply:
+
+```bash
+npm ls @jrmoulckers/prettier-config @jrmoulckers/eslint-config @jrmoulckers/tsconfig
+# compare against versions.json — currency is a separate claim from correctness
+```
+
+This is the sixth repository to lose work to the `0.x` caret, and the first where a thorough
+verification pass ran, succeeded, and confirmed nothing about currency. It belongs with the other
+instances in which **a missing thing presents as a passing one**.
+
 **Use that, not `npm view`, and not `git show`.** This table went stale within one release of being
 written — twice — and the verification command previously recommended here was `npm view`, which
 requires registry access, the one thing the repositories most likely to be stale do not have. A
