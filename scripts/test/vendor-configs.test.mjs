@@ -365,3 +365,67 @@ describe('vendor-configs --check', () => {
     }
   });
 });
+
+describe('vendor-configs lock coverage', () => {
+  test("warns when a previous run's files are left untracked on disk", { skip: OFFLINE }, () => {
+    const dir = workspace();
+    try {
+      const first = run(['v0.115.0', '--dest', 'config/engineering'], dir);
+      assert.equal(first.code, 0);
+      // A fresh vendor has nothing to orphan, so it must be silent. Without
+      // this the warning could fire always and the test below would still pass.
+      assert.doesNotMatch(first.out, /no longer tracked/);
+
+      const moved = run(['v0.115.0', '--dest', 'vendor/engineering'], dir);
+      assert.equal(moved.code, 0);
+      assert.match(moved.out, /10 file\(s\) from the previous run are no longer tracked/);
+      assert.match(moved.out, /config\/engineering\/tsconfig\/base\.json/);
+      // The old tree is still on disk and --check now covers none of it, which
+      // is why this has to be said out loud rather than silently dropped.
+      assert.ok(existsSync(join(dir, 'config/engineering/tsconfig/base.json')));
+      const lock = JSON.parse(readFileSync(join(dir, 'engineering-configs.lock.json'), 'utf8'));
+      assert.equal(
+        Object.keys(lock.files).some((k) => k.startsWith('config/engineering/')),
+        false,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test(
+    'a same-dest refresh reports no orphans and counts changes honestly',
+    { skip: OFFLINE },
+    () => {
+      const dir = workspace();
+      try {
+        assert.equal(run(['v0.112.0', '--dest', 'config/engineering'], dir).code, 0);
+        const { code, out } = run(['v0.115.0', '--dest', 'config/engineering'], dir);
+        assert.equal(code, 0);
+        assert.doesNotMatch(out, /no longer tracked/);
+        // No vendored file has changed content since the v0.112.0 floor. A file
+        // absent from the previous lock must not be counted as changed.
+        assert.match(out, /Ref moved v0\.112\.0 -> v0\.115\.0; 0 file\(s\) changed content/);
+        assert.doesNotMatch(out, /newly tracked/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test('orphan detection fails if the guard is neutralised', { skip: OFFLINE }, () => {
+    const dir = workspace();
+    try {
+      // Mutation test: if the on-disk existence check always returned false,
+      // no orphan would ever be reported and the test above would be vacuous.
+      const mutated = variant(dir, (s) =>
+        s.replace('if (await exists(key)) orphans.push(key);', 'if (false) orphans.push(key);'),
+      );
+      assert.equal(run(['v0.115.0', '--dest', 'config/engineering'], dir, mutated).code, 0);
+      const { out } = run(['v0.115.0', '--dest', 'vendor/engineering'], dir, mutated);
+      assert.doesNotMatch(out, /no longer tracked/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
