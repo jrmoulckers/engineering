@@ -14,7 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SETS, isNewerRef } from '../vendor-configs.mjs';
+import { SETS, isNewerRef, escapesCwd } from '../vendor-configs.mjs';
 import { createHash } from 'node:crypto';
 
 const script = fileURLToPath(new URL('../vendor-configs.mjs', import.meta.url));
@@ -772,5 +772,142 @@ describe('--check staleness ordering', () => {
     const { code, out } = await checkAgainst('v0.999.0', 'v0.113.0');
     assert.equal(code, 0, 'staleness is information, never a failure');
     assert.match(out, /Notice: pinned at v0\.113\.0; newest release is v0\.999\.0/);
+  });
+});
+
+describe('a scratch --dest cannot poison the lock', () => {
+  const root = process.platform === 'win32' ? 'C:\\scratch\\probe' : '/tmp/probe';
+
+  test('a dest under the working directory is not an escape', () => {
+    assert.equal(escapesCwd('config/engineering', process.cwd()), false);
+    assert.equal(escapesCwd('./config/engineering', process.cwd()), false);
+    assert.equal(escapesCwd('.', process.cwd()), false);
+  });
+
+  test('a dest outside the working directory is an escape', () => {
+    assert.equal(escapesCwd('../elsewhere', process.cwd()), true);
+    assert.equal(escapesCwd(root, process.cwd()), true);
+  });
+
+  // The reported failure: a probe rewrote the real lock with absolute scratch
+  // paths, and --check then passed having examined no repository file at all.
+  test('--check refuses a lock whose keys leave the working directory', () => {
+    const dir = workspace();
+    try {
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v1.0.0',
+          files: { [`${root}/tsconfig/base.json`]: { source: 'x', sha256: 'a'.repeat(64) } },
+        }),
+        'utf8',
+      );
+      const { code, out } = run(['--check'], dir);
+      assert.equal(code, 1);
+      assert.match(out, /outside/);
+      assert.match(out, /--dest/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // The dangerous case is the machine that produced the lock: every absolute
+  // path still resolves there, so a hash comparison passes. Rejection must come
+  // from the shape of the key, never from the file being absent.
+  test('rejects an escaping key even when that file exists and matches', () => {
+    const dir = workspace();
+    const outside = mkdtempSync(join(tmpdir(), 'vendor-outside-'));
+    try {
+      const body = '{"a":1}';
+      writeFileSync(join(outside, 'base.json'), body, 'utf8');
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v1.0.0',
+          files: {
+            [`${outside.split('\\').join('/')}/base.json`]: {
+              source: 'x',
+              sha256: createHash('sha256').update(body).digest('hex'),
+            },
+          },
+        }),
+        'utf8',
+      );
+      const { code, out } = run(['--check'], dir);
+      assert.equal(code, 1, 'a resolvable absolute key must still be refused');
+      assert.match(out, /outside/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  // Positive control: without it, every assertion above would also pass against
+  // a --check that refused all locks.
+  test('a relative lock key is still accepted', () => {
+    const dir = workspace();
+    try {
+      const body = '{"a":1}';
+      writeFileSync(join(dir, 'vendored.json'), body, 'utf8');
+      writeFileSync(
+        join(dir, 'engineering-configs.lock.json'),
+        JSON.stringify({
+          ref: 'v1.0.0',
+          files: {
+            'vendored.json': {
+              source: 'x',
+              sha256: createHash('sha256').update(body).digest('hex'),
+            },
+          },
+        }),
+        'utf8',
+      );
+      const { code } = run(['--check'], dir);
+      assert.equal(code, 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+describe('the no-commitment probe leaves the repository alone', { skip: OFFLINE }, () => {
+  test('a scratch --dest writes no lock and leaves the existing one intact', () => {
+    const dir = workspace();
+    const scratch = mkdtempSync(join(tmpdir(), 'vendor-probe-'));
+    try {
+      assert.equal(run(['v0.115.0', '--set', 'prettier'], dir).code, 0);
+      const lockPath = join(dir, 'engineering-configs.lock.json');
+      const before = readFileSync(lockPath, 'utf8');
+
+      const { code, out } = run(['v0.112.0', '--set', 'prettier', '--dest', scratch], dir);
+      assert.equal(code, 0, out);
+      assert.match(out, /was NOT written/);
+      assert.equal(readFileSync(lockPath, 'utf8'), before, 'the probe rewrote the real lock');
+
+      // The whole point: the guard must still be armed afterwards.
+      writeFileSync(join(dir, 'config/engineering/prettier/index.js'), 'tampered', 'utf8');
+      const after = run(['--check'], dir);
+      assert.equal(after.code, 1, 'drift went undetected after a probe');
+      assert.match(after.out, /content differs/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
+  // Keyed by destination, every lookup misses once --dest moves and the count
+  // degrades to "all" or "none" -- which reads as an answer.
+  test('the change count is meaningful from a scratch dest', () => {
+    const dir = workspace();
+    const scratch = mkdtempSync(join(tmpdir(), 'vendor-probe-'));
+    try {
+      assert.equal(run(['v0.112.0', '--set', 'prettier'], dir).code, 0);
+      const { code, out } = run(['v0.115.0', '--set', 'prettier', '--dest', scratch], dir);
+      assert.equal(code, 0, out);
+      assert.match(out, /Ref moved v0\.112\.0 -> v0\.115\.0/);
+      assert.doesNotMatch(out, /newly tracked/, 'same files counted as new because dest moved');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(scratch, { recursive: true, force: true });
+    }
   });
 });
