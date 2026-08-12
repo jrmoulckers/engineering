@@ -450,6 +450,25 @@ steps:
 > the rule: the callee has already declared its requirement, so read the declaration rather than
 > re-deriving it from behaviour. A derivation can be reasoned wrong; a declaration cannot.
 
+> **Reconcile counts against your own call list, and treat a maintainer's chat summary as the
+> lossy channel it is.** Twice now this guide has been correct while a message summarising it was
+> not, and both times a consumer caught it. The second instance: a message listed six
+> install-bearing reusables and then asserted "all five you call are covered." Those cannot both
+> be true — the reader called five, but only **four** of theirs were on the list, the fifth being
+> `reusable-security-ci`, which needs nothing.
+>
+> The direction of the error is what makes it worth recording. A count that does not reconcile
+> does not fail safe: the reader resolves the discrepancy by assuming the uncounted callee belongs
+> in the set, and adds registry configuration to `reusable-security-ci` — the exact thing the next
+> paragraph forbids. An off-by-one in a summary became an argument for the wrong action, and it
+> arrived with more apparent authority than the table it contradicted.
+>
+> So: **when a message and this document disagree, the document wins**, and please say so rather
+> than complying. Both consumers who caught this declined to act on the wrong claim and reported
+> it instead. That is the behaviour that works — a fleet where the summary is trusted over the
+> source propagates a maintainer's arithmetic slip to every repository at once, and none of them
+> can detect it locally, because each one's configuration is individually plausible.
+
 **The packages are private today, so `GITHUB_TOKEN` is not enough on its own**: each consuming
 repository must also be added under the package's **Manage Actions access** settings with
 **Read**. That is one grant per repository per package, so seven repositories across three
