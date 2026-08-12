@@ -435,6 +435,15 @@ The two outcomes deliberately differ in severity:
   `116 release(s) newer` cannot be skimmed that way. If the count cannot be established it is
   omitted rather than guessed, and a full page reports `at least N` rather than a wrong total.
 
+**A checker validates its input before it trusts it.** Two adopters arrived at the same rule from
+opposite directions, and it is the single most useful thing to know about `--check`: assert the
+lock parses, records files, and carries a usable ref **before** comparing any hashes. A checker
+that cannot read its input and reports "no drift" holds a state indistinguishable from clean,
+forever. `--check` therefore refuses an empty file list and a missing, empty, or non-string `ref`,
+naming what it found — the ref because every remediation message interpolates it, so an unvalidated
+one produces advice like `node scripts/vendor-configs.mjs` with nothing after it: a command that
+cannot work, printed with confidence at the moment someone is already confused.
+
 **Wire it into a command that already runs, or it will not run.** A check people have to remember
 has the reliability of not having one:
 
@@ -557,6 +566,27 @@ Vendoring now warns when the destination is not matched by any line in `.prettie
 is a literal prefix match against non-comment lines rather than full gitignore semantics, so it
 says exactly what it looked for, and it stays a warning: a repository with no `.prettierignore` at
 all is not necessarily formatting anything.
+
+**Exclude the tree from ESLint too, for a reason that generalises past formatting.** The `prettier`
+set is `.js`, so a flat config with a `**/*.js` pattern lints it. Add:
+
+```js
+{
+  ignores: ['config/engineering/**'];
+}
+```
+
+The general property is the one worth carrying: **a hash-locked file has no legal response to a
+gate finding.** Editing it breaks the lock; not editing it leaves the gate red. When a file cannot
+be changed, reporting on it is not a finding, it is a dead end — so the only correct behaviour is
+not to report. Apply this to every gate you add, not just these two.
+
+**One thing you cannot test by corrupting the file.** An adopter tried to mutation-test their lock
+check by injecting a comment into `tsconfig/next.json`, and it broke **Vitest's own config load**
+before a single test ran. The suite went red for entirely the wrong reason and very nearly scored
+as a passing mutation test. Vendored files that the toolchain itself consumes cannot be mutated
+this way: change a **value** to something still valid rather than making the file unparseable, so
+the failure comes from your assertion instead of from a dead runner.
 
 #### Splitting a migration does not split its consequences
 
