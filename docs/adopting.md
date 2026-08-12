@@ -1667,25 +1667,65 @@ migrating, the `'detect'` line is usually the only thing you need to delete; kee
 > wrong reading here, because a declared `^9.7` cap makes "incompatible with 10" the obvious story
 > — but a peer range is an author's claim, not a test result.
 
-**`.npmrc` has no Prettier parser — but whether that breaks `format:check` depends on how your
+> **A correction generated from a summary can invert the fact it is correcting.** After a consumer
+> had already fixed a collision correctly — establishing order with `git log --diff-filter=A`,
+> renumbering the newer record, leaving the older at its number — a follow-up instruction told them
+> to do the opposite: renumber the _older_ record instead. They refused it, re-ran the command, and
+> showed the two add-dates 49 minutes apart. They were right; the instruction was wrong.
+>
+> The mechanism is worth naming because it is not carelessness. The instruction was generated from
+> a **list of the two filenames**, and two colliding ADR filenames are identical up to the title —
+> they carry **no ordering information at all**. That is the exact reason the original guidance said
+> not to trust filenames. A summary that drops the evidence keeps the shape of the claim and loses
+> the thing that makes it checkable, so the restatement is fluent, specific, and reversed.
+>
+> Had it been followed it would have renumbered an already-published record a second time and
+> re-broken references that had just been fixed — violating "published records are never
+> renumbered" in the one case where that rule was cleanly satisfiable.
+>
+> The countermeasure is the same one this document reaches for elsewhere: **carry the evidence next
+> to the claim, not the claim alone.** For ordering that is one command, and it belongs in the
+> message rather than behind it:
+>
+> ```bash
+> git log --diff-filter=A --format='%ad %H' -- docs/architecture/0003-*.md
+> ```
+>
+> **And treat a correction that arrives without its evidence as unverified, whatever its source.**
+> The consumer's decision to check before acting is what stopped this, and it is the generally
+> correct response — including when the correction comes from the authority you are adopting.
+
 script targets files, not on `.npmrc` being present.** The advice previously given here — add it to
 `.prettierignore` — is a no-op for most repositories and insufficient for the rest. Measured on
 Prettier 3.9.6:
 
-| Invocation                | Result                                                           |
-| ------------------------- | ---------------------------------------------------------------- |
-| `prettier --check .`      | **passes** — `.npmrc` is silently skipped                        |
-| `prettier --check .npmrc` | fails — `No parser could be inferred`                            |
-| `prettier --check "**/*"` | fails on **every** unparseable file, `.npmrc` and binaries alike |
+| Invocation                                | Result                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------ |
+| `prettier --check .`                      | **passes** — `.npmrc` is silently skipped                          |
+| `prettier --check "**/*.{ts,js,json,md}"` | **passes** — an extensionless file never matches an extension glob |
+| `prettier --check .npmrc`                 | fails — `No parser could be inferred`                              |
+| `prettier --check "**/*"`                 | fails on **every** unparseable file, `.npmrc` and binaries alike   |
 
 Prettier skips files whose parser it cannot infer when the target is a **directory**, and errors
 only when a file is named explicitly or matched by an explicit glob. So:
 
 - If your script is `prettier --check .`, there is nothing to do. Adding `.npmrc` to
   `.prettierignore` is an inert entry guarding a failure the repository cannot have.
+- **If your script is an extension glob** — `"**/*.{ts,tsx,js,json,css,md}"` — there is likewise
+  nothing to do, and for a second, independent reason: an extensionless file cannot match a brace
+  glob of extensions. A consumer measured both arms on their own gate (glob **exit 0**, explicit
+  path **exit 2**) and deliberately declined to add the entry, on the grounds that an ignore rule
+  for a file the gate cannot see is future confusion. That is the right call. Note this is not the
+  directory case wearing different syntax: the directory passes because Prettier **skips**
+  uninferrable files, the glob passes because the file is **never matched**. Two mechanisms, and
+  only the first would change if Prettier ever learned an `ini` parser.
 - If your script is `prettier --check "**/*"`, you were **already failing** on binary assets —
   PNGs, `.wasm` — before `.npmrc` existed. Adding one entry does not fix that. Use
   **`--ignore-unknown`**, or target the directory.
+
+The question to ask is never "do I have an `.npmrc`" but **"what does my gate target"** — and the
+answer is in your `package.json` script, not in the reusable workflow, whose default your
+`format-check-command` may be overriding.
 
 > **`--ignore-unknown` is the general fix; `.prettierignore` handles only the file that already
 > bit you.** A second consumer made this point after reproducing the glob-vs-directory split
