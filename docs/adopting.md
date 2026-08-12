@@ -1542,11 +1542,11 @@ The trap is that this repeats at every minor. `^0.3.0` locks you out of `0.4.0` 
 again one release later and has no signal. Pin with an explicit upper bound instead, which tracks
 every minor until the first stable major:
 
-| Package                        | Range             | Floor is set by                                                        |
-| ------------------------------ | ----------------- | ---------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `>=0.13.0 <1.0.0` | Runtime deps track the ESLint major, so ESLint 10 gets ESLint 10 rules |
-| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`      |
-| `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0`  | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                   |
+| Package                        | Range             | Floor is set by                                                         |
+| ------------------------------ | ----------------- | ----------------------------------------------------------------------- |
+| `@jrmoulckers/eslint-config`   | `>=0.14.0 <1.0.0` | Type-aware rules stay off for every file type a `tsconfig` cannot cover |
+| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`       |
+| `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0`  | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                    |
 
 The floors say what each version _added_, so they only rise when something is genuinely required.
 The ranges keep you current without editing the manifest. Confirm what is actually published
@@ -1794,6 +1794,50 @@ instances in which **a missing thing presents as a passing one**.
 > subtle. The third is just arithmetic — `npm view <pkg> version` before you pick the endpoints — and
 > it is the one that has now cost the most effort here, because the rigour of the method makes the
 > result feel conclusive. **Diff to `latest`, not to the next version after yours.**
+
+> **`strictTypeChecked` and file types no `tsconfig` covers — fixed for the class in `0.14.0`.**
+> Through `0.13.0`, `svelteConfig({ strictTypeChecked: true })` did not report findings; it
+> **aborted the entire run** on the first `.svelte` file:
+>
+> ```text
+> Error: Error while loading rule '@typescript-eslint/await-thenable': You have used a rule
+> which requires type information, but don't have parserOptions set to generate type
+> information for this file.
+> Parser: svelte-eslint-parser
+> ```
+>
+> Exit 2, no results for any file — so this reads as a broken preset rather than a lint failure.
+>
+> The mechanism is worth understanding, because it is the shape of the bug rather than one
+> extension. `base()` applies the type-checked sets **unscoped**, then re-disables them in trailing
+> blocks for `**/*.ts*`, `**/*.js*` and `toolingFiles`. `.svelte` matched none of them.
+> `svelteConfig` _did_ opt `.svelte` out of the TypeScript project — but it set only
+> `parserOptions.projectService: false`, not `disableTypeChecked.rules`. **Removing the project
+> without removing the rules that need one is precisely the combination that aborts.**
+>
+> This is the plain-`.js` crash fixed in `0.12.0`, one file extension over. The property was stated
+> correctly then — _JavaScript is never covered by a TypeScript project, so every type-aware rule
+> has to come back off for it_ — but the fix landed on the extension it was reported on rather than
+> the class. Any file type a `tsconfig` cannot include has that property. `0.14.0` therefore adds
+> `untypedFiles` to `base()`, which places caller globs in the **trailing** position, and
+> `svelteConfig` passes its own three.
+>
+> **A preset could not have fixed this itself, and that is the design point.** Its entries arrive
+> via `extend`, which `base()` splices in _above_ the trailing blocks specifically so a caller
+> cannot re-enable a rule the preset switched off. Correct in general, but it also means the
+> preset had no position from which to switch one off.
+>
+> **If you worked around this, remove the workaround.** Passing the disable block through `extend`
+> did turn exit 2 into exit 1 — but only because _no_ trailing block matched `.svelte`, which made
+> a caller entry last-matching. That is the opposite of the documented guarantee, and it never
+> worked for `.js`. From `0.14.0` the guarantee holds for both, so the `extend` workaround stops
+> working and a regression test pins that it must.
+>
+> What `strictTypeChecked` actually costs is worth measuring before you enable it. One Svelte
+> repository found **71 findings across 18 files** — and 66% of them were two stylistic rules
+> (`require-await` 27, `prefer-promise-reject-errors` 20), with `no-floating-promises` firing
+> **zero** times and the whole `no-unsafe-*` family firing three. Real discipline, but a costed
+> change rather than a free upgrade, and the headline rules may not be the ones you get.
 
 > **A stale pin hides the fix for the bug you are about to report.** The sharpest instance so far:
 > a Svelte repository held `prettier-config` at `^0.2.0` deliberately, and in the same message
