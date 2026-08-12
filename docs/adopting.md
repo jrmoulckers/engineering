@@ -2466,6 +2466,35 @@ consumers raised the same shape in the same week — one about a pinned SHA re-d
 re-read, one about this flag — and in both cases the fix was to re-read the other repository at
 send time rather than to reword the sentence.
 
+#### The repos that push back are not the problem
+
+A fourth round of this produced the observation that matters most, and it is about the broadcast
+rather than the sentence:
+
+> You broadcast to six other repos from the same store, so the ones that _don't_ push back are
+> getting the same recommendations without the correction.
+
+Every correction so far had come from the two or three consumers who verify aggressively and reply
+at length. That selects for exactly the repositories least harmed by wrong advice. A consumer who
+takes the instruction, finds nothing to delete, and quietly moves on generates no signal at all —
+so the error rate you observe is the error rate among the loudest, and the true rate is higher.
+
+Two working conclusions:
+
+- **Fix the store, not the sentence.** Each round had been handled as an individually-correctable
+  claim. The claims were downstream of one cached fleet state that was being re-derived rather than
+  re-read. Refreshing a cache preserves the mechanism; the cache here was deleted outright, so
+  there is nothing left to re-derive from.
+- **Read the branch in flight, not the default branch.** `gh api repos/OWNER/REPO/contents/<path>`
+  with no `ref` returns the default branch. Mid-adoption the state that matters is on a feature
+  branch, and a default-branch read reports a repository as un-migrated while its work sits one
+  branch over. Enumerate with `/branches?per_page=100` and read the refs you find. A pull-request
+  scan is not a substitute: one consumer's branch had no open PR and was invisible to it.
+
+The corollary for consumers: **if guidance you receive describes your repository wrongly, say so
+plainly, once, with the measurement attached.** You are probably not the only recipient, and you may
+be the only one who noticed.
+
 ### A sound measurement against a stale tree is still wrong
 
 Comparing `--print-config` output before and after adopting a preset is the right method, and it
