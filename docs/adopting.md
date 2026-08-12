@@ -878,7 +878,7 @@ every minor until the first stable major:
 
 | Package                        | Range             | Floor is set by                                                        |
 | ------------------------------ | ----------------- | ---------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `>=0.12.0 <1.0.0` | Runtime deps track the ESLint major, so ESLint 10 gets ESLint 10 rules |
+| `@jrmoulckers/eslint-config`   | `>=0.13.0 <1.0.0` | Runtime deps track the ESLint major, so ESLint 10 gets ESLint 10 rules |
 | `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`      |
 | `@jrmoulckers/prettier-config` | `>=0.3.0 <1.0.0`  | `proseWrap: 'preserve'`; `0.1.x` hard-wraps Markdown                   |
 
