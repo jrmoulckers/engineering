@@ -322,6 +322,64 @@ consuming repository to be granted access. Either way you must send a token.
 > contain it, and a real page with packages does not contain it either. **Assert what the page must
 > say, not how big it is or how it got there.**
 
+> **A control needs a needle that generalises, and this probe has now failed three different ways.**
+> A consumer asked for the probe to be retracted outright, reporting that it returns `0` for
+> `home-assistant/core`, `renovatebot/renovate` and `cli/cli` — all of which they believed publish
+> public packages — and concluding it "reports private for everything and cannot produce a
+> negative". Their instinct was right and the falsification was invalid: they ran the **subject's**
+> needle against the **control** pages. `eslint-config` is a string that only ever appears on this
+> repository's page, so grepping for it elsewhere tests nothing. Measured on their three:
+>
+> | Repository             | `grep -c eslint-config` | link shape | empty-state marker |
+> | ---------------------- | ----------------------- | ---------- | ------------------ |
+> | `home-assistant/core`  | 0                       | **28**     | absent             |
+> | `renovatebot/renovate` | 0                       | **1**      | absent             |
+> | `cli/cli`              | 0                       | **0**      | **present**        |
+>
+> The link shape discriminates cleanly, and the marker independently confirms that `cli/cli`'s zero
+> is a true zero rather than a broken fetch — the two halves of the recipe answering different
+> questions, as intended.
+>
+> Three consumers have now broken this one probe in three distinct ways: an **absence test with no
+> positive control**, a **units error** reading `960` lines as bytes, and a **needle that does not
+> generalise**. All three produced `0`, all three read as "private", and none of them was a
+> measurement of visibility. When a probe's failure output is identical to its interesting output,
+> expect to get it wrong more than once.
+
+> **pnpm 11 refuses any dependency published in the last 24 hours, and the error invites you to
+> disable the wrong thing.** A consumer adopting within a day of a publish hit
+> `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` on all three packages. This is built in, not configured,
+> and it is a supply-chain control worth keeping — a compromised release is most dangerous in its
+> first hours. The error text suggests relaxing the policy that flagged them, which reads as an
+> invitation to switch it off globally.
+>
+> Do what they did instead: exclude **by exact version**, so the exemption expires with the
+> version rather than persisting.
+>
+> ```yaml
+> # pnpm-workspace.yaml — narrow, self-expiring
+> minimumReleaseAgeExclude:
+>   - '@jrmoulckers/eslint-config@0.13.0'
+> ```
+>
+> A later release re-enters quarantine rather than inheriting the exemption. Waiting a day is also
+> a complete fix, and usually the cheaper one.
+
+> **`allowImportingTsExtensions` is deliberately not in the shared base, and hoisting it would
+> break emitting consumers.** A consumer kept it locally and asked for it to be hoisted, reasonably
+> — every preset here inherits `noEmit: true` from `base.json`, so it would be safe for all of them
+> as shipped. It is not safe for a consumer who overrides that. Measured on TypeScript 5.9:
+>
+> ```
+> tsconfig.json: error TS5096: Option 'allowImportingTsExtensions' can only be used
+>                when either 'noEmit' or 'emitDeclarationOnly' is set.
+> ```
+>
+> A hard error, not a warning. Hoisting would convert "works" into "does not compile" for any
+> repository that sets `noEmit: false` to build with `tsc`, and it would arrive on a version bump,
+> in a file they never edited. **A flag that is only valid under a setting a consumer may override
+> does not belong in a base others extend.** Keep it local, next to the `noEmit` that licenses it.
+
 > **GitHub Packages only supports classic personal access tokens.** Fine-grained PATs are
 > rejected by the npm registry. A fine-grained token fails with a 401 that is indistinguishable
 > from having no token at all, so this is worth getting right the first time.
