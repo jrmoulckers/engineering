@@ -6486,6 +6486,72 @@ be able to _show_ — so Evidence is where the sentence a reviewer can check aga
 tends to sit. When two principles both seem to apply, prefer citing both for their different
 halves over picking the closer-sounding one.
 
+#### Search the whole record — `npm run principles:find`
+
+Two repositories independently concluded that no principle covered framework-free domain logic.
+Both had searched **all 66 Statements** — a thorough method that cannot find the answer, because the
+obligation is in Evidence. Until recently this repository shipped a checker for a principle you have
+already named and **nothing for finding one**, so every consumer improvised the search, and the
+obvious improvisation excludes the field that matters:
+
+```bash
+npm run principles:find -- 'framework|renderer'
+```
+
+```text
+3 of 66 principle(s) match /framework|renderer/i:
+
+ENG-ARCH-002  Explicit additive contracts
+  evidence  …policy modules run without a renderer or consumer framework.
+            ^ matched in Evidence only -- the Statement does not mention this,
+              so a Statement-only search would miss it.
+
+ENG-INT-001   Thin typed adapters
+  statement …isolate provider or framework behavior behind thin single-purpose adapters.
+
+ENG-TEST-001  Layered test portfolio
+  evidence  Domain rules run without framework or network setup; …
+```
+
+It searches `id`, `title`, `statement`, `rationale` and `evidence`, prints **which field matched**,
+and flags Evidence-only hits explicitly. The field matters to your judgement: a Statement hit tells
+you the principle is _for_ your case, an Evidence hit tells you it is what you must be able to
+_show_ — and the second is usually the citable one.
+
+#### Two rules that pull against each other, and how to settle it
+
+"Check before concluding no principle exists" and "cite nothing rather than the nearest-sounding ID"
+point in opposite directions, and a repo applying the first enthusiastically lands on over-citation.
+A consumer hit this exactly: told that `ENG-INT-001` covers framework isolation, they considered
+citing it for their pure domain layer and **correctly refused** — its scope is provider or framework
+behaviour _at an external boundary, behind adapters_. Their domain layer is not an adapter and has
+no provider to isolate. Citing it there would be borrowed authority.
+
+Their reconciliation was **read the Statement's scope, not just its keywords** — `ENG-INT-001`
+contains the word "framework", which is why it looks like a match and is not. That is right, and it
+is not the whole fix: their scope reading was sound and their _search_ was still too narrow, so the
+correct citations for that layer (`ENG-ARCH-002`, plus `ENG-TEST-001` for the testability half)
+never entered the shortlist to be judged. Both steps are needed:
+
+1. **Search every field**, or the right principle never reaches your shortlist.
+2. **Judge scope, not vocabulary**, or the wrong one gets cited off that shortlist.
+
+Refusing to cite is the right call whenever step 2 fails — but confirm step 1 first, because "no
+principle covers this" is a claim about the catalog, and a Statement-only search cannot support it.
+
+#### Stack a citation change on an unmerged format pass, do not cut it from `main`
+
+If you have an open PR that reformats or restructures the same document, branch your citation
+changes **from that PR**, not from `main`. A consumer found `prettier --check` already failing on a
+file they had not touched, because the repo-wide format pass was still unmerged. A naming change cut
+from `main` and a format pass in flight rewrite the same lines of the same file, so they conflict by
+construction — and conflict resolution on citation lines is precisely where a corrected ID silently
+reverts to a wrong one. They had already seen a rebase try to restore a superseded `ENG-SEC-008`
+wording.
+
+This bites hardest during a fleet-wide citation rollout, because that lands in exactly the files
+most likely to be mid-format.
+
 **Link paths are checked for you.** IDs and locations are independent, and the area prefix is not
 derivable from the ID: of eleven prefixes, only `ARCH` lives under a directory named after it.
 `ENG-INT-001` is under `principles/platforms/`, not `principles/architecture/`. A hand-written

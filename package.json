@@ -16,6 +16,7 @@
     "principles:index": "node scripts/build-principles-index.mjs",
     "principles:check": "node scripts/build-principles-index.mjs --check",
     "citations:check": "node scripts/check-citations.mjs . --index principles/index.json",
+    "principles:find": "node scripts/find-principle.mjs",
     "citations:review": "node scripts/check-citations.mjs . --index principles/index.json --review",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
