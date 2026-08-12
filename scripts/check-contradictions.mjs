@@ -129,9 +129,27 @@ const RETIRED = [
       /is a symptom, not a recipe/i,
     ],
   },
+  {
+    // A preset advertising `esModuleInterop` re-creates the audit confusion that
+    // caused it to be removed. The option is inert under this family's `bundler`
+    // resolution and `noEmit`, deprecated on TS 6 and removed on TS 7 -- so any
+    // copy claiming a variant "adds" it is describing a state we deliberately left.
+    id: 'esmoduleinterop-as-a-feature',
+    pattern: /(?:adds?|sets?|includes?|enables?)[^.\n]{0,60}`?esModuleInterop`?/gi,
+    why: 'no tsconfig variant sets esModuleInterop: `moduleResolution: "bundler"` implies allowSyntheticDefaultImports and `noEmit` retires the emit half, so it is inert on TS 5.x; TS 6 deprecates `false` (TS5107) and TS 7 removes it (TS5108).',
+    replacement:
+      'drop the mention, or state why it is absent rather than describing it as something a preset adds',
+    exempt: [
+      /Obsoleted by the language/i,
+      /earns its row/i,
+      /is set nowhere/i,
+      /becoming the only value/i,
+      /can only be default-imported/i,
+    ],
+  },
 ];
 
-const FILES = ['docs/adopting.md', 'versions.json'];
+const FILES = ['docs/adopting.md', 'versions.json', 'packages/tsconfig/README.md'];
 
 const isExempt = (line, entry) => entry.exempt.some((r) => r.test(line));
 

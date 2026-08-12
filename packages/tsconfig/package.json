@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/tsconfig",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Engineering-owned TypeScript compiler configurations.",
   "license": "UNLICENSED",
   "private": false,
