@@ -583,6 +583,49 @@ The scan is a substring match over config-shaped files, so it is biased toward f
 a stale mention in a comment keeps the check quiet. That is the safe direction: the check exists to
 catch a tree that is provably dead, not to audit that every reference is load-bearing.
 
+#### `--dest` cannot retarget an existing lock
+
+A consumer reported that `--dest` poisoned their lock and silently disarmed `--check`. Reading the
+code twice suggested it could not — there is a guard that rejects a lock whose keys escape the
+working directory. **Running it proved the consumer right**, and the escape guard was the reason the
+code looked safe: it only fires for a destination _outside_ the repository. A `--dest` pointing
+somewhere else _inside_ the repository sails past it.
+
+The failure needed two correct-looking behaviours to combine:
+
+1. A `--dest` run rewrote the canonical lock to describe the new tree.
+2. Nothing referenced that new tree yet, so `references` was recorded as `[]` — which moved the
+   orphan check off its fatal branch (`recorded > 0, live == 0`) and onto its benign "not wired up
+   yet" notice.
+
+The result, reproduced end to end: with `tsconfig.json` still extending `config/engineering`, that
+tree could be edited to `{"compilerOptions":{"strict":false}}` and `--check` still reported
+`11 vendored file(s) match` and exited 0. The verification had been moved off the tree the build
+actually uses, and nothing said so.
+
+Retargeting is now refused, before anything is fetched:
+
+```
+error: engineering-configs.lock.json already records config/engineering, and this run
+       would retarget it to config/elsewhere.
+       Those are different trees, and config/engineering would stop being verified
+       while --check kept passing. Re-run without --dest to refresh
+       config/engineering, or delete engineering-configs.lock.json first if you
+       really are moving the vendored tree.
+```
+
+Re-running the **same** `--dest` is a refresh and is unaffected; only a change of destination is
+refused. If you genuinely are relocating the vendored tree, delete the lock first — that makes the
+move an explicit act rather than a side effect.
+
+Two things worth taking from this beyond the fix. **A warning was already there and was not
+enough** — the previous behaviour printed that the old files were no longer tracked, and a test
+asserted it. The warning was accurate and the guarantee still evaporated, because nothing that read
+the lock afterwards could tell a retargeted lock from a fresh adoption. **And the guard that made
+the code look correct was the reason it was not** — an escape check answers "is this path outside
+the repository", which is a different question from "is this the tree we verify". Reading a guard
+tells you what it rejects; only running it tells you what it lets through.
+
 **A checker validates its input before it trusts it.** Two adopters arrived at the same rule from
 opposite directions, and it is the single most useful thing to know about `--check`: assert the
 lock parses, records files, and carries a usable ref **before** comparing any hashes. A checker

@@ -698,6 +698,45 @@ async function main() {
     if (!SETS[name]) fail(`unknown set '${name}'`, `Known sets: ${Object.keys(SETS).join(', ')}`);
   }
 
+  let previous = null;
+  try {
+    previous = JSON.parse(await readFile(LOCK, 'utf8'));
+  } catch {
+    // No previous lock: this is a first vendor.
+  }
+
+  // Retargeting the lock is how `--check` gets disarmed without anything looking
+  // wrong. A `--dest` run rewrites the canonical lock to describe a tree the
+  // repository does not use, and because nothing references that new tree yet,
+  // `references` is recorded as empty -- which turns the orphan check's fatal
+  // branch (recorded > 0, live == 0) into its benign "not wired up yet" notice.
+  // The wired tree can then be edited freely while `--check` still prints
+  // "N vendored file(s) match" and exits 0. Both halves are individually
+  // reasonable, and together they silently delete the guarantee. Reported by a
+  // consumer, reproduced against a real repository, and previously shipped here
+  // as a warning that said the coverage was being dropped -- which it did say,
+  // and which was not enough.
+  //
+  // Refused before anything is fetched: the answer does not depend on the
+  // payload, so downloading it first would only make the refusal slower and
+  // leave a half-populated directory behind.
+  //
+  // A probe is exempt because it cannot overwrite the lock anyway; refusing one
+  // would break a read-only inspection to prevent a write that never happens.
+  if (
+    !escapesCwd(dest) &&
+    previous &&
+    typeof previous.dest === 'string' &&
+    previous.dest !== dest
+  ) {
+    fail(
+      `${LOCK} already records ${previous.dest}, and this run would retarget it to ${dest}.`,
+      `Those are different trees, and ${previous.dest} would stop being verified while ` +
+        `--check kept passing. Re-run without --dest to refresh ${previous.dest}, or delete ` +
+        `${LOCK} first if you really are moving the vendored tree.`,
+    );
+  }
+
   // Fetch and validate everything before writing anything. A partial write is
   // worse than a failed one: the tools would run against a mix of refs and
   // report success.
@@ -770,13 +809,6 @@ async function main() {
       staged.map((item) => [lockKey(item.dest), { source: item.path, sha256: sha256(item.text) }]),
     ),
   };
-
-  let previous = null;
-  try {
-    previous = JSON.parse(await readFile(LOCK, 'utf8'));
-  } catch {
-    // No previous lock: this is a first vendor.
-  }
 
   // A lock whose keys point outside the working directory cannot be verified
   // from it, so writing one destroys the only record that can be. The probe
