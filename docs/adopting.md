@@ -8,6 +8,33 @@ How a repository consumes this one. Three layers, adopt in order.
 | [Practices](../practices/README.md)             | Technique for satisfying them        | Link by URL                                     |
 | [Packages](#2-install-the-shared-configuration) | Executable enforcement               | GitHub Packages                                 |
 
+## Start here: find your symptom
+
+**This guide is long and six consumers have re-derived answers that were already in it.** That is a
+failure of this document, not of the people reading it — so before reading linearly, search for your
+symptom. Every phrase below is a literal string in this file; search for it rather than scrolling.
+
+| What you are seeing                                         | Search for                                               |
+| ----------------------------------------------------------- | -------------------------------------------------------- |
+| CI fails instantly, no logs, `startup_failure`              | `read the annotation, do not infer`                      |
+| Every job fails in ~1s with `steps=0`                       | `The permission ceiling and the billing hold`            |
+| A version bump seems to change nothing                      | `Diffing the increment is not verifying the floor`       |
+| `--print-config` shows rules for a framework you do not use | `Grep the severity, not the name`                        |
+| `npm update` will not take a new minor                      | `Do not use a caret at all`                              |
+| `warn` rules are failing your build                         | `A warn severity is not advisory under`                  |
+| `TS7016` on a config file after enabling `checkJs`          | `Precondition 1: the config file must be`                |
+| Type declarations appear to do nothing                      | `Precondition 2:`                                        |
+| `pnpm` refuses a just-published version                     | `minimumReleaseAgeExclude`                               |
+| `TS5097` / `TS5096` on `.ts` import specifiers              | `allowImportingTsExtensions`                             |
+| Lint is green but you suspect coverage shrank               | `set of files linted, in both directions`                |
+| Go: a wall of `errcheck` findings that CI does not report   | `Compare the set of findings, not the set of rules`      |
+| A rule you expected to fire never fires                     | `A clean `rules-of-hooks` run is not proof of absence`   |
+| Package install returns `401`/`403`                         | `Visibility changes _authorization_, not authentication` |
+
+**If your symptom is not here, say so when you report it.** A report that this guide lacks something
+it already contains is still useful — it means the answer is unfindable, which is the same defect as
+missing. Both get fixed here.
+
 ## 1. Cite principles by ID
 
 Replace restated rules with a citation. Under
@@ -1678,6 +1705,29 @@ plugins that are mostly not loaded. So `--print-config` on a Svelte file legitim
 `react/*` entries and 39 `vue/*` entries. None of them run. **Grep the severity, not the name**;
 the positive check is whether the rules a release actually adds appear at a non-zero severity.
 
+**A warn severity is not advisory under `--max-warnings 0`.** The severities in these presets are
+chosen deliberately — `react-hooks/exhaustive-deps` is `warn` because it has real false positives,
+`no-console` is `warn` because tests and scripts legitimately print. But the gate this guide
+recommends, `eslint . --max-warnings 0`, promotes every one of them to build-failing. Verified:
+identical source, exit `0` without the flag and exit `1` with it. The distinction between `warn`
+and `error` collapses silently for anyone following the recommended gate, and `warn` reads as a
+soft landing that does not exist.
+
+Counts resolved through `ESLint.calculateConfigForFile` on a `.tsx`, which is the only correct way
+to measure this — flat-merging the `rules` blocks ignores `files` scoping and reports every preset
+one rule short:
+
+| Preset           | `warn` rules | Notes                                   |
+| ---------------- | ------------ | --------------------------------------- |
+| `base()`         | 1            | `no-console` — so no consumer is exempt |
+| `reactConfig()`  | 2            | adds `react-hooks/exhaustive-deps`      |
+| `svelteConfig()` | 2            | adds `svelte/no-at-debug-tags`          |
+| `nextConfig()`   | 18           | 14 `@next/next/*` plus four shared      |
+
+If you run `--max-warnings 0`, decide per rule whether you want it blocking and downgrade the rest
+at your call site rather than discovering it mid-migration. The count is pinned by a test in this
+repository, so a release cannot change it silently.
+
 **And the source diff misleads in the other direction too, which is the case that costs a bump
 rather than hiding one.** A consumer verifying `0.6.0 → 0.7.0` found `react.js` had changed by
 **−67 lines** and was about to report a behavioural change. The resolved config was identical:
@@ -3097,19 +3147,35 @@ formatting change is exactly what stops it.
 
 Merge the format pass quickly or freeze the branch. Its cost grows with every day it stays open.
 
-### The preset lints more files than yours did
+### The preset lints a different set of files than yours did
 
 A rule-by-rule diff of the old config against this one cannot see this, and it is easy to
 under-report as a result: the shared presets apply to paths many local configs never covered —
 `scripts/**/*.mjs` most commonly. One repository's first run surfaced a genuine `no-regex-spaces`
 violation in a script that had never been linted at all.
 
-So when comparing before and after, compare the **set of files linted**, not just the set of rules
-enabled. Widened coverage is a real gain that a rules diff scores as zero:
+**This heading previously said "lints more files", and a consumer was right that the asymmetry
+misleads.** They measured both sets — 84 files under each config, empty set difference — and
+observed that the file the section predicts would be newly covered was already linted before. Their
+point: a repository told "the preset lints more" goes looking for additions, finds none, concludes
+it is fine, and skips the measurement. **The expensive failure is the opposite one — a file the old
+config linted that the preset stops linting.** That is a silent coverage loss, and it is invisible
+to a rule diff _and_ to a green lint run, because the finding that would have been reported is
+simply never produced.
+
+So compare the **set of files linted, in both directions**:
 
 ```bash
-npx eslint --debug . 2>&1 | grep -c 'Linting '
+npx eslint --debug . 2>&1 | grep 'Linting ' | sed 's/.*Linting //' | sort > after.txt
+# same against the old config, e.g. via --config, then:
+comm -3 before.txt after.txt
 ```
+
+`comm -3` prints both columns: left-only lines are coverage you lost, right-only lines are coverage
+you gained. A count alone cannot distinguish "84 and 84" from "84 and 84 with twelve swapped", so
+compare the sets and not their sizes. Discount any scratch config you wrote to disk to run the
+comparison — that shows up as a spurious one-file delta and has already sent one consumer chasing
+it.
 
 ### Do not bulk-remove `svelte-ignore` comments
 
@@ -3517,23 +3583,37 @@ export default nextConfig({
 ```
 
 Type declarations ship with the package from `0.8.0`, so option names and types are checked even
-in a plain `eslint.config.js` if you lint it under `checkJs`. Do not hand-write ambient
-declarations. `extend` is deliberately typed `unknown[]`: config objects originating from a
-different copy of `@types/eslint` than yours are not mutually assignable, so a narrower type would
-reject correct configs.
+Type declarations ship with the package from `0.8.0`, so option names and types are checked even
+in a plain `eslint.config.js` **if that file is inside a TypeScript project and that project checks
+JavaScript**. Both conditions are load-bearing, both fail silently, and most repositories satisfy
+neither by default. Do not hand-write ambient declarations. `extend` is deliberately typed
+`unknown[]`: config objects originating from a different copy of `@types/eslint` than yours are not
+mutually assignable, so a narrower type would reject correct configs.
 
-**`include` without `allowJs` is a silent no-op, not an error.** A consumer enabling the
-declarations found their `tsconfig.node.json` had listed `svelte.config.js`, `eslint.config.js`
-and `prettier.config.js` in `include` since adoption — and with `allowJs` off, `tsc` skips all
-three. No error, no warning, exit `0`, and `--listFiles` shows none of them in the program. The
-`include` entry made it look as though they were checked; they never had been.
+**Precondition 1: the config file must be in some project's file set.** `eslint.config.js` normally
+sits at the repository root, above every project's `include`. A consumer checked each of their
+projects with `tsc --listFilesOnly` and found the root config in **none** of them, so the
+declarations could not have applied no matter what else was configured. Measured on a minimal
+project with `include: ["src"]`, `allowJs` and `checkJs` both on: the program contains `src/a.ts`
+and not `eslint.config.js`. Exit `0`, no diagnostic.
 
-So turning on the declarations changes nothing until `allowJs` and `checkJs` are both on, and the
-absence of any diagnostic reads as "the types do not work" rather than "the file is not being
-compiled." Confirm the file is actually in the program before concluding anything about it:
+They were right not to wire it up during a migration. Pulling a root config into a TypeScript
+project widens typecheck scope, which is a separate change with its own findings and belongs in its
+own pull request.
+
+**Precondition 2: `include` without `allowJs` is a silent no-op, not an error.** A second consumer
+found their `tsconfig.node.json` had listed `svelte.config.js`, `eslint.config.js` and
+`prettier.config.js` in `include` since adoption — and with `allowJs` off, `tsc` skips all three.
+No error, no warning, exit `0`, and `--listFiles` shows none of them in the program. The `include`
+entry made it look as though they were checked; they never had been.
+
+The two failures are independent and produce identical output — nothing. So turning on the
+declarations appears to do nothing, and the absence of any diagnostic reads as "the types do not
+work" rather than "the file is not being compiled." Confirm the file is actually in the program
+before concluding anything about it:
 
 ```bash
-tsc -p tsconfig.node.json --listFiles | grep prettier.config
+tsc -p tsconfig.node.json --listFilesOnly | grep eslint.config
 ```
 
 That is this guide's standing rule about probes, in a new place: a green run proves nothing until
