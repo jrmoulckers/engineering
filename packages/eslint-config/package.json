@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/eslint-config",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Engineering-owned ESLint flat configuration presets.",
   "license": "UNLICENSED",
   "private": false,
@@ -41,6 +41,7 @@
     "svelte.js",
     "react.js",
     "next.js",
+    "react-layer.js",
     "hooks.js",
     "ignores.js",
     "base.d.ts",

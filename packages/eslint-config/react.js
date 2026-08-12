@@ -1,68 +1,5 @@
-import tseslint from 'typescript-eslint';
-import reactPlugin from 'eslint-plugin-react';
-import jsxA11y from 'eslint-plugin-jsx-a11y';
-import { createRequire } from 'node:module';
-import { join } from 'node:path';
-
 import { base } from './base.js';
-import { isFlatConfig, resolveHooks } from './hooks.js';
-
-const JSX_FILES = ['**/*.jsx', '**/*.tsx'];
-
-/**
- * Resolve the consumer's React version at config-construction time.
- *
- * `eslint-plugin-react` accepts `version: 'detect'`, but its detection calls
- * `context.getFilename()`, which ESLint 10 removed. Every rule in the plugin
- * then fails to load with `contextOrFilename.getFilename is not a function` —
- * which reads like a broken plugin rather than a removed API, and is why this
- * is worth resolving here instead.
- *
- * Reading the version ourselves keeps the plugin working on ESLint 9 and 10
- * alike, because a concrete version never enters the detection path. When
- * React cannot be resolved we return `undefined` and set nothing: the plugin
- * warns and falls back to its own default, which still loads.
- *
- * @returns {string | undefined}
- */
-function detectReactVersion() {
-  // Resolve from the consumer's root first. `import.meta.url` would resolve
-  // relative to this package, which under pnpm's non-hoisted layout is a
-  // different (or absent) React than the one being linted.
-  const candidates = [join(process.cwd(), 'noop.js'), import.meta.url];
-
-  for (const from of candidates) {
-    try {
-      const { version } = createRequire(from)('react/package.json');
-      if (typeof version === 'string' && version) return version;
-    } catch {
-      // Try the next resolution root.
-    }
-  }
-  return undefined;
-}
-
-/**
- * Resolve a flat config from a plugin that may publish it under any of several
- * historical keys, and may publish either an array or a single config object.
- *
- * Each React plugin picked a different convention, and reading the wrong key
- * yields a value that fails at config load rather than at lint time.
- *
- * @param {string} pluginName Package name, for the error message only.
- * @param {unknown} candidate The value read from the plugin.
- * @param {string} where Key path that was read, for the error message only.
- * @returns {import('eslint').Linter.Config[]}
- */
-function asConfigArray(pluginName, candidate, where) {
-  if (Array.isArray(candidate) && candidate.every(isFlatConfig)) return candidate;
-  if (isFlatConfig(candidate)) return [/** @type {import('eslint').Linter.Config} */ (candidate)];
-
-  throw new TypeError(
-    `@jrmoulckers/eslint-config: ${pluginName} exposes no usable flat config at "${where}". ` +
-      `Its export shape has changed; the preset needs updating.`,
-  );
-}
+import { reactLayer } from './react-layer.js';
 
 /**
  * React preset.
@@ -71,6 +8,10 @@ function asConfigArray(pluginName, candidate, where) {
  * TypeScript preset. Deliberately excludes `eslint-plugin-react`'s prop-types
  * rules, which duplicate work TypeScript already does, and its
  * `react-in-jsx-scope` rule, which the automatic JSX runtime made obsolete.
+ *
+ * The plugin layer itself lives in `react-layer.js` and is shared with
+ * `nextConfig()`, so a Next application gets the same React and accessibility
+ * rules as a Vite one.
  *
  * Requires `eslint-plugin-react`, `eslint-plugin-react-hooks`, and
  * `eslint-plugin-jsx-a11y` in the consumer.
@@ -82,42 +23,9 @@ function asConfigArray(pluginName, candidate, where) {
 export function reactConfig(options = {}) {
   const { compiler = false, extend = [], ...rest } = options;
 
-  const reactFlat = reactPlugin.configs?.flat ?? {};
-  const reactVersion = detectReactVersion();
-
   return base({
     ...rest,
-    extend: [
-      ...asConfigArray('eslint-plugin-react', reactFlat.recommended, 'configs.flat.recommended'),
-      ...asConfigArray(
-        'eslint-plugin-react',
-        reactFlat['jsx-runtime'],
-        "configs.flat['jsx-runtime']",
-      ),
-      ...asConfigArray(
-        'eslint-plugin-jsx-a11y',
-        jsxA11y.flatConfigs?.recommended ?? jsxA11y.configs?.recommended,
-        'flatConfigs.recommended',
-      ),
-      ...resolveHooks(compiler),
-      {
-        files: JSX_FILES,
-        languageOptions: {
-          parser: tseslint.parser,
-          parserOptions: { ecmaFeatures: { jsx: true } },
-        },
-      },
-      {
-        ...(reactVersion ? { settings: { react: { version: reactVersion } } } : {}),
-        rules: {
-          // TypeScript checks prop shapes; prop-types is redundant ceremony.
-          'react/prop-types': 'off',
-          // The automatic JSX runtime removed the need for React to be in scope.
-          'react/react-in-jsx-scope': 'off',
-        },
-      },
-      ...extend,
-    ],
+    extend: [...reactLayer(compiler), ...extend],
   });
 }
 
