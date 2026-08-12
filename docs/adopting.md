@@ -31,6 +31,7 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | A valid, documented option is rejected as unknown           | `silently overrides the package's shipped types`         |
 | A citation link works but lands at the top of the file      | `cannot 404, so retitling a heading`                     |
 | Unsure which version of a package is actually installable   | `a repository counter, not a package version`            |
+| A "bogus option" check says a typed package has no types    | `does not work on every package`                         |
 | `pnpm` refuses a just-published version                     | `minimumReleaseAgeExclude`                               |
 | `TS5097` / `TS5096` on `.ts` import specifiers              | `allowImportingTsExtensions`                             |
 | Lint is green but you suspect coverage shrank               | `set of files linted, in both directions`                |
@@ -1492,6 +1493,35 @@ option silently widening to `any` looks like:
 | a **bogus** option | **still rejected**, naming the package's own interface |
 
 The third is load-bearing; the first two pass identically against a shim that resolved to `any`.
+
+> **The bogus-option check does not work on every package, and `prettier-config` is one where it
+> silently reports the wrong answer.** It was written against `eslint-config`, whose options are a
+> named interface with a closed set of keys. Prettier's own `Config` — which
+> `@jrmoulckers/prettier-config` deliberately re-exports rather than restating — carries an index
+> signature:
+>
+> ```ts
+> [_: string]: unknown;
+> ```
+>
+> That is correct of Prettier, because plugins contribute arbitrary options. But it means **any**
+> property name type-checks, so a bogus key is accepted by a fully, correctly typed package. Run
+> the recipe above and you conclude the types are missing when they are live.
+>
+> **Where a type is open, probe a known key's type instead of an unknown key's existence:**
+>
+> ```js
+> /** @type {number} */
+> const n = config.semi; // → TS2322: 'boolean | undefined' is not assignable to 'number'
+> ```
+>
+> An error naming `boolean | undefined` proves the declaration resolved and carries real types. A
+> silent pass means it widened to `any`. Verified both arms against the published package.
+>
+> The general rule, which outlives this instance: **a negative check is only evidence if the thing
+> it looks for is impossible when healthy.** "Rejects nonsense" assumes the type is closed. Where it
+> is open by design, absence of an error is not absence of a type — the same vacuous-check shape as
+> a fragment that cannot 404, and as a rule count that cannot see a dropped layer.
 
 ### Under-granting kills the run; over-granting does nothing at all
 
