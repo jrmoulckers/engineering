@@ -30,6 +30,7 @@ symptom. Every phrase below is a literal string in this file; search for it rath
 | Type declarations appear to do nothing                      | `Precondition 2:`                                        |
 | A valid, documented option is rejected as unknown           | `silently overrides the package's shipped types`         |
 | A citation link works but lands at the top of the file      | `cannot 404, so retitling a heading`                     |
+| Unsure which version of a package is actually installable   | `a repository counter, not a package version`            |
 | `pnpm` refuses a just-published version                     | `minimumReleaseAgeExclude`                               |
 | `TS5097` / `TS5096` on `.ts` import specifiers              | `allowImportingTsExtensions`                             |
 | Lint is green but you suspect coverage shrank               | `set of files linted, in both directions`                |
@@ -3374,6 +3375,37 @@ gate you have never seen fail is a gate you have not yet tested.
 > names a path, a stack trace names the frame that threw, and a `startup_failure` names nothing at
 > all — in none of those cases is the named thing reliably the cause.
 
+### A git tag is a repository counter, not a package version
+
+> **This repository's maintainer got this wrong seven times, to seven different consumers.** Every
+> instance had the same cause: announcing a package version by reading the git tag that shipped it.
+> The two numbers were never related and have diverged badly — tag `v0.115.0` ships
+> `eslint-config@0.16.0`. A tag counts commits to this repository; a package version counts releases
+> of one package. Nothing enforces a relationship, and nothing ever will.
+>
+> The cost is not the wrong number, it is the round trip. A consumer told a stale floor either
+> re-pins to something older than what they already have, or spends a message correcting it — and
+> in at least two cases the advice would have been a **downgrade** from what the consumer had
+> already merged.
+>
+> ```bash
+> npm run versions:print   # workspace vs published vs the range consumers pin
+> ```
+>
+> It reads the working tree, so it needs no registry credential — which matters, because
+> `versions:check` degrades to "registry unreachable" without `read:packages`, precisely when
+> someone is trying to look a version up. From outside this repository, `npm view <pkg> version`
+> settles it in one call.
+>
+> The column to quote is **published**, not workspace. A workspace version ahead of the published
+> one is normal mid-release: the bump has merged, the tag has not been pushed, and the version is
+> **not installable yet**. `versions:print` names that gap explicitly, because it is exactly the
+> state that produces a confidently wrong announcement.
+>
+> The generalisable form: **when two numbers are adjacent and look interchangeable, something has
+> to state which one is authoritative** — otherwise the cheaper one to read wins, and it is usually
+> the wrong one.
+
 ### A citation's `#fragment` cannot 404, so retitling a heading breaks it silently
 
 > A wrong path 404s and someone notices. **A wrong fragment does not.**
@@ -3988,10 +4020,12 @@ export default nextConfig({
 ```
 
 Type declarations ship with the package from `0.8.0`, so option names and types are checked even
-Type declarations ship with the package from `0.8.0`, so option names and types are checked even
 in a plain `eslint.config.js` **if that file is inside a TypeScript project and that project checks
 JavaScript**. Both conditions are load-bearing, both fail silently, and most repositories satisfy
-neither by default. Do not hand-write ambient declarations. `extend` is deliberately typed
+neither by default. Do not hand-write ambient declarations — and **if you already did, delete
+them**: an existing one does not become redundant when the package ships types, it silently
+overrides them. See `A local declare module silently overrides the package's shipped types`.
+`extend` is deliberately typed
 `unknown[]`: config objects originating from a different copy of `@types/eslint` than yours are not
 mutually assignable, so a narrower type would reject correct configs.
 
