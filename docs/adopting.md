@@ -966,7 +966,7 @@ jobs:
 > ```
 
 Pass a `secrets: NODE_AUTH_TOKEN:` block only for a registry the job's own token cannot reach.
-If you staged one for GitHub Packages, delete it.
+If you staged a `secrets:` block on a `uses:` job for GitHub Packages, delete that block.
 
 > **"Pass no secret at all" is about the caller's `secrets:` block, not about every
 > `NODE_AUTH_TOKEN` line in your file.** A consumer flagged that the sentence reads as "delete
@@ -985,6 +985,33 @@ If you staged one for GitHub Packages, delete it.
 > would pick; deleting an inline `env:` is a 401 on the next run. When in doubt, check whether the
 > line sits under a `uses:` job — a job that delegates has no install step of its own to
 > authenticate.
+
+**The discriminator is mechanical, not a judgment call.** A second consumer re-reported this
+after the guidance above shipped, which suggests "check whether the line sits under a `uses:`
+job" still reads as advice you have to apply carefully. It isn't: GitHub's schema permits a
+`secrets:` block **only** on a reusable-workflow call, so the ambiguous shape cannot exist.
+
+```console
+$ actionlint
+.github/workflows/bad.yml:6:5: "secrets" is only available for a reusable workflow call
+  with "uses" but "uses" is not found in job "j" [syntax-check]
+```
+
+That turns the instruction into a grep with no false positives:
+
+| Search                 | Matches                                          | Safe to act on          |
+| ---------------------- | ------------------------------------------------ | ----------------------- |
+| `NODE_AUTH_TOKEN`      | caller `secrets:` blocks **and** your own `env:` | **no** — conflates both |
+| `secrets:` under a job | only reusable-workflow calls                     | **yes**                 |
+
+Grep for the block, never for the token name. The two constructs are indistinguishable by the
+token name and perfectly distinguishable by the keyword that encloses it.
+
+**And the fallback only covers workflows this backbone owns.** Zero-config authentication is a
+property of the reusable workflow's own `setup-node` step. A job you define yourself gets
+nothing automatically, no matter how the callee is configured — so an inline install step needs
+its own `registry-url`, `scope`, and `env: NODE_AUTH_TOKEN:` even in a repository where every
+delegated job authenticates without configuration.
 
 **Deleting it is a simplification, not a repair — and that distinction is worth stating out loud.**
 `NODE_AUTH_TOKEN` is still a declared optional `workflow_call` secret in every one of these
@@ -1278,6 +1305,22 @@ If audit contacted the scoped registry, this must fail with a DNS error. It did 
 A 401 requires reaching a host; an unroutable host cannot return one. Reproduced independently in
 both npm and pnpm.
 
+**A consumer confirmed the same result from the opposite direction — and retracted their own
+earlier report to do it.** They had told this repository that `reusable-security-ci` would 401
+and needed registry inputs. Rather than let that stand, they ran `pnpm audit --audit-level=high`
+against a fully registry-resolved lockfile — every `@jrmoulckers/*` entry a
+`npm.pkg.github.com` tarball URL with an integrity hash — with **no token present at all**. Exit
+`0`, no 401.
+
+The two experiments falsify the same claim from opposite ends. The blackhole test removes the
+registry and shows audit never notices; theirs populates the scope completely and shows audit
+still needs no credential. A single result in either direction is consistent with "the scope
+happened not to matter here"; together they establish that audit's endpoint selection is
+independent of scope configuration.
+
+It is worth recording that the retracted claim was never tested when it was made — it was
+inferred from the workflow reading `npm ci`-shaped. The correction cost one command.
+
 > **Audit sends dependency names — including `@jrmoulckers/*` — to `registry.npmjs.org`.** The bulk
 > advisory request contains the name and version of every dependency, whichever registry resolved
 > it. Scoping a dependency to a private registry does **not** keep it out of that payload.
@@ -1296,6 +1339,58 @@ data. It does **not** hold for a command that resolves or installs — `npm audi
 install-then-audit sequence — because those do contact the scoped registry and will 401 without
 a token. If you override `reusable-security-ci`'s `audit-command` input with anything of that
 shape, you are back to needing registry configuration.
+
+**A suppressed advisory still prints.** A consumer reported that their audit outputs `2 high` and
+exits `0`, because both advisories are suppressed by `ignoreGhsas` — and warned that a gate
+grepping audit _output_ rather than trusting its exit code would fire on their repository
+spuriously. Reproduced here, and the mechanism is sharper than a count mismatch: pnpm keeps the
+advisory's full table row and leaves it in the severity summary, marking it only with a
+parenthetical.
+
+```console
+$ pnpm audit --audit-level=high      # advisory NOT suppressed
+Severity: 1 moderate | 1 critical
+
+$ pnpm audit --audit-level=high      # same advisory, suppressed
+Severity: 1 moderate (1 ignored) | 1 critical
+```
+
+The suppressed and unsuppressed runs differ by seven characters, and the severity word survives
+both. Any gate matching `/high|critical/` on stdout cannot distinguish them. This is the same
+failure as the earlier probes: a check whose signal was read out of text that was never a signal.
+The exit code is the contract — audit already computed the answer, and re-deriving it from prose
+discards the computation.
+
+**And on pnpm 11 that suppression may already be inert.** `pnpm.auditConfig` in `package.json`
+is no longer read:
+
+```console
+$ pnpm --version
+11.10.0
+$ pnpm audit --audit-level=high
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were
+ignored: "pnpm.auditConfig". See https://pnpm.io/settings for the new home of each setting.
+Severity: 1 moderate | 1 critical        # (1 ignored) is gone — suppression dropped
+```
+
+The setting moved to `pnpm-workspace.yaml`:
+
+```yaml
+auditConfig:
+  ignoreGhsas:
+    - GHSA-vh95-rmgr-6w4m
+```
+
+Note the failure direction. This one is _safe_ — suppressions dropping means previously hidden
+advisories reappear and the gate goes red — but it goes red on a pnpm upgrade, in a repository
+whose audit configuration nobody touched, for advisories somebody already triaged and accepted.
+The warning is printed, but it is a `[WARN]` with an unchanged exit code, so nothing fails at the
+moment the setting stops working. Any repository carrying an `ignoreGhsas` list in `package.json`
+should move it before upgrading, not after.
+
+This is the second pnpm 11 change in this guide to alter behaviour with no failing command at the
+point of change; the release-age quarantine is the other. Treat a pnpm major as a settings
+migration, not just a resolver upgrade.
 
 `--omit=dev` makes the point moot regardless. All three presets are `devDependencies`, so an audit
 scoped to production dependencies never queries them and passes even while `npm ci` fails in the
