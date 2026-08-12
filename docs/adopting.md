@@ -3035,12 +3035,36 @@ copy: the preset then fails to load rather than silently skipping the rules.
 with `contextOrFilename.getFilename is not a function`, which reads like a broken plugin rather
 than a removed API.
 
-`reactConfig()` and `nextConfig()` are **not** affected: they resolve the installed React version
-themselves at config-construction time and pass a concrete string, so nothing enters the detection
-path. Verified against ESLint 10.8.1 with `eslint-plugin-react@7.37.5` and React 19 — the preset
-lints normally, and the same config forced to `'detect'` throws the error above. If you are
-migrating, the `'detect'` line is usually the only thing you need to delete; keeping your own
-`settings.react` block is what reintroduces the failure.
+`reactConfig()` and `nextConfig()` are **not** affected **from `eslint-config@0.4.0`**: they resolve
+the installed React version themselves at config-construction time and pass a concrete string, so
+nothing enters the detection path. Verified against ESLint 10.8.1 with `eslint-plugin-react@7.37.5`
+and React 19 — the preset lints normally, and the same config forced to `'detect'` throws the error
+above.
+
+> **Check the preset version before you go looking in your own config, because for three releases
+> the `'detect'` line was ours.** This section previously said the line was "usually the only thing
+> you need to delete" and that "keeping your own `settings.react` block is what reintroduces the
+> failure." That is right from `0.4.0` and **wrong at or below `0.3.0`**, where `react.js` itself
+> carried a bare `settings: { react: { version: 'detect' } }`:
+>
+> | `eslint-config` | `react.js` sets                                         |
+> | --------------- | ------------------------------------------------------- |
+> | `0.2.0`–`0.3.0` | `settings: { react: { version: 'detect' } }` — **ours** |
+> | `0.4.0`+        | `detectReactVersion()`, a concrete version string       |
+>
+> A consumer on `0.3.0` who follows the old advice greps their own config, finds nothing, and is
+> left with neither the cause nor the fix — while the actual remedy, **upgrade past `0.4.0`**, goes
+> unstated. That was reported by a consumer who could not find the line they were told to delete.
+>
+> The failure is worth naming beyond this one line: **a remedy phrased as "look in your config"
+> silently asserts the defect is not in the shipped artifact.** When it is, the search returns clean
+> and the clean result reads as _"not my problem either"_ rather than _"wrong place to look."_ If a
+> defect existed in released versions, the remedy has to name the version boundary, or it sends
+> every consumer below that boundary on a search that cannot succeed.
+>
+> Note that grepping the preset source for `detect` does **not** answer this. From `0.4.0` the word
+> still appears in `react.js` — in the function name `detectReactVersion` and in the comment
+> explaining why `'detect'` is not used. Match the **setting**, not the string.
 
 > **Isolating _which_ component throws is not the same as finding the cause, and the difference
 > changed the recommendation.** A consumer on ESLint 10 hit this error, installed the three peers
