@@ -429,3 +429,50 @@ describe('vendor-configs lock coverage', () => {
     }
   });
 });
+
+describe('vendor-configs formatter interaction', () => {
+  test('warns when the vendored tree is not prettier-ignored', { skip: OFFLINE }, () => {
+    const dir = workspace();
+    try {
+      writeFileSync(join(dir, '.prettierignore'), 'dist/\n# config/engineering\n', 'utf8');
+      const { code, out } = run(['v0.115.0', '--dest', 'config/engineering'], dir);
+      assert.equal(code, 0);
+      assert.match(out, /'config\/engineering' is not matched by any line in \.prettierignore/);
+      // A commented-out entry must not count as coverage.
+      assert.match(out, /config\/engineering\//);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test(
+    'stays silent when an entry covers the tree, directly or by parent',
+    { skip: OFFLINE },
+    () => {
+      for (const entry of ['config/engineering/', 'config/']) {
+        const dir = workspace();
+        try {
+          writeFileSync(join(dir, '.prettierignore'), `${entry}\n`, 'utf8');
+          const { code, out } = run(['v0.115.0', '--dest', 'config/engineering'], dir);
+          assert.equal(code, 0);
+          assert.doesNotMatch(out, /not matched by any line/, `${entry} should cover the tree`);
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      }
+    },
+  );
+
+  test('says nothing when the repository has no .prettierignore', { skip: OFFLINE }, () => {
+    const dir = workspace();
+    try {
+      const { code, out } = run(['v0.115.0', '--dest', 'config/engineering'], dir);
+      assert.equal(code, 0);
+      // Absence is not evidence Prettier is used, so warning here would be noise
+      // on every repository that does not format at all.
+      assert.doesNotMatch(out, /not matched by any line/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

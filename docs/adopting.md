@@ -303,6 +303,45 @@ covers, and the current set is **10**. Eight means a ref older than `v0.112.0` g
 prettier declarations are missing — a more legible signal than reading the tag, because `v0.15.3`
 and `v0.115.0` look similar and sort in the wrong order.
 
+#### Prettier-ignore the vendored tree, or drift detection starts lying
+
+The vendored files are written byte-identical to upstream and pinned by SHA-256. A repo-wide
+`prettier --write` rewrites them and breaks every recorded hash — and the damage is worse than
+losing the check. `--check` then reports the files as drifted, and the natural reading of that is
+**"someone hand-edited the vendored config"**, not "the formatter reformatted it." An
+upstream-drift signal becomes a false local-edit signal, which is the one failure mode that costs
+more than having no check at all.
+
+```
+config/engineering/
+```
+
+A repository escapes this only while the vendored Prettier config happens to agree with upstream's
+own formatting on every vendored file. That is luck, not a property anyone maintains: one file
+whose upstream formatting differs from the config shipped beside it is enough. Two repositories
+reached the same `.prettierignore` entry independently, one of them by reasoning from the existing
+`vendor/` precedent.
+
+Vendoring now warns when the destination is not matched by any line in `.prettierignore`. The check
+is a literal prefix match against non-comment lines rather than full gitignore semantics, so it
+says exactly what it looked for, and it stays a warning: a repository with no `.prettierignore` at
+all is not necessarily formatting anything.
+
+#### Splitting a migration does not split its consequences
+
+If you split an adoption into a vendored layer and a registry layer, the type fixes authored
+against the _combined_ branch can depend on the layer you are not shipping yet.
+
+One repository hit this precisely: its source fixes were written on a branch that had also adopted
+the ESLint preset, whose `no-unused-vars` carries `argsIgnorePattern: '^_'`. Ported onto a branch
+that kept the repository's own ESLint config, a `_`-prefixed binding errored — because an
+`eslint-disable-next-line` had been deleted as redundant while the preset made it redundant, and
+removing the preset made it load-bearing again.
+
+The general shape: **a suppression deleted as redundant is only redundant under the config that
+made it so.** When splitting, re-run the lower layer's gates against the lower layer's config
+rather than assuming a fix that passed on the combined branch still applies.
+
 #### Vendor everything in one run, or the lock stops covering what you moved
 
 The lock records **one run**. It replaces rather than merges, so if you change `--dest` or `--set`,
