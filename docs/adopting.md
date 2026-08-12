@@ -303,6 +303,29 @@ covers, and the current set is **10**. Eight means a ref older than `v0.112.0` g
 prettier declarations are missing — a more legible signal than reading the tag, because `v0.15.3`
 and `v0.115.0` look similar and sort in the wrong order.
 
+#### A warm npm cache makes a token requirement disappear
+
+If you are checking whether a change removed the need for a token, **a plain `npm ci` cannot tell
+you.** npm serves packages from its local cache without contacting the registry, so any machine
+that authenticated once will install cleanly with every credential removed:
+
+```
+npm ci                          # added 599 packages, EXIT=0   <- proves nothing
+npm ci --cache "$(mktemp -d)"   # E401 ... authentication token not provided
+```
+
+Both results are real. The first is a **false negative on the token requirement**, and it is
+reproducible: an install satisfied entirely from cache makes no registry request, so there is
+nothing for authentication to fail.
+
+This matters more than an ordinary measurement error because of who it affects. The person
+verifying is the person most likely to have a warm cache, and the people who get the failure — a
+new contributor, and CI, which always starts cold — are the ones the change was supposed to help.
+A cached probe hides precisely the onboarding regression it is run to detect.
+
+Verify with a fresh cache directory rather than `npm cache clean`, which discards a cache you may
+want. The same applies to `pnpm store` and yarn's cache.
+
 #### Prettier-ignore the vendored tree, or drift detection starts lying
 
 The vendored files are written byte-identical to upstream and pinned by SHA-256. A repo-wide
