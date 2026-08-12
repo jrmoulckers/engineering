@@ -1322,6 +1322,171 @@ describe('the staleness notice reports how big the gap is', { skip: OFFLINE }, (
     }
   });
 
+  // Pristine is not the same as used. A consumer showed that everything the
+  // check verifies can hold on a tree nothing reads: rewire tsconfig.json back
+  // to the package the vendored files replaced, and the hashes stay green while
+  // the files become inert. These three tests pin that distinction, because the
+  // failure is invisible to every other assertion in this suite.
+  const SHA_EMPTY_OBJ = createHash('sha256').update('{}\n').digest('hex');
+
+  function orphanFixture(dir, { wired }) {
+    mkdirSync(join(dir, 'config', 'engineering'), { recursive: true });
+    writeFileSync(join(dir, 'config', 'engineering', 'base.json'), '{}\n', 'utf8');
+    writeFileSync(
+      join(dir, 'tsconfig.json'),
+      JSON.stringify({
+        extends: wired ? './config/engineering/base.json' : '@jrmoulckers/tsconfig/base.json',
+      }),
+      'utf8',
+    );
+    writeFileSync(
+      join(dir, 'engineering-configs.lock.json'),
+      JSON.stringify({
+        ref: 'v1.0.0',
+        dest: 'config/engineering',
+        references: ['tsconfig.json'],
+        files: {
+          'config/engineering/base.json': { source: 'packages/x/base.json', sha256: SHA_EMPTY_OBJ },
+        },
+      }),
+      'utf8',
+    );
+  }
+
+  test('an edited copy of the script does not vouch for the tree either', async () => {
+    const dir = workspace();
+    try {
+      orphanFixture(dir, { wired: false });
+      // Content identity cannot catch a copy the adopter has edited, and the
+      // copy being executed is exactly the one most likely to have been. Only
+      // the resolved-path exclusion covers this, so it gets its own test rather
+      // than sitting in the tree unkillable.
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      const copy = join(dir, 'scripts', 'vendored-copy.mjs');
+      writeFileSync(copy, `${readFileSync(script, 'utf8')}\n// locally edited\n`, 'utf8');
+      const { code, out } = await runAsyncIn(
+        dir,
+        ['--check', '--no-remote'],
+        {
+          VENDOR_API_BASE: 'http://127.0.0.1:1',
+        },
+        copy,
+      );
+      assert.equal(
+        code,
+        1,
+        'the running script must never count as a reference to its own default dest',
+      );
+      assert.match(out, /nothing in this repository references the vendored configs/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('the committed script cannot vouch for the tree it audits', async () => {
+    const dir = workspace();
+    try {
+      orphanFixture(dir, { wired: false });
+      // Adopters are told to commit this script, and it carries the default
+      // dest as a string literal. A live probe on a realistic tree caught this
+      // passing when it must fail -- the unit fixtures missed it because they
+      // never placed the script inside the workspace.
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      writeFileSync(
+        join(dir, 'scripts', 'vendor-configs.mjs'),
+        readFileSync(script, 'utf8'),
+        'utf8',
+      );
+      const { code, out } = await runAsyncIn(dir, ['--check', '--no-remote'], {
+        VENDOR_API_BASE: 'http://127.0.0.1:1',
+      });
+      assert.equal(
+        code,
+        1,
+        'the vendor script must not count as a live reference to its own default dest',
+      );
+      assert.match(out, /nothing in this repository references the vendored configs/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('the vendored tree cannot vouch for itself', async () => {
+    const dir = workspace();
+    try {
+      orphanFixture(dir, { wired: false });
+      // A vendored file that names its own destination — a header comment, a
+      // sibling `extends`, anything. Counting it would make the check vacuous:
+      // the tree would prove its own liveness and never fail.
+      writeFileSync(
+        join(dir, 'config', 'engineering', 'note.js'),
+        '// vendored into config/engineering by scripts/vendor-configs.mjs\n',
+        'utf8',
+      );
+      const { code, out } = await runAsyncIn(dir, ['--check', '--no-remote'], {
+        VENDOR_API_BASE: 'http://127.0.0.1:1',
+      });
+      assert.equal(code, 1, 'a reference from inside the vendored tree must not count as liveness');
+      assert.match(out, /nothing in this repository references the vendored configs/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a vendored tree nothing references fails, though every hash matches', async () => {
+    const dir = workspace();
+    try {
+      orphanFixture(dir, { wired: false });
+      const { code, out } = await runAsyncIn(dir, ['--check', '--no-remote'], {
+        VENDOR_API_BASE: 'http://127.0.0.1:1',
+      });
+      // The hashes pass first. That is the whole point: a green hash comparison
+      // sits directly above the failure, so the two claims cannot be conflated.
+      assert.match(out, /1 vendored file\(s\) match/);
+      assert.equal(code, 1, 'an orphaned vendored tree must not be reported as healthy');
+      assert.match(out, /nothing in this repository references the vendored configs/);
+      assert.match(out, /tsconfig\.json/, 'the failure must name what used to reference them');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('the same tree passes while something still references it', async () => {
+    const dir = workspace();
+    try {
+      orphanFixture(dir, { wired: true });
+      const { code, out } = await runAsyncIn(dir, ['--check', '--no-remote'], {
+        VENDOR_API_BASE: 'http://127.0.0.1:1',
+      });
+      assert.equal(code, 0, `a wired tree must pass:\n${out}`);
+      assert.match(out, /1 file\(s\) reference the vendored configs/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a lock predating the references field is not failed for lacking one', async () => {
+    // Consumers hold locks written by older versions of this script. Treating a
+    // missing field as "zero references" would fail every one of them on upgrade
+    // -- an upstream change reddening a downstream build, which is the thing
+    // this repository refuses to do.
+    const dir = workspace();
+    try {
+      orphanFixture(dir, { wired: false });
+      const lockPath = join(dir, 'engineering-configs.lock.json');
+      const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+      delete lock.references;
+      writeFileSync(lockPath, JSON.stringify(lock), 'utf8');
+
+      const { code } = await runAsyncIn(dir, ['--check', '--no-remote'], {
+        VENDOR_API_BASE: 'http://127.0.0.1:1',
+      });
+      assert.equal(code, 0, 'an old lock must not fail merely for being old');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('--no-remote is rejected when vendoring, which cannot be offline', async () => {
     const dir = workspace();
     const { code, out } = await runAsyncIn(dir, ['v0.15.4', '--no-remote']);

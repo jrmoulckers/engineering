@@ -532,6 +532,57 @@ staleness signal without putting a network call in a lint gate.
 `--no-remote` is rejected when vendoring rather than ignored, because vendoring fetches files and
 cannot be offline; accepting it there would promise a guarantee that does not exist.
 
+#### Pristine is not the same as used
+
+The adopter who gave us the sentence above pushed it one step further, and the extension is sharper
+than the original: **a green `--check` means your tree matches the lock, not that your pin is
+current — and not that anything still reads it.**
+
+The failure is concrete. Point `tsconfig.json` back at `@jrmoulckers/tsconfig`, leave the vendored
+directory in place, and every hash still matches. The files are byte-perfect. Nothing loads them.
+`--check` scored that tree healthy, correctly from its own side, and the repository had silently
+stopped being an adopter of anything.
+
+So the lock now records where the files went and what pointed at them at vendor time:
+
+```json
+{
+  "ref": "v0.120.0",
+  "dest": "config/engineering",
+  "references": ["tsconfig.json", "prettier.config.js"],
+  "files": { "...": { "source": "...", "sha256": "..." } }
+}
+```
+
+`--check` re-scans the working tree for live references to `dest` and fails if the lock recorded
+some and none survive:
+
+```
+6 vendored file(s) match engineering-configs.lock.json at v0.120.0.
+error: nothing in this repository references the vendored configs in config/engineering.
+  at vendor time these did: tsconfig.json, prettier.config.js
+```
+
+Note the order. The hash line passes _first_, immediately above the failure, so the two claims
+cannot be read as one.
+
+Three deliberate limits:
+
+- **A lock written before this field is skipped, not failed.** A missing `references` is absence of
+  evidence; refusing to run on it would break every adopter on an older lock at once.
+- **Nothing may vouch for itself.** References found _inside_ `dest` do not count, and neither does
+  this script — it carries the default `config/engineering` as a string literal, and you are told to
+  commit it. Counting either would let the thing being audited supply its own evidence, and the
+  check would pass forever without ever being able to fail. Both were caught here rather than in the
+  field, the second only by running the real tool against a realistic tree: the unit fixtures never
+  placed the script inside the workspace, so they scored a dead tree healthy.
+- **It is fatal, unlike staleness.** Nothing we release can turn it red; only an edit in your
+  repository can. That is the whole test for whether a finding may be fatal.
+
+The scan is a substring match over config-shaped files, so it is biased toward false _positives_ —
+a stale mention in a comment keeps the check quiet. That is the safe direction: the check exists to
+catch a tree that is provably dead, not to audit that every reference is load-bearing.
+
 **A checker validates its input before it trusts it.** Two adopters arrived at the same rule from
 opposite directions, and it is the single most useful thing to know about `--check`: assert the
 lock parses, records files, and carries a usable ref **before** comparing any hashes. A checker

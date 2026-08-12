@@ -29,7 +29,7 @@
  * else. Provenance lives in the lock file instead.
  */
 
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, dirname, relative, resolve, isAbsolute } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -492,6 +492,40 @@ async function check(noRemote = false) {
 
   process.stdout.write(`${entries.length} vendored file(s) match ${LOCK} at ${lock.ref}.\n`);
 
+  // Pristine is not the same as used.
+  //
+  // A consumer pointed out that everything above can pass on a tree nothing
+  // reads: rewire `tsconfig.json` back to the package it was vendored to
+  // replace, and the vendored files stay byte-perfect while becoming inert.
+  // The hashes are green and the answer is worthless. They kept a local test
+  // asserting their config still pointed at the vendored directory, and were
+  // right that it belongs here -- every consumer needs it, and a local copy is
+  // the one that goes stale while this file evolves.
+  //
+  // Fatal rather than advisory, by the same rule the exit codes follow
+  // elsewhere: nothing published in the engineering repository can orphan a
+  // consumer's vendored tree. Only an edit in that repository can. So it cannot
+  // redden an unrelated pull request, and it means what it says.
+  const recorded = Array.isArray(lock.references) ? lock.references : null;
+  if (recorded) {
+    const dest = lock.dest ?? dirname(entries[0][0]);
+    const live = await wiringReferences(dest);
+    if (recorded.length > 0 && live.length === 0) {
+      fail(
+        `nothing in this repository references the vendored configs in ${dest}.\n` +
+          `  ${LOCK} recorded ${recorded.length} file(s) that did:\n    ${recorded.join('\n    ')}`,
+        'The files are pristine but inert -- a config was probably rewired back to the ' +
+          'package these replaced. Restore the reference, or re-run the vendor step so the ' +
+          'lock records the new wiring.',
+      );
+    }
+    process.stdout.write(
+      live.length > 0
+        ? `${live.length} file(s) reference the vendored configs.\n`
+        : `No file references the vendored configs yet. Wire them up before relying on this check.\n`,
+    );
+  }
+
   // Two behaviours live behind one flag and they are easy to conflate: the hash
   // comparison above is authoritative and offline, while everything below is an
   // advisory network lookup. A consumer put it exactly right — a green --check
@@ -727,6 +761,11 @@ async function main() {
     fetchedAt: new Date().toISOString(),
     refresh: `node scripts/vendor-configs.mjs <newer-ref>`,
     tool: await toolEntry(ref),
+    dest,
+    // Which files in the consumer's repository actually point at the vendored
+    // tree. Recorded so `--check` can tell "unchanged" from "still in use" --
+    // two properties that look identical from a hash comparison and are not.
+    references: await wiringReferences(dest),
     files: Object.fromEntries(
       staged.map((item) => [lockKey(item.dest), { source: item.path, sha256: sha256(item.text) }]),
     ),
@@ -813,6 +852,87 @@ async function main() {
  * a consumer deliberately running a newer tool. Whether that tool matches the
  * ref is asked here instead, at vendor time, where the answer is actionable.
  */
+/**
+ * Files in the consumer's repository that mention the vendored directory.
+ *
+ * Deliberately a plain substring search over likely config files rather than a
+ * parser: the reference can appear in `extends`, an import, a `--config` flag
+ * in a package script, or a CI step, and a parser for each would be a larger
+ * surface than the thing it verifies. A false positive here is harmless (it
+ * only keeps the check quiet); a false negative would fail a healthy repo, so
+ * the sweep is broad on purpose.
+ */
+async function wiringReferences(dest) {
+  const needle = String(dest).replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  if (needle === '' || needle === '.') return [];
+
+  // This script carries the default dest as a string literal, and adopters are
+  // told to commit it. Counting it would let the tool vouch for the tree it is
+  // auditing -- vacuous for every consumer who kept the default path. Excluded
+  // by resolved path (the copy being executed) and by identical content (a
+  // committed copy sitting at some other path, renamed or not).
+  const selfPath = resolve(fileURLToPath(import.meta.url));
+  let selfText = null;
+  try {
+    selfText = await readFile(selfPath, 'utf8');
+  } catch {
+    // Unreadable self just means the path check carries it alone.
+  }
+
+  const SKIP = new Set([
+    'node_modules',
+    '.git',
+    'dist',
+    'build',
+    'coverage',
+    '.next',
+    '.svelte-kit',
+    '.turbo',
+    'out',
+  ]);
+  const EXT = /\.(json|jsonc|js|mjs|cjs|ts|mts|cts|ya?ml|toml)$/i;
+  const MAX_BYTES = 512 * 1024;
+  const hits = [];
+
+  async function walk(dir, depth) {
+    if (depth > 6) return;
+    let items;
+    try {
+      items = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const item of items) {
+      const path = dir === '.' ? item.name : `${dir}/${item.name}`;
+      if (item.isDirectory()) {
+        if (SKIP.has(item.name)) continue;
+        // The vendored tree references itself; only outside references count.
+        if (path === needle) continue;
+        await walk(path, depth + 1);
+      } else if (item.isFile() && EXT.test(item.name)) {
+        try {
+          const text = await readFile(path, 'utf8');
+          // Content identity is the real test: it catches a committed copy at
+          // any path, renamed or not. Resolved-path equality is only the
+          // fallback for when this script cannot read itself -- keeping it as a
+          // separate guard would be dead code, since selfText is by definition
+          // the content of selfPath. That fallback branch is not covered by a
+          // test: staging an unreadable self is not portable.
+          const isSelf = selfText === null ? resolve(path) === selfPath : text === selfText;
+          if (isSelf) continue;
+          if (text.length <= MAX_BYTES && text.includes(needle)) hits.push(path);
+        } catch {
+          // Unreadable is not a reference.
+        }
+      }
+    }
+  }
+
+  await walk('.', 0);
+  // The lock records itself as a reference otherwise, which is circular.
+  return hits.filter((path) => path !== LOCK).sort();
+}
+
 async function toolEntry(ref) {
   const source = 'scripts/vendor-configs.mjs';
   const self = fileURLToPath(import.meta.url);
