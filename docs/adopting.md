@@ -3435,6 +3435,25 @@ gate you have never seen fail is a gate you have not yet tested.
 > The generalisable form: **when two numbers are adjacent and look interchangeable, something has
 > to state which one is authoritative** — otherwise the cheaper one to read wins, and it is usually
 > the wrong one.
+>
+> **The same skew breaks verification, in the direction people actually get wrong.** A consumer
+> asked to confirm a peer range "at `v0.4.0`" read exactly that ref — and got package `0.3.0`,
+> because that is what the tag contains. So "check it at `v0.4.0`" and "check version `0.4.0`"
+> resolve to **different code**, and the tag looks _newer_ than the package inside it, which is the
+> opposite of what a reader assumes. They reported a stale peer range in good faith; the ref was
+> right and the artifact was a version behind.
+>
+> A `git merge-base --is-ancestor` check does not catch this: the ref genuinely is an ancestor of
+> `main` and still contains the wrong package version. What catches it is reading `version` out of
+> **the same `package.json` you are reading the claim from**, which costs one line and makes the
+> artifact self-identifying:
+>
+> ```bash
+> git show "v0.4.0:packages/eslint-config/package.json" | jq -r '.version, .peerDependencies'
+> ```
+>
+> So the rule is not only "a repo tag is never an actionable npm specifier" — it is **do not verify
+> at a repo tag either**, unless you read the package version out of the same file.
 
 ### A citation's `#fragment` cannot 404, so retitling a heading breaks it silently
 
