@@ -551,6 +551,48 @@ staleness signal without putting a network call in a lint gate.
 `--no-remote` is rejected when vendoring rather than ignored, because vendoring fetches files and
 cannot be offline; accepting it there would promise a guarantee that does not exist.
 
+#### "Warn-only by design" is a fact about the gate, not about the payload
+
+Staleness here is deliberately non-fatal, and adopters have correctly read that as licence to
+refresh on their own schedule. Two then drew a further conclusion that does not follow: that a
+release which cannot redden their build therefore contains nothing for them. One declined a refresh
+across **166 commits** on that reasoning.
+
+The two statements are about different objects. _Warn-only_ describes what the checker does when
+your pin is behind. _Nothing changed_ is a claim about file contents, and the checker never made
+it. A policy about failure modes cannot answer a question about payloads, so reading one off the
+other will be wrong exactly as often as releases contain something.
+
+Measured on that consumer's own pin, across the ten vendored files:
+
+```
+8/10  identical
+2/10  differ -- packages/prettier-config/index.d.ts   (new file)
+      packages/prettier-config/svelte.d.ts  (new file)
+```
+
+Not edits — **additions**, type declarations absent at the pinned ref entirely. A refresh was the
+difference between having and not having types on their Prettier config, which is small but is not
+"nothing", and is not what the policy predicted.
+
+So decide refreshes on a payload comparison, which is one command and needs no network:
+
+```bash
+git diff --stat <your-ref> <newer-ref> -- packages/tsconfig packages/prettier-config
+```
+
+**And compare the tool as well as the files it copies.** The same interval that looked content-free
+also carried a fix to `vendor-configs.mjs` itself: at the older ref, a `--dest` run rewrites the
+repository's lock, retargets it at paths outside the repository, and silently disarms `--check`,
+which then reports success while the real tree rots. A payload diff scoped only to the vendored
+directories misses that, because the defect is in the copier rather than the copy. Diff
+`scripts/vendor-configs.mjs` too, or read the release notes for the range you are skipping.
+
+The general form is the one this document keeps arriving at from different directions: **ask
+whether the evidence you have is about the thing you are claiming.** A green install is about
+resolution, not compatibility. A passing lint run is about rule behaviour, not peer ranges. A
+warn-only gate is about failure, not content.
+
 #### Pristine is not the same as used
 
 The adopter who gave us the sentence above pushed it one step further, and the extension is sharper
