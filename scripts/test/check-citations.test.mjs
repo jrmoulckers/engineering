@@ -1,3 +1,4 @@
+// citations-check: ignore-file -- builds deliberately-invalid citation fixtures.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -29,6 +30,59 @@ function fixture(contents) {
 }
 
 describe('check-citations', () => {
+  // A consumer's two wrong citations sat in `.ts` files. The scanner's
+  // extension set excluded them, so the run printed `all IDs exist` and exited
+  // 0 -- an affirmative green over the exact defect the tool exists to find.
+  test('scans source files, not only prose', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'citations-src-'));
+    try {
+      writeFileSync(path.join(dir, 'query.ts'), '// Authoritative (`ENG-NOPE-404`).\n', 'utf8');
+      const { code, out } = run(dir);
+      assert.equal(code, 1, 'a wrong citation in a .ts file must fail the run');
+      assert.match(out, /ENG-NOPE-404/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // A file count is not a claim about a repository unless the reader can see
+  // what "file" meant.
+  test('prints the scanned extension set alongside the count', () => {
+    const dir = fixture('Secrets follow `ENG-SEC-001`.\n');
+    try {
+      const { code, out } = run(dir);
+      assert.equal(code, 0);
+      assert.match(out, /scanned extensions:.*\.ts\b/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('honours the ignore pragma but names every file it skipped', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'citations-skip-'));
+    try {
+      writeFileSync(
+        path.join(dir, 'fixtures.mjs'),
+        `// citations-check${':'} ignore-file\nconst bad = 'ENG-NOPE-404';\n`,
+        'utf8',
+      );
+      const { code, out } = run(dir);
+      assert.equal(code, 0, 'a pragma-marked fixture file must not fail the run');
+      assert.match(out, /1 file\(s\) skipped/);
+      assert.match(out, /fixtures\.mjs/, 'a silent skip is how the false green happened');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // The pragma regex first matched its own definition, so the checker quietly
+  // excluded itself from every scan.
+  test('does not exclude itself via its own pragma definition', () => {
+    const { code, out } = run(script);
+    assert.equal(code, 0);
+    assert.doesNotMatch(out, /skipped/, 'the checker must scan its own source');
+  });
+
   test('accepts a real principle ID', () => {
     const dir = fixture('Secrets follow `ENG-SEC-001`.\n');
     try {

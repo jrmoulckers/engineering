@@ -6362,6 +6362,68 @@ prose (`per ENG-SEC-008 — never a real record`) is untouched. That restraint i
 an early version also parsed em-dashed text and produced a false positive on that exact line,
 and a checker that cries wolf is a checker somebody turns off.
 
+**Known ambiguity: every principle record currently contradicts itself about its own status.**
+All 66 records in `principles/` carry both of these lines:
+
+```text
+- Status: Ratified
+- Owner and ratification: Engineering owns this Draft's ... mechanism;
+    only the repository owner may change it to Ratified.
+```
+
+`Status` says the record is ratified; the ratification line describes it as a Draft awaiting the
+owner's change _to_ Ratified. It is uniform — 66 of 66, not a scattering of per-record errors —
+which reads like boilerplate that survived the ratification flip rather than a considered claim.
+
+This is the repository owner's call, not Engineering's, so it is recorded here rather than fixed.
+Two things follow for you meanwhile:
+
+- **Do not build an argument on the distinction.** Any proposal whose reasoning depends on a repo
+  holding an Accepted decision _against a Ratified principle_ being visibly in a different
+  position than one held against a Draft is resting on a word the catalog does not yet settle.
+- **Cite the ID and the obligation, not the status.** The Statement and Evidence are unambiguous
+  regardless of which half of the status wording turns out to be authoritative, and that is what a
+  reviewer checks against your repository anyway.
+
+**Re-run the checker after upgrading to v0.133.0 — earlier runs did not read your source files.**
+Until `v0.133.0` the scanner's extension set was prose-only (`.md`, `.txt`, `.yml`, `.json` and
+friends). Citations in `.ts`, `.js`, `.svelte`, `.py`, `.go` and the rest were never opened. A
+consumer had filed two wrong citations against themselves in `packages/domain/src/*.ts`, ran the
+checker over that repository, and got:
+
+```text
+41 citation(s) across 19 principle(s) in 102 file(s); all IDs exist.
+```
+
+Exit 0, over the exact defect the tool exists to find.
+
+This is worse than the silent-check failures recorded elsewhere in this guide. Those produced an
+**absent** signal — nothing said the check had not run. This produced an **affirmative green**:
+a clean verdict a reader would reasonably cite as evidence their citations were sound. A tool that
+says nothing invites a second look; a tool that says "all IDs exist" ends the inquiry.
+
+Two changes follow from it, and the second matters more than the first:
+
+- The extension set now covers source files as well as prose.
+- Every run prints **the extensions it scanned** and **every file it skipped, by name**. A count
+  of files is not a claim about your repository unless you can see what "file" meant. `102 files`
+  reads like the repo; it was a subset, and nothing in the output said so.
+
+If you need to exclude a file that builds citation fixtures deliberately containing invalid IDs,
+put `citations-check: ignore-file` in it. The skip is then reported by name on every run — an
+exclusion nobody can see is how this defect survived.
+
+```text
+681 citation(s) across 66 principle(s) in 153 file(s); all IDs exist, and 6 stated name(s) match.
+scanned extensions: .cjs .css .go .html .java .js .json .jsx ... .ts .tsx .txt .vue .yaml .yml
+2 file(s) skipped via "citations-check: ignore-file": scripts/test/...
+```
+
+The first implementation of that pragma matched its own definition, so the checker silently
+excluded **itself** from every scan — and when that was fixed it immediately reported a real
+invalid ID in its own documentation. A tool exempt from its own rule stops being evidence about
+the rule.
+
 **Cite nothing rather than the nearest-sounding ID.** If no principle states the obligation,
 state it as your own rule. But check before concluding one is absent — read the **Statement**,
 not the title. `ENG-INT-001` is titled _Thin typed adapters_, which does not sound like a rule
@@ -6369,6 +6431,30 @@ about framework-free domain logic; its Statement requires you to "isolate provid
 behavior behind thin single-purpose adapters", which is exactly that rule seen from the other
 side. Titles are labels, not the obligation, and a search over titles alone will conclude a
 principle does not exist when it does.
+
+**And "read the Statement" is itself too narrow — read the whole record.** A consumer looking for
+the framework-free obligation was pointed at `ENG-INT-001` and correctly answered that it is only
+half the rule. `ENG-INT-001` governs the _adapter_ — isolate provider behaviour behind a seam.
+A domain package that is not an adapter but simply has no renderer is a different shape, and the
+principle that covers it is `ENG-ARCH-002`, whose Statement mentions no such thing:
+
+```text
+- ID: ENG-ARCH-002
+- Statement: Publish typed, versioned, consumer-neutral contracts and evolve them
+    additively until a declared breaking boundary.
+- Evidence: ... policy modules run without a renderer or consumer framework.
+- Legacy input scope: ... `studio-legacy:testing:1` contributes framework-free policy testability.
+```
+
+Read only the Statement and you conclude `ENG-ARCH-002` is about contract versioning. The
+checkable obligation is in **Evidence**. That is not a one-off: `ENG-LOCAL-003`'s tombstone
+requirement and `ENG-LOCAL-002`'s "local data remains authoritative" both live in Evidence too,
+and all three were missed the same way by readers who stopped at the Statement.
+
+The pattern is that a Statement says what the principle _is for_ and Evidence says what you must
+be able to _show_ — so Evidence is where the sentence a reviewer can check against your repository
+tends to sit. When two principles both seem to apply, prefer citing both for their different
+halves over picking the closer-sounding one.
 
 **Link paths are checked for you.** IDs and locations are independent, and the area prefix is not
 derivable from the ID: of eleven prefixes, only `ARCH` lives under a directory named after it.
