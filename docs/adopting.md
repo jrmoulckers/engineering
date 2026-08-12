@@ -229,6 +229,50 @@ consuming repository to be granted access. Either way you must send a token.
 > While that returns `0`, the grants below are required. This is the current state and the
 > single blocker for adopting the presets.
 >
+> **There is a direct probe, and it is better than this one.** A consumer proposed asking the API
+> for the field itself rather than inferring it from a page:
+>
+> ```console
+> $ gh api users/jrmoulckers/packages/npm/eslint-config --jq .visibility
+> private
+> ```
+>
+> Prefer it. The `curl` above answers by **absence**, which is the failure mode this document has
+> had to retract twice; this answers by value. Keep the anonymous `curl` only as the no-auth
+> fallback, and note the API route needs `read:packages`.
+>
+> **But `gh` reports on the identity actually in effect, which may not be the one you configured.**
+> Running that probe here returned two different answers on the same machine, in the same
+> directory, within a minute:
+>
+> ```console
+> $ gh api users/jrmoulckers/packages/npm/eslint-config --jq .visibility
+> gh: You need at least read:packages scope to get a package. (HTTP 403)
+>
+> $ GH_TOKEN='' gh api users/jrmoulckers/packages/npm/eslint-config --jq .visibility
+> private
+> ```
+>
+> An environment-supplied `GH_TOKEN` takes precedence over the keyring credential and is not
+> mentioned in the error, which blames a missing scope without saying whose. `gh auth status` is
+> the disambiguator, and it prints both:
+>
+> ```console
+> $ gh auth status
+> ✓ Logged in to github.com account jrmoulckers (GH_TOKEN)
+>   - Active account: true
+>   - Token scopes: 'gist', 'project', 'read:org', 'repo', 'user', 'workflow'
+> ✓ Logged in to github.com account jrmoulckers (keyring)
+>   - Active account: false
+>   - Token scopes: 'admin:public_key', 'gist', 'read:org', 'read:packages', 'repo'
+> ```
+>
+> Both are the same username, so nothing looks wrong. This applies to **every** `gh` probe in this
+> document, not just the visibility one: run `gh auth status` first, or a reader reproduces a
+> published check under a different identity and gets a different answer with no indication why.
+> Note also that the 403 and a genuine "no such package" are easy to conflate — neither says
+> `public`, and only one is about permissions.
+>
 > **Grep for the link shape, not for a package name.** A consumer read this probe as untestable
 > because it returned `0` for repositories with genuinely public packages too. Their controls were
 > sound in intent and wrong in needle: the page never contains a bare package name near the link,
@@ -2081,6 +2125,49 @@ that surfaced this, a `nilerr` violation would have shipped for exactly that rea
 Because the mechanisms differ, a fix for one does not fix the other — the shared discipline is the
 question, not the remedy: **is the thing I just verified the thing that will be installed?** Ask it
 before believing a green local run, on any channel, including ones added later.
+
+**And "no npm surface" is not "no JavaScript".** That same consumer recorded the presets as
+non-applicable, correctly, on the evidence they had — then asked a second question and found six
+hand-authored browser ES modules served from Go via `//go:embed`:
+
+| Probe                        | Count |
+| ---------------------------- | ----- |
+| `package.json`               | 0     |
+| `eslint*` / `tsconfig*.json` | 0     |
+| `.ts` / `.tsx`               | 0     |
+| **`.js`**                    | **6** |
+
+No bundler, no package manager, no build step — and, until they looked, linted by nothing at all.
+`package.json: 0` and `.js: 0` are different questions, and only the first one gets asked, because
+the absence of a manifest reads as the absence of a language.
+
+**Measured before repeating their conclusion: `base()` handles this shape today.** With no
+`tsconfig.json`, no TypeScript, and no bundler:
+
+```console
+$ npx eslint static/js/api.js
+$ echo $?
+0
+
+$ npx eslint static/js/bad.js        # typo'd globals, unused binding
+  4:9  error  'unusedVar' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  6:3  error  'documnet' is not defined                        no-undef
+  7:3  error  'windwo' is not defined                          no-undef
+```
+
+Note both halves. The clean file passes with real `fetch`, `document` and `window`, so browser
+globals are configured rather than `no-undef` being switched off — and a _typo'd_ global is caught,
+which is the defect this file shape is most prone to and which no Go linter will ever see.
+
+So for a repository like this the presets **do** apply; what is genuinely open is whether a Go
+repository wants a Node toolchain, which is a cost decision and not an applicability one. Record it
+that way. "N/A — no npm surface" closes the question; "applies, declined for toolchain cost" leaves
+it visible.
+
+This also revises the crash reported at `0.6.0`, where plain `.js` outside the config/script/test
+escape hatch aborted a run. Hand-authored browser ESM with no project file anywhere is a **second
+confirmed instance** of that shape, from an unrelated repository — enough to treat it as a category
+the presets must handle rather than an edge case.
 
 > **The wider class: a missing thing presents as a wrong thing, or as a passing one.** The same
 > consumer unified three failures in this migration that had been recorded separately, and the
