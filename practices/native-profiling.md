@@ -74,22 +74,6 @@ each one silently invalidates it when omitted:
 
 Cold-versus-warm state is already mandated by `ENG-PERF-001` and is not repeated here.
 
-## Know the floor of your instrument (`ENG-PERF-001`, `ENG-PERF-008`)
-
-Sampling profilers — async-profiler, the Android Studio CPU profiler in sampled mode, `pprof` —
-resolve nothing below the sampling interval. Work that is individually short and collectively
-expensive is exactly the shape they miss, and **it does not appear as a small number**. It
-appears as absence, or as time attributed to a caller.
-
-This inverts the usual reading of a profile. If a hot path is suspected and the profile is flat,
-that is a signal to change instrument — tracing or instrumentation mode — not a finding that the
-path is cheap. A flat profile is evidence about the instrument at least as often as it is
-evidence about the code, and `ENG-PERF-008`'s reproduce-then-quantify ordering is what stops a
-null result being promoted to a conclusion.
-
-**Record which mode produced the capture.** A sampled and a traced profile of the same workload
-are not comparable, and mixing them reads as a regression that no code change caused.
-
 ## Profile to diagnose, benchmark to gate (`ENG-PERF-007`)
 
 This is the executable content, and the piece the budgets guide is missing. Native profilers are
