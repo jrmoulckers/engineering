@@ -1815,12 +1815,39 @@ instances in which **a missing thing presents as a passing one**.
 > `parserOptions.projectService: false`, not `disableTypeChecked.rules`. **Removing the project
 > without removing the rules that need one is precisely the combination that aborts.**
 >
-> This is the plain-`.js` crash fixed in `0.12.0`, one file extension over. The property was stated
-> correctly then — _JavaScript is never covered by a TypeScript project, so every type-aware rule
-> has to come back off for it_ — but the fix landed on the extension it was reported on rather than
-> the class. Any file type a `tsconfig` cannot include has that property. `0.14.0` therefore adds
-> `untypedFiles` to `base()`, which places caller globs in the **trailing** position, and
-> `svelteConfig` passes its own three.
+> **This was live for the entire life of the option, and the `.js` half was never broken at all.**
+> An earlier revision of this section said it was "the plain-`.js` crash fixed in `0.12.0`, one file
+> extension over." Both halves of that are wrong. Bisecting all fifteen published versions for the
+> two strings:
+>
+> | version          | `strictTypeChecked` | `.js` disable block |
+> | ---------------- | ------------------- | ------------------- |
+> | `0.1.0`–`0.5.0`  | absent              | absent              |
+> | `0.6.0`–`0.14.0` | present             | present             |
+>
+> They arrived **in the same release**, so **no published version ever exposed the `.js` crash** —
+> it was handled correctly the moment the option that can trigger it existed. `0.12.0` changed
+> nothing here; `base.js` is byte-identical between `0.11.0` and `0.12.0`.
+>
+> `.svelte` is the half that was actually broken, and it was broken in **every version that had the
+> option**: `0.6.0` through `0.13.0`, eight consecutive releases. Verified by installing `0.6.0`
+> from the registry and reproducing the same abort.
+>
+> So this is not a fix that landed on one extension and missed another later. The `.svelte` path was
+> **never** covered, and the reason is structural: the disable blocks were written by enumerating
+> extensions, and an enumeration silently omits whatever it does not name. Any file type a
+> `tsconfig` cannot include has the same property. `0.14.0` therefore adds `untypedFiles` to
+> `base()`, which places caller globs in the **trailing** position, and `svelteConfig` passes its
+> own three.
+>
+> **The correction is worth more than the fact, because of when it was made.** The wrong version
+> number shipped in `v0.103.0` — the same release whose notes state that _a fixed-in version is a
+> claim about the registry and has to be checked against it like any other_. Writing the rule down
+> did not cause it to be applied to the sentence next to it. A number recalled from a prior
+> conversation reads like a memory, not like a claim, so it never triggers the check that the rule
+> demands. **Treat every version number you did not just read off the registry as unverified,
+> including ones in your own recent work.** A consumer caught this one by asserting a different
+> number in passing.
 >
 > **A preset could not have fixed this itself, and that is the design point.** Its entries arrive
 > via `extend`, which `base()` splices in _above_ the trailing blocks specifically so a caller
@@ -1838,6 +1865,25 @@ instances in which **a missing thing presents as a passing one**.
 > (`require-await` 27, `prefer-promise-reject-errors` 20), with `no-floating-promises` firing
 > **zero** times and the whole `no-unsafe-*` family firing three. Real discipline, but a costed
 > change rather than a free upgrade, and the headline rules may not be the ones you get.
+>
+> **Do not verify this fix without enabling the option that triggers it.** One repository confirmed
+> the fix was active by linting a plain `.js` file through its own `svelteConfig()`:
+>
+> ```bash
+> echo 'export const probe = 1;' | eslint --stdin --stdin-filename src/probe.js   # exit 0
+> ```
+>
+> That probe cannot fail. Its config does not pass `strictTypeChecked`, so the type-checked sets are
+> never applied, so there is nothing to abort — on **any** version. Installing `0.5.0`, which
+> predates the whole mechanism, returns the same exit 0. The probe measures that type-aware linting
+> is off, and reports it as evidence that a type-aware crash is fixed.
+>
+> This is the same defect as the deleted `/packages` probe in a different costume: **an all-clear
+> whose failure mode also renders as an all-clear.** The check is cheap — run the probe against a
+> version you believe is broken and confirm it goes red first. Here that is unusually awkward, and
+> worth knowing before you try: because the option and its `.js` guard shipped together, **no
+> published version produces a red for the `.js` case at all**, so the probe has no valid negative
+> control anywhere in the release history. `.svelte` on `0.6.0`–`0.13.0` is the only real one.
 
 > **A stale pin hides the fix for the bug you are about to report.** The sharpest instance so far:
 > a Svelte repository held `prettier-config` at `^0.2.0` deliberately, and in the same message
