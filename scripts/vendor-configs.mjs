@@ -52,7 +52,15 @@ const SETS = {
   },
   prettier: {
     from: 'packages/prettier-config',
-    files: ['index.js', 'svelte.js'],
+    // The declarations ship alongside the modules they describe. Without them,
+    // importing the vendored config from TypeScript fails with TS7016 and the
+    // config widens to `any`.
+    //
+    // The trigger is `allowJs: false`, which is the default and what
+    // @jrmoulckers/tsconfig leaves in place -- NOT `checkJs`. With allowJs on,
+    // TypeScript reads the .js directly and infers a usable type, so the
+    // failure disappears; measured both ways before writing this.
+    files: ['index.js', 'index.d.ts', 'svelte.js', 'svelte.d.ts'],
   },
 };
 
@@ -195,6 +203,15 @@ function assertPayload(path, text) {
         'It parsed, but it is not a TypeScript configuration.',
       );
     }
+  } else if (path.endsWith('.d.ts')) {
+    // A declaration file that carries no declaration is indistinguishable from
+    // a stub, and a stub silently widens every consumer's types to `any`.
+    if (!/^(export )?declare |^export type |^export interface /m.test(text)) {
+      fail(
+        `${path} declares nothing`,
+        'It downloaded, but it is not a TypeScript declaration file.',
+      );
+    }
   } else if (!/^export /m.test(text)) {
     fail(`${path} exports nothing`, 'It downloaded, but it is not an ES module configuration.');
   }
@@ -209,6 +226,16 @@ async function fetchFile(ref, path) {
     fail(`could not reach ${url}`, String(cause.message ?? cause));
   }
   if (!response.ok) {
+    // A .d.ts 404 has one overwhelmingly likely cause, and the generic hint
+    // sends people looking for a typo instead. Declarations were added to
+    // prettier-config at v0.112.0; every earlier ref carries the modules
+    // without them.
+    if (response.status === 404 && path.endsWith('.d.ts')) {
+      fail(
+        `${url} returned HTTP 404`,
+        `Declarations ship from v0.112.0 onward. Ref '${ref}' predates them; vendor a newer tag.`,
+      );
+    }
     fail(
       `${url} returned HTTP ${response.status}`,
       `Check that ref '${ref}' exists in ${REPO} and contains this path.`,

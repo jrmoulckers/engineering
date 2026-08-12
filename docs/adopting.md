@@ -184,6 +184,30 @@ node scripts/vendor-configs.mjs "$REF"
 Commit the fetched files, `engineering-configs.lock.json`, and the script. Refreshing is the same
 command with a newer tag, which makes an upgrade a reviewable diff.
 
+**Vendor at `v0.112.0` or newer.** That is the first tag where `prettier-config` ships its type
+declarations, and the vendored set includes them. Earlier refs fail loudly with the floor named
+rather than writing a partial set:
+
+```
+error: .../packages/prettier-config/index.d.ts returned HTTP 404
+       Declarations ship from v0.112.0 onward. Ref 'v0.15.1' predates them; vendor a newer tag.
+```
+
+The declarations are not cosmetic for a vendoring consumer, and the precondition is the opposite of
+the one most people assume. **The trigger is `allowJs: false`, not `checkJs`** — and `allowJs` is
+false by default, which `@jrmoulckers/tsconfig` leaves alone. Measured both ways on a vendored tree:
+
+| `allowJs` | Declarations | Result                                          |
+| --------- | ------------ | ----------------------------------------------- |
+| `false`   | present      | `tsc` exits 0                                   |
+| `false`   | removed      | **TS7016**, config implicitly `any`             |
+| `true`    | present      | exits 0                                         |
+| `true`    | removed      | exits 0 — TypeScript reads the `.js` and infers |
+
+So a repository that happens to enable `allowJs` cannot reproduce the failure, and one that does not
+hits it on the first import. If you are chasing TS7016 on a vendored config, check `allowJs` before
+anything else.
+
 Vendoring normally trades away the one thing a registry gives you — a version signal — so this
 deliberately keeps it. The lock file records the ref and the SHA-256 of every file, the fetched
 files are written **byte-identical** to source with no generated header, and a re-run at a
