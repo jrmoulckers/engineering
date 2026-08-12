@@ -503,11 +503,43 @@ steps:
 > each operation"_). Condition on the call, not on the block.
 >
 > **And do not read this as a reason to omit `permissions:`.** Omitting it inherits the
-> repository default, which in many organizations is still the permissive write-all set — so
-> "unaffected" is true of `startup_failure` and false of least authority. The advice that gets
-> both: **declare an explicit narrow block, and add `packages: read` only if a job in that file
-> calls a reusable that declares it.** Raised by a consumer who was the counterexample to the
-> earlier phrasing.
+> repository default. The consumer who first argued that point later checked the repository they
+> were standing in and retracted the reasoning behind it:
+>
+> ```
+> GET /repos/OWNER/REPO/actions/permissions/workflow
+> {"default_workflow_permissions":"read", "can_approve_pull_request_reviews":false}
+> ```
+>
+> Verified `read` on three repositories here. So the "permissive write-all default" argument does
+> not hold, but the conclusion survives for a better reason — and the better reason is the useful
+> part. GitHub labels that default _"Read repository contents **and packages** permissions"_: the
+> default set **includes** `packages: read`. A caller with no explicit block is not lucky, it is
+> inheriting a **superset** of what the callees declare.
+>
+> Which inverts the intuition: **the more precisely you scope, the more likely you fall below a
+> callee's declaration.** "No block is safe" invites the reader to assume a narrower block is also
+> safe. It is the narrowing that is dangerous.
+>
+> **The necessary condition is a job-level `uses:` calling a reusable workflow — not a step-level
+> action.** A Go consumer confirmed they cannot have this trap at all: their only `uses:` entries
+> are `actions/checkout`, `actions/setup-go` and `golangci/golangci-lint-action`, all step-level.
+> Step-level actions declare no `permissions:` of their own; they run inside the calling job on
+> that job's token, so there is no callee declaration for the ceiling to bind against. Say this
+> plainly, because "applies even to Go repositories" otherwise sends every Go repository hunting
+> for a problem most of them structurally cannot have. Grep for the shape:
+>
+> ```bash
+> grep -rn --include='*.yml' -B5 'uses:.*jrmoulckers/\.github' .github/workflows/
+> ```
+>
+> **The resolution of the `ENG-SEC-004` tension is to compute the block, not to skip it.** Least
+> privilege says write an explicit narrow block; this trap says a narrow block is what kills you.
+> The same consumer supplied the resolution and it is better than the advice it replaces: **write
+> the explicit block as the union of what every callee declares.** That is still least privilege
+> relative to the inherited default — just never less than the callees need. Skipping the block
+> would trade a real security property for a workaround and would carve an exception out of
+> `ENG-SEC-004`; computing it keeps the principle intact. Use the callee table below as the input.
 >
 > **The exposure is inverted, and that is the thing to take away.** A second consumer sets
 > `permissions: {}` at _workflow_ level so that every job must declare its own — the strictest
