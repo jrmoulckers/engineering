@@ -451,11 +451,13 @@ steps:
 > re-deriving it from behaviour. A derivation can be reasoned wrong; a declaration cannot.
 
 > **Reconcile counts against your own call list, and treat a maintainer's chat summary as the
-> lossy channel it is.** Twice now this guide has been correct while a message summarising it was
-> not, and both times a consumer caught it. The second instance: a message listed six
+> lossy channel it is.** Three times now this guide has been correct while a message summarising
+> it was not, and every time a consumer caught it. One instance: a message listed six
 > install-bearing reusables and then asserted "all five you call are covered." Those cannot both
 > be true — the reader called five, but only **four** of theirs were on the list, the fifth being
-> `reusable-security-ci`, which needs nothing.
+> `reusable-security-ci`, which needs nothing. In a third, a message predicted that no Markdown
+> would remain in a format diff, while the section above says the opposite and names the three
+> categories that survive.
 >
 > The direction of the error is what makes it worth recording. A count that does not reconcile
 > does not fail safe: the reader resolves the discrepancy by assuming the uncounted callee belongs
@@ -1592,6 +1594,33 @@ authored break moved, and the diff really is confined to the categories above.
 The practical consequence is the opposite of the rewrap's. The residual diff is mechanical,
 low-risk, and worth landing in one commit; the rewrap was neither. **Same command, opposite
 advice** — which is why the two need separating before anyone runs it.
+
+> **Count files and count lines separately — `proseWrap` moves one and not the other.** A
+> repository re-ran its whole tree twice, holding `.prettierignore` constant and changing only
+> `proseWrap`:
+>
+> | Config                  | Files failing | Of which Markdown |
+> | ----------------------- | ------------- | ----------------- |
+> | `proseWrap: 'always'`   | 60            | 5                 |
+> | `proseWrap: 'preserve'` | **60**        | **5**             |
+>
+> Identical. `proseWrap` changed the file count by **zero**, while changing the line count by 551.
+> It cancels churn _within_ failing files; it does not stop any file failing. So a repository that
+> measures adoption by "how many files does `--check` list" will see no movement at all, and may
+> conclude its configuration never took effect. The measurement that shows the effect is lines,
+> not files.
+>
+> **The same run isolated a confound worth copying.** That repository's file count had genuinely
+> dropped, 104 → 60, and it would have been natural to credit `proseWrap`, since a drop was
+> predicted. The entire drop came from its `.prettierignore` — a different change, shipped in the
+> same pass. Holding one variable fixed and re-running is what separated them.
+>
+> This is the trap in predictions generally: **a confirming measurement does not identify the
+> cause.** Two changes landed together, an effect was predicted, the effect appeared, and it
+> belonged wholly to the other change. Every downstream repository would have inherited the wrong
+> mechanism — and repositories with no `.prettierignore` would have seen no drop and reasonably
+> suspected their own wiring. When you ship two changes at once and one of them has a predicted
+> effect, vary them independently before reporting the effect as evidence.
 
 > **"Does not reflow your prose" is true at the moment you switch, and progressively less true
 > afterwards. Expect a mixed corpus, and do not "fix" it.** `preserve` does not merely permit
