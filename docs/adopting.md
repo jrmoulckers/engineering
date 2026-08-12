@@ -1512,9 +1512,37 @@ of a cached packument, not three coincidences. A stale read is indistinguishable
 it is well-formed, plausibly ordered, and ends in a real version.
 
 The cost was not the version numbers. On the strength of that snapshot they re-reported a defect
-as still open — a preset missing its React and a11y layers — which had been fixed **four minors
-inside the range their read could not see**. So the stale read did not merely leave them behind;
-it manufactured a live bug report about resolved work, with a registry query as its evidence.
+as still open — a preset missing its React and a11y layers — and this document then recorded that
+it "had been fixed four minors inside the range their read could not see."
+
+**That sentence was wrong, and correcting it is the more useful lesson.** The version was asserted
+from memory, never checked. Bisecting every published tarball shows where `next.js` actually gains
+the layer:
+
+| package version  | `next.js` imports                                        |
+| ---------------- | -------------------------------------------------------- |
+| `0.5.0`          | next plugin, `typescript-eslint`, `base`, `ignores`      |
+| `0.8.0`          | next plugin, `base`, **`resolveHooks`** — still no React |
+| `0.9.0`–`0.12.0` | no `reactLayer`                                          |
+| **`0.13.0`**     | next plugin, `base`, **`reactLayer`**                    |
+
+The gap survived **nine** releases and closed in `0.13.0`, published _after_ the report that was
+dismissed on the grounds that it described fixed work. For the entire period they were reporting
+it, they were right.
+
+**A correct process critique does not dispose of the report.** Both facts were true and
+independent: their registry read really was stale, and the defect really was open. Delivering them
+together let the first stand in for a rebuttal of the second, so a valid, repeatedly-filed defect
+report was recharacterised as a methodology failure by the reporter. That is worse than simply
+missing the bug, because it transfers the error to the person who found it and gives them a reason
+to stop filing.
+
+Read the two independently. "Your evidence is stale" answers _how much confidence the evidence
+carries_. It never answers _whether the thing is broken_ — that requires checking the thing.
+
+And note which party was better positioned to catch it. The consumer could only observe the
+version they had installed; the version claim was this repository's to verify, and verifying it is
+one command. The report was re-filed five times.
 
 ```bash
 npm view @jrmoulckers/eslint-config version --prefer-online
@@ -1525,6 +1553,36 @@ npm view @jrmoulckers/eslint-config time.modified --prefer-online   # when the r
 one command everybody reaches for to escape staleness has a cache in front of it. Publishing
 timestamps are the cross-check — if `time.modified` predates a release you were told about, you
 are reading a copy, not the registry.
+
+**If you go one level lower and fetch tarballs, do not construct the URL.** Verifying the table
+above meant downloading each published version and reading `next.js` out of it. The obvious URL
+shape is wrong for GitHub Packages, and it fails in the worst possible way:
+
+```console
+$ curl -s -L -H "Authorization: Bearer $TOKEN" \
+    -o 0.13.0.tgz https://npm.pkg.github.com/@jrmoulckers/eslint-config/-/eslint-config-0.13.0.tgz
+$ ls -l 0.13.0.tgz
+-rw-r--r-- 1 user user 21 0.13.0.tgz          # 21 bytes
+$ cat 0.13.0.tgz
+{"error":"Not found"}
+$ tar -xzf 0.13.0.tgz -C out                  # extracts nothing, exit 0 under a pipeline
+```
+
+`curl` without `-f` writes the error body to the output file and exits `0`. The first pass of that
+check therefore reported `next.js MISSING` for **every** version — a result that reads exactly like
+"the file was removed from the package," and which would have produced a second false claim on top
+of the one being corrected.
+
+GitHub Packages serves content-addressed tarballs, so the real URL is in the packument and cannot
+be derived from the name and version:
+
+```
+https://npm.pkg.github.com/download/@jrmoulckers/eslint-config/0.13.0/43bd4252…
+```
+
+Read `.versions["<v>"].dist.tarball` rather than building the path, and pass `curl -f` so a 404
+fails loudly. The general form: **an extraction step that finds nothing is not evidence of
+absence until you have confirmed the archive was real.** Same shape as a `grep -c` of `0`.
 
 ```bash
 npm ls @jrmoulckers/eslint-config @jrmoulckers/tsconfig @jrmoulckers/prettier-config
