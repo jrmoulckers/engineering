@@ -170,6 +170,35 @@ function parseArgs(argv) {
 }
 
 /**
+ * Whether `candidate` is a strictly greater version than `current`.
+ *
+ * The obvious test — `latest !== ref` — is wrong, and wrong in the direction
+ * that produces a confident instruction to move backwards. GitHub's
+ * `releases/latest` returns the most recent release by the underlying tag's
+ * date, not the greatest version, so a patch backported to an older line and
+ * published after a newer minor is reported as "latest". Comparing for
+ * difference then tells every consumer to downgrade, simultaneously.
+ *
+ * Returns false when either ref is not a plain `vX.Y.Z`, because an ordering
+ * that cannot be established is not a staleness signal. Silence is the correct
+ * output for "I do not know", and the whole point of this function is that a
+ * wrong answer here is worse than no answer.
+ */
+export function isNewerRef(candidate, current) {
+  const parse = (ref) => {
+    const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(ref ?? '').trim());
+    return match ? match.slice(1, 4).map(Number) : null;
+  };
+  const a = parse(candidate);
+  const b = parse(current);
+  if (!a || !b) return false;
+  for (let i = 0; i < 3; i += 1) {
+    if (a[i] !== b[i]) return a[i] > b[i];
+  }
+  return false;
+}
+
+/**
  * Report whether a newer release exists. Never throws and never fails the
  * caller: a tag pushed upstream must not turn an unrelated PR red. Returns null
  * when the answer cannot be determined, which is treated the same as "fine" —
@@ -261,7 +290,7 @@ async function check() {
   process.stdout.write(`${entries.length} vendored file(s) match ${LOCK} at ${lock.ref}.\n`);
 
   const latest = await latestRef();
-  if (latest && latest !== lock.ref) {
+  if (isNewerRef(latest, lock.ref)) {
     process.stdout.write(
       `\nNotice: pinned at ${lock.ref}; newest release is ${latest}.\n` +
         `This is not a failure. Update deliberately when you choose to:\n` +
@@ -442,7 +471,7 @@ async function main() {
   // latest without anything saying so. Same contract as --check: a newer
   // release is information, never a failure.
   const latest = await latestRef();
-  if (latest && latest !== ref) {
+  if (isNewerRef(latest, ref)) {
     process.stdout.write(
       `\nNotice: you vendored ${ref}; the newest release is ${latest}.\n` +
         `This is not a failure — pinning to an older ref is a valid choice.\n` +
