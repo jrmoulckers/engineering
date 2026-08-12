@@ -61,16 +61,27 @@ test('nextConfig() still carries the Next-specific rules', () => {
   );
 });
 
-// The counts above are quoted in `react-layer.js` and in `docs/adopting.md` as
-// the size of the regression. They were wrong once — recorded as "17 react/* and
-// 6 jsx-a11y/*" from recall rather than measurement, when a consumer measuring a
-// real application found 18 and 31. A prose number that nothing executes drifts
-// silently, so this asserts a floor: the documented figures cannot exceed what
-// the presets actually enable.
-test('the documented rule counts are not larger than the real ones', () => {
+// A rule count is meaningless without its baseline, and this defect has three:
+// the legacy `next/core-web-vitals` (17 react / 6 a11y active), the broken
+// preset (0 / 0), and the fixed layer (18 / 31). All three numbers are true.
+//
+// I got this wrong in exactly the way the docs warn about: a consumer measured
+// broken -> fixed as 0 -> 18 / 0 -> 31, and I "corrected" the drop-relative-to-
+// legacy figures of 17 and 6 to match, shipping a wrong fact to fix a right one.
+// The scan that caught it looked for the old numbers and found them in a table
+// that explained why they were right.
+//
+// So this asserts the fixed layer's own counts -- the only baseline this file
+// can measure -- and leaves prose about the other two to name its baseline.
+test('the restored layer is ahead of the legacy config, not merely level', () => {
   const react = activeRules(reactConfig(), 'react/');
   const a11y = activeRules(reactConfig(), 'jsx-a11y/');
 
+  // Legacy `next/core-web-vitals` enforces 17 and 6. The fix must exceed both,
+  // which is the claim in `docs/adopting.md` that adopters plan around: expect
+  // *new* a11y findings, not parity.
+  assert.ok(react.size > 17, `expected more than the legacy 17 react/*, got ${react.size}`);
+  assert.ok(a11y.size > 6, `expected more than the legacy 6 jsx-a11y/*, got ${a11y.size}`);
   assert.ok(react.size >= 18, `docs claim 18 react/* rules; the preset enables ${react.size}`);
   assert.ok(a11y.size >= 31, `docs claim 31 jsx-a11y/* rules; the preset enables ${a11y.size}`);
 
