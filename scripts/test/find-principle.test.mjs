@@ -74,4 +74,29 @@ describe('find-principle', () => {
     assert.equal(code, 2);
     assert.match(out, /valid regular expression/);
   });
+
+  // Looking up a known ID matches only the `id` field. This tool used to answer
+  // with the title alone and then advise reading a record it declined to print,
+  // which is the exact input that produced two wrong-meaning citations in an
+  // adopter's draft -- both off the title, both would have passed the citation
+  // checker, because the ID resolves.
+  describe('an ID lookup shows the obligation, not just the label', () => {
+    test('prints the statement for an ID-only match', () => {
+      const { out, code } = run(['ENG-OBS-004']);
+      assert.equal(code, 0);
+      assert.match(out, /propagated identifiers/, 'the statement must be shown');
+      assert.match(out, /unrelated to sensitive identity/);
+    });
+
+    test('prints the evidence for an ID-only match', () => {
+      assert.match(run(['ENG-TEST-004']).out, /no green static stage is reported as test coverage/);
+    });
+
+    // The title is what misleads, so it must not be the only thing on screen.
+    test('the title alone is never the whole answer', () => {
+      const { out } = run(['ENG-TEST-004']);
+      assert.match(out, /Distinct static signals/);
+      assert.match(out, /statement/, 'title without statement is the defect this fixes');
+    });
+  });
 });
