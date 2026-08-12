@@ -1604,6 +1604,42 @@ widened `prettier-plugin-svelte` from `^3.2.0` to `^3.2.0 || ^4.0.0` — and the
 Svelte repository. The pin blocked precisely the change most relevant to it, and every check it
 ran stayed green.
 
+**Diffing the increment is not verifying the floor, and this is the strongest version of the trap
+because the measurement is rigorous.** A consumer on `^0.6.0` moved to `^0.7.0` and did the
+carefullest possible check: rather than trusting a claim that the release was irrelevant to their
+preset, they printed the _effective resolved ruleset_ for a real source file on both versions and
+compared them.
+
+```
+0.6.0 -> 295 rules
+0.7.0 -> 295 rules
+Compare-Object -> no difference
+```
+
+The measurement was correct and the method is the right one. The conclusion drawn from it — that
+the bump was a formality — was not, because **a diff between two adjacent versions is evidence
+about those two versions and nothing else.** The floor at the time was `0.14.0`. Seven minors sat
+outside the comparison, and `^0.7.0` cannot reach any of them.
+
+What was in that gap was not theoretical. Between `0.7.0` and `0.14.0`, `svelte.js` gains a block
+applying `typescript-eslint`'s `eslintRecommended` rules to `**/*.svelte` — **23 rules: 19 core
+rules switched off, 4 switched on** — and it applies to a bare `svelteConfig()` with no options.
+For a Svelte consumer that is a larger change to their resolved ruleset than the release they
+measured, and their check could not see it because it was never in the comparison.
+
+**Diff against the floor, not against the next version.** If the floor is `0.14.0` and you are on
+`0.6.0`, the only diff that answers "what does this bump change for me" is `0.6.0` against
+`0.14.0`. An adjacent-version diff answers a question nobody asked, and answers it convincingly
+enough to stop the investigation.
+
+A corollary, since a resolved-ruleset diff is the best tool here and worth using correctly: a rule
+present at severity `0` is not a rule that runs. `eslint-config-prettier` is part of the base
+preset and switches off **178 rules across nine plugin namespaces** — 81 core, 39 `vue/*`, 19
+`@typescript-eslint/*`, 16 `react/*`, 11 `flowtype/*`, and others — every one at severity `0`, for
+plugins that are mostly not loaded. So `--print-config` on a Svelte file legitimately lists 16
+`react/*` entries and 39 `vue/*` entries. None of them run. **Grep the severity, not the name**;
+the positive check is whether the rules a release actually adds appear at a non-zero severity.
+
 > **A retracted claim has to be corrected where it was made, not only where it landed.** A consumer
 > was told by this repository that "any authenticated token may now read the packages; no per-repo
 > access grant is needed". That was wrong. They did not act on it, and when a later message
