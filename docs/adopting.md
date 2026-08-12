@@ -425,6 +425,7 @@ The two outcomes deliberately differ in severity:
 
   ```
   Notice: pinned at v0.114.0; newest release is v0.115.0, 1 release(s) newer.
+  2 of 8 vendored file(s) would change.
   This is not a failure. Update deliberately when you choose to:
     node scripts/vendor-configs.mjs v0.115.0
   ```
@@ -434,6 +435,34 @@ The two outcomes deliberately differ in severity:
   and "this is not a failure" made a **116-release** gap sound like a decision someone had made.
   `116 release(s) newer` cannot be skimmed that way. If the count cannot be established it is
   omitted rather than guessed, and a full page reports `at least N` rather than a wrong total.
+
+  **The notice is silent when a newer release would change nothing you vendor.** A tag here
+  advances for docs, ADRs and CI edits that touch no vendored file. An adopter measured six
+  consecutive releases across which **0 of their 8 files** changed, and were told they were stale at
+  every one. A signal that always fires stops being read — and the habituated ignore then covers the
+  release that mattered, so a notice that cries wolf is worse than none. `--check` therefore
+  compares the **bytes at the newer ref**, not just the tag, and answers the question you actually
+  have: _would my config change?_
+
+  Two properties of that silence are worth knowing, because both are places this could have gone
+  wrong:
+
+  - **Silence means "compared, nothing differs" — never "the comparison failed."** If any file at
+    the newer ref cannot be fetched, the notice speaks and says the result is unknown, explicitly
+    disclaiming that it is evidence either way. A check whose failure mode is silence reads as
+    success, which is the defect this repository has now found three separate times in its own
+    verifying machinery.
+  - **A file _added_ upstream is invisible to a file-by-file comparison.** Every file you already
+    have matches, and you are silently missing the new one. The set of files is defined by the
+    vendoring script, so the script is compared too: if it changed at the newer ref, the notice says
+    so and tells you the file set may have changed — a case where `0 of N differ` is true and
+    misleading.
+
+  The vendor-time notice, by contrast, still fires on any newer tag. That difference is deliberate:
+  `--check` runs on every CI build, so a nag across irrelevant releases is seen hundreds of times
+  and learned as noise. Vendoring runs once, in a session where someone has just typed a ref by hand
+  and can still cheaply correct it — which is exactly when a newer release is worth an interruption
+  whatever its contents.
 
 **A checker validates its input before it trusts it.** Two adopters arrived at the same rule from
 opposite directions, and it is the single most useful thing to know about `--check`: assert the

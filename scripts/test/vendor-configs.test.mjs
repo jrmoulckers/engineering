@@ -47,9 +47,9 @@ function run(args, cwd, source = script, env = {}) {
 // spawnSync blocks this process's event loop, so an in-process server can never
 // answer the child and the child times out. Tests that stub the release lookup
 // must use this instead.
-function runAsyncIn(cwd, args, env = {}) {
+function runAsyncIn(cwd, args, env = {}, source = script) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [script, ...args], {
+    const child = spawn(process.execPath, [source, ...args], {
       cwd,
       env: { ...process.env, ...env },
     });
@@ -1103,7 +1103,7 @@ describe('the staleness notice reports how big the gap is', { skip: OFFLINE }, (
     const base = `http://127.0.0.1:${server.address().port}`;
     const dir = workspace();
     try {
-      await body((args) => runAsyncIn(dir, args, { VENDOR_API_BASE: base }));
+      await body((args, source) => runAsyncIn(dir, args, { VENDOR_API_BASE: base }, source), dir);
     } finally {
       rmSync(dir, { recursive: true, force: true });
       await new Promise((resolve) => server.close(resolve));
@@ -1183,11 +1183,94 @@ describe('the staleness notice reports how big the gap is', { skip: OFFLINE }, (
 
   test('--check reports the gap too, not only vendor time', async () => {
     const tags = ['v0.115.0', 'v0.114.0', 'v0.15.4'];
+    await withApi(api('v0.115.0', tags), async (exec, dir) => {
+      assert.equal((await exec(['v0.15.4', '--set', 'tsconfig'])).code, 0);
+
+      // The notice is content-aware, so it says nothing when the newer ref would
+      // change nothing -- which is true of these two refs for the tsconfig set.
+      // Forcing a real difference is what makes this test about the gap phrase
+      // rather than about which refs happen to differ today.
+      //
+      // Both the file and its lock hash are rewritten together, so the drift
+      // check still passes: the local tree is self-consistent and it is only
+      // upstream that differs. Editing the file alone would fail earlier, on
+      // drift, and the test would pass for the wrong reason.
+      const lockPath = join(dir, 'engineering-configs.lock.json');
+      const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+      const [dest, meta] = Object.entries(lock.files)[0];
+      const local = join(dir, dest);
+      const text = `${readFileSync(local, 'utf8')}\n`;
+      writeFileSync(local, text);
+      meta.sha256 = createHash('sha256').update(text).digest('hex');
+      writeFileSync(lockPath, JSON.stringify(lock, null, 2));
+
+      const { code, out } = await exec(['--check']);
+      assert.equal(code, 0);
+      assert.match(out, /2 release\(s\) newer/);
+      assert.match(out, /1 of 6 vendored file\(s\) would change/);
+    });
+  });
+
+  test('a newer release that changes nothing you vendor says nothing', async () => {
+    // Six consecutive releases changed 0 of one adopter's 8 vendored files, and
+    // the notice fired at every one. A signal that always fires is learned as
+    // noise, and the habituated ignore then covers the release that mattered.
+    const tags = ['v0.115.0', 'v0.114.0', 'v0.15.4'];
     await withApi(api('v0.115.0', tags), async (exec) => {
       assert.equal((await exec(['v0.15.4', '--set', 'tsconfig'])).code, 0);
       const { code, out } = await exec(['--check']);
       assert.equal(code, 0);
-      assert.match(out, /2 release\(s\) newer/);
+      assert.match(out, /6 vendored file\(s\) match/);
+      assert.doesNotMatch(out, /Notice:/);
+    });
+  });
+
+  test('an uncomparable ref speaks rather than staying silent', async () => {
+    // Silence must mean "compared, nothing differs" and never "the comparison
+    // failed" -- a check whose failure mode is silence reads as success, which
+    // is the defect this repository has now found three times in its own
+    // verifying machinery. A ref that does not exist upstream cannot be fetched.
+    const tags = ['v99.99.99', 'v0.15.4'];
+    await withApi(api('v99.99.99', tags), async (exec) => {
+      assert.equal((await exec(['v0.15.4', '--set', 'tsconfig'])).code, 0);
+      const { code, out } = await exec(['--check']);
+      assert.equal(code, 0);
+      assert.match(out, /Notice:/);
+      assert.match(out, /Could not compare contents/);
+      assert.match(out, /is unknown/);
+    });
+  });
+
+  test('a changed vendoring script speaks even when every file matches', async () => {
+    // Comparing the files already vendored cannot see a file *added* upstream:
+    // all of them match, and the consumer is silently missing the new one. The
+    // script is what defines the file set, so a changed script means the set may
+    // have changed -- the one case where "0 of N differ" is true and misleading.
+    //
+    // Isolated deliberately: the config files are identical across these two
+    // refs, so `changed` is 0 and only the tool drives the notice.
+    const tags = ['v0.115.0', 'v0.114.0', 'v0.15.4'];
+    await withApi(api('v0.115.0', tags), async (exec, dir) => {
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      const copy = join(dir, 'scripts/vendor-configs.mjs');
+      writeFileSync(copy, readFileSync(script, 'utf8'), 'utf8');
+
+      assert.equal((await exec(['v0.15.4', '--set', 'tsconfig'], copy)).code, 0);
+
+      // Local script and lock hash move together, so the drift check still
+      // passes and it is only upstream that differs.
+      const text = `${readFileSync(copy, 'utf8')}\n// local edit\n`;
+      writeFileSync(copy, text);
+      const lockPath = join(dir, 'engineering-configs.lock.json');
+      const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+      lock.tool.sha256 = createHash('sha256').update(text).digest('hex');
+      writeFileSync(lockPath, JSON.stringify(lock, null, 2));
+
+      const { code, out } = await exec(['--check'], copy);
+      assert.equal(code, 0, out);
+      assert.match(out, /0 of 6 vendored file\(s\) differ/);
+      assert.match(out, /vendoring script itself has changed/);
+      assert.match(out, /set of files may have changed/);
     });
   });
 });
