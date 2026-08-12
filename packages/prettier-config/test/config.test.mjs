@@ -1,9 +1,34 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import prettier from 'prettier';
 
 import config from '../index.js';
 import svelteConfig from '../svelte.js';
+
+describe('type declarations', () => {
+  // A consumer enabling `checkJs` on a tsconfig that covers `prettier.config.js`
+  // gets `TS7016: Could not find a declaration file` if any subpath resolves to
+  // bare JavaScript. That failure names this package while the feature being
+  // adopted lives in `eslint-config`, so it reads as an unrelated regression.
+  test('every export subpath resolves to a declaration', async () => {
+    const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+
+    for (const [subpath, entry] of Object.entries(pkg.exports)) {
+      assert.equal(
+        typeof entry,
+        'object',
+        `${subpath} is a bare string, so it ships no types condition`,
+      );
+      assert.ok(entry.types, `${subpath} has no "types" condition`);
+      assert.ok(
+        pkg.files.includes(entry.types.replace('./', '')),
+        `${entry.types} is not in "files", so it would not be published`,
+      );
+      await readFile(new URL(`../${entry.types.replace('./', '')}`, import.meta.url), 'utf8');
+    }
+  });
+});
 
 describe('prettier config', () => {
   test('pins line endings to lf', () => {

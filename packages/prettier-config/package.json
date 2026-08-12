@@ -1,6 +1,6 @@
 {
   "name": "@jrmoulckers/prettier-config",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Engineering-owned Prettier configuration.",
   "license": "UNLICENSED",
   "private": false,
@@ -14,12 +14,20 @@
     "registry": "https://npm.pkg.github.com"
   },
   "exports": {
-    ".": "./index.js",
-    "./svelte": "./svelte.js"
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./svelte": {
+      "types": "./svelte.d.ts",
+      "default": "./svelte.js"
+    }
   },
   "files": [
     "index.js",
+    "index.d.ts",
     "svelte.js",
+    "svelte.d.ts",
     "README.md"
   ],
   "engines": {
