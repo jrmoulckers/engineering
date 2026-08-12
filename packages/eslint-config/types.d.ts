@@ -41,6 +41,15 @@ export interface BaseOptions {
    * `typeAware`. Defaults to `false`; see the README for why.
    */
   strictTypeChecked?: boolean;
+  /**
+   * Extra globs for files no TypeScript project covers. Type-aware rules are
+   * disabled for them, after `extend`.
+   *
+   * Presets set this for their own file types; consumers rarely need it. It
+   * exists because a preset cannot fix this from `extend`, which is inserted
+   * above the blocks it would have to outrank.
+   */
+  untypedFiles?: string[];
 }
 
 export interface ReactOptions extends BaseOptions {
