@@ -1764,6 +1764,26 @@ such an instruction will search, find nothing, and be left unable to distinguish
 instruction from their own oversight. Both of this migration's instances were caught only because
 the recipient reported the absence instead of assuming they had misread.
 
+### A sound measurement against a stale tree is still wrong
+
+Comparing `--print-config` output before and after adopting a preset is the right method, and it
+does not protect you if the branch you measured on has fallen behind.
+
+One repository ran that diff carefully, on a branch **88 commits behind `main`**. In the meantime
+`main` had added two ignore globs — `**/playwright-report/**` and `**/test-results/**` — to fix a
+failure where Playwright's HTML report and trace snapshots took `pnpm lint` from **16 problems to
+5439**. The diff was clean and the conclusion was wrong, because the baseline no longer existed.
+
+The general form is worth more than the instance: **rigour in the measurement does not survive a
+stale baseline.** A "verified clean" claim has a date on it, and the older it is, the more it is a
+statement about a tree that no longer exists. Rebase onto current `main`, then re-measure — and
+treat any adoption claim older than the branch it was made on as unverified rather than verified.
+
+Both globs are now in `sharedIgnores`, so this specific case is closed for anyone adopting the
+preset. The reason it is worth stating anyway is that the failure only appears **after a test
+fails**: a repository that adopts while green sees nothing, and meets it on the run that already
+had something else wrong with it.
+
 ### `behind main: 0` does not mean nothing was dropped
 
 A long-running adoption branch is usually rebased several times, and a bad conflict resolution is
@@ -1995,11 +2015,11 @@ The trap is that this repeats at every minor. `^0.3.0` locks you out of `0.4.0` 
 again one release later and has no signal. Pin with an explicit upper bound instead, which tracks
 every minor until the first stable major:
 
-| Package                        | Range             | Floor is set by                                                       |
-| ------------------------------ | ----------------- | --------------------------------------------------------------------- |
-| `@jrmoulckers/eslint-config`   | `>=0.16.0 <1.0.0` | Tooling globs cover every test/config/script suffix, and are exported |
-| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`     |
-| `@jrmoulckers/prettier-config` | `>=0.4.0 <1.0.0`  | Type declarations, so `checkJs` consumers can adopt at all            |
+| Package                        | Range             | Floor is set by                                                        |
+| ------------------------------ | ----------------- | ---------------------------------------------------------------------- |
+| `@jrmoulckers/eslint-config`   | `>=0.17.0 <1.0.0` | Playwright report and trace output are ignored; tooling globs exported |
+| `@jrmoulckers/tsconfig`        | `>=0.4.0 <1.0.0`  | `vite-react.json`; TypeScript 6 and 7 support; opt-in `node.json`      |
+| `@jrmoulckers/prettier-config` | `>=0.4.0 <1.0.0`  | Type declarations, so `checkJs` consumers can adopt at all             |
 
 The floors say what each version _added_, so they only rise when something is genuinely required.
 The ranges keep you current without editing the manifest. Confirm what is actually published
@@ -2033,7 +2053,7 @@ give the specifier rather than the number:
 ```diff
 - Type declarations shipped in 0.8.0.
 + Type declarations shipped in 0.8.0. The floor is 0.15.0 — set
-+ "@jrmoulckers/eslint-config": ">=0.16.0 <1.0.0".
++ "@jrmoulckers/eslint-config": ">=0.17.0 <1.0.0".
 ```
 
 If you are reading a release note from this repository that names a version without naming the
@@ -2061,7 +2081,7 @@ version recorded in `versions.json`, and exits non-zero if any range cannot reac
 
 ```
   STALE    @jrmoulckers/eslint-config    ^0.3.0  CANNOT reach 0.16.0
-                                         use: >=0.16.0 <1.0.0
+                                         use: >=0.17.0 <1.0.0
 ```
 
 Two properties are deliberate, and both exist because this guide has repeatedly caught its own
@@ -4564,6 +4584,30 @@ it locally means you also own the TypeScript floor it implies.
 `node.json` and `vite-node.json` both set `types: ["node"]`, so install `@types/node` alongside
 them. Without it the first run fails with `TS2688: Cannot find type definition file for 'node'`,
 which reads like a broken preset rather than a missing dev dependency.
+
+**`node.json` bundles two unrelated concerns, so do not reach for it repo-wide.** It sets both
+`types: ["node"]` and `allowImportingTsExtensions`, and a package that needs the second without the
+first cannot use it. Both halves of the trap are real — measured on an empty project with one
+`import './dep.ts'`:
+
+| Extends                       | Result                                                                                                    |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `base.json`                   | `TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled` |
+| `node.json`, no `@types/node` | `TS2688: Cannot find type definition file for 'node'`                                                     |
+
+So in a monorepo where only the server package declares `@types/node`, extending `node.json` from
+the shared root fails every other package. The wiring that works splits by what each package
+actually is:
+
+| Config                    | Extends         | Why                                   |
+| ------------------------- | --------------- | ------------------------------------- |
+| root `tsconfig.base.json` | `base.json`     | serves packages with no `@types/node` |
+| server app                | `node.json`     | already declares `@types/node`        |
+| web app                   | `vite-app.json` | replaces `@tsconfig/svelte`           |
+
+If a package needs `.ts` specifiers but not Node types, set `allowImportingTsExtensions: true`
+locally rather than extending `node.json` for it. It is one compiler option, and it is a statement
+about how that package is executed — which is a repository layout decision, not a shared practice.
 
 #### Replacing an existing root `tsconfig.base.json`
 
