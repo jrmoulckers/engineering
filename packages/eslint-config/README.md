@@ -71,6 +71,56 @@ config files, scripts and tests, so files outside your project cannot abort the
 run. Use `typeAware: true` alone if you want type information available without
 the type-checked rule sets.
 
+### Take `no-floating-promises` without taking the rest
+
+`strictTypeChecked` is a large first bill. Measured on one repository: **2,093
+findings across 45 rules**, led by `no-unsafe-assignment` (311) and
+`no-unnecessary-type-assertion` (187). Most of that is untyped surface rather
+than defects, and it scales with how much `any` a codebase carries, not with how
+many files it has — so treat any quoted figure as a range, not an estimate.
+
+`no-floating-promises` is the rule in that set that finds a genuine defect class:
+a dropped rejection is a failure that never surfaces. On the same repository it
+accounted for **54 sites in 32 files**. You can enable it alone:
+
+```js
+base({
+  typeAware: true,
+  rules: { '@typescript-eslint/no-floating-promises': 'error' },
+});
+```
+
+Roughly a fifth of the findings, and the ones worth acting on first.
+
+This is safe rather than lucky, and the ordering is what makes it so. A caller's
+`rules` are merged into the preset's own rules block, which sits **before** the
+trailing blocks that switch type-aware rules off for JavaScript, tooling and any
+file type the preset marks untyped. So the override reaches TypeScript files and
+cannot reach the files that have no project behind them. Verified: with the
+config above, `no-floating-promises` resolves to severity `2` on a `.ts` file in
+the project and `0` on a `.js` file, and the run exits `1` with findings rather
+than `2` with a crash.
+
+### Tooling globs
+
+Repositories disagree about where tooling lives. `toolingFiles` covers tests,
+`*.config.*`, `scripts/**` and `tools/**`; it deliberately does not claim
+directories like `services/` or `internal/`, which are product source in most
+repositories. Extend it rather than re-authoring it:
+
+```js
+import { toolingFiles } from '@jrmoulckers/eslint-config/ignores';
+
+export default base({
+  extend: [
+    {
+      files: [...toolingFiles, 'services/**/*.ts'],
+      rules: { 'no-console': 'off' },
+    },
+  ],
+});
+```
+
 The React **and Next** presets take one additional option:
 
 | Option     | Type      | Default | Effect                                |

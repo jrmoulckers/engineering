@@ -83,7 +83,15 @@ export function base(options = {}) {
     },
     {
       files: toolingFiles,
-      rules: { 'no-console': 'off' },
+      rules: {
+        'no-console': 'off',
+        // Tooling is routinely CommonJS — `.cjs` config files, scripts a build
+        // step runs directly — and `require` is the only call available there.
+        // The rule stayed on everywhere, so a repository with CommonJS tooling
+        // took an unfixable error: the suggested import syntax is invalid in
+        // the file being linted.
+        '@typescript-eslint/no-require-imports': 'off',
+      },
     },
     ...extend,
     // Deliberately last, after `extend`. A type-aware rule on a file with no
