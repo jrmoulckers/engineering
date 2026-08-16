@@ -44,6 +44,15 @@ consequence on native is specific and worth stating: **a repository that instrum
 channel will believe it satisfies `ENG-PERF-008` and will not.** Both channels, or say which
 obligation you are not meeting.
 
+Having a field channel is not the same as having evidence from one. A collector that has never
+reported a problem and a collector that is silently dropping every sample look identical from
+here, and the second one reads as health. `ENG-TEST-008` asks you to verify important tests can
+fail by killing a targeted behavior-changing mutation; the same move applies to a measurement
+channel. **Break the channel on purpose once** — ship a deliberate regression to an internal or
+staged track, confirm the field metric moves, and record that you did. Until a channel has been
+observed failing, it is an assumption you are treating as evidence, which is the position
+`ENG-PERF-008` exists to prevent.
+
 ## Profile release builds on named baseline hardware (`ENG-PERF-002`)
 
 Debug builds mislead on every native platform, each for its own reason: Android debug skips R8
@@ -54,7 +63,13 @@ flattering some code and damning other code.
 - **Release configuration only** for any number that reaches a budget.
 - **Name the baseline device in the budget itself.** On the web, throttling is a property of the
   tool. On native, the device is a property of the **budget**, and a native budget without one is
-  unfalsifiable — any result can be defended by asserting different hardware.
+  unfalsifiable — any result can be defended by asserting different hardware. Name it by **model
+  and OS version** — `Pixel 6a, Android 14` — never by a tier label. A tier picks the device; only
+  the model and OS version record which one you used, and a label like "low-end Android" re-points
+  itself at faster hardware as the fleet turns over, so the budget quietly gets easier with no
+  edit to review. `ENG-PERF-002` asks for budgets that are reviewed when target platforms
+  materially change; recording the model and OS version is what makes a re-baseline a diff
+  someone can decline.
 
 `ENG-PERF-002` asks for versioned, method-specific budgets. **On native the device is part of the
 method**, and a hardware change is one of the material changes that triggers review.
