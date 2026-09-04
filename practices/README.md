@@ -57,6 +57,14 @@ already follow, and it makes the reported number mean what it says.
 Run `npm run coverage:list` to see the current gaps by area. A principle with no guide is not a
 licence to write the rule locally — it is a signal to propose a technique here.
 
+**A gap in this ledger is not always a missing technique.** `uncovered.json` carries a `$notes`
+block for a listed principle whose adoption technique exists somewhere the ratchet cannot see.
+`ENG-ARCH-003` is the live case: its technique is the ADR section of
+[`docs/adopting.md`](../docs/adopting.md), written for adopting repositories rather than for a
+stack. A note is a pointer and never coverage — the ID stays in the ledger, and `npm test` fails if
+the section it names is renamed or removed. Writing a stub guide to move the number instead would
+be the phantom coverage described above, arrived at deliberately.
+
 ## Boundaries
 
 These guides describe Engineering mechanisms only. Reference, but never restate:

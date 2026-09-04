@@ -4,6 +4,9 @@ import { readFile } from 'node:fs/promises';
 
 import { coverage, implementedIds } from '../check-coverage.mjs';
 
+const baselineUrl = new URL('../../practices/uncovered.json', import.meta.url);
+const readBaseline = async () => JSON.parse(await readFile(baselineUrl, 'utf8'));
+
 test('every principle is classified exactly once', async () => {
   const { covered, uncovered, total } = await coverage();
   assert.equal(covered.length + uncovered.length, total);
@@ -12,9 +15,7 @@ test('every principle is classified exactly once', async () => {
 
 test('the recorded baseline matches reality', async () => {
   const { covered, uncovered } = await coverage();
-  const baseline = JSON.parse(
-    await readFile(new URL('../../practices/uncovered.json', import.meta.url), 'utf8'),
-  );
+  const baseline = await readBaseline();
 
   const regressions = uncovered.filter((id) => !baseline.uncovered.includes(id));
   const stale = baseline.uncovered.filter((id) => covered.includes(id));
@@ -75,4 +76,35 @@ test('a title is not a declaration', () => {
   // `#` is the document title. Letting it count would restore the header
   // claim this model exists to reject, one line higher up.
   assert.deepEqual([...implementedIds('# Security (`ENG-SEC-002`)')], []);
+});
+
+test('a note annotates a gap without closing it', async () => {
+  // `$notes` records where a listed principle's technique actually lives when
+  // it is not a practices/ guide. It must never read as coverage: an ID with a
+  // note is still an ID the ratchet counts as a gap.
+  const baseline = await readBaseline();
+  const notes = baseline.$notes ?? {};
+
+  for (const id of Object.keys(notes)) {
+    assert.ok(
+      baseline.uncovered.includes(id),
+      `${id} has a note but is not listed uncovered — a pointer is not an implementation`,
+    );
+  }
+});
+
+test('every note points at a section that still exists', async () => {
+  // The failure a pointer invites is rot: the guidance is renamed or moved and
+  // the note keeps asserting it is there. Resolve it against the file.
+  const baseline = await readBaseline();
+
+  for (const [id, note] of Object.entries(baseline.$notes ?? {})) {
+    assert.ok(note.technique && note.section, `${id}: a note needs a technique and a section`);
+
+    const source = await readFile(new URL(`../../${note.technique}`, import.meta.url), 'utf8');
+    assert.ok(
+      source.split('\n').includes(note.section),
+      `${id}: ${note.technique} no longer contains the heading "${note.section}"`,
+    );
+  }
 });
