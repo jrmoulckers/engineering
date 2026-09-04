@@ -5,6 +5,13 @@
 - Deciders: repository owner
 - Principles: `ENG-ARCH-003`, `ENG-BUILD-002`
 
+> **This number was briefly shared.** A later record was also filed as `0001` and has been
+> renumbered to [`ADR-0002`](0002-native-platform-principle-area.md). This record keeps `0001`
+> because it is the earlier of the two, and because renumbering a published record breaks every
+> inbound citation to it. A bare `ADR-0001` written between 2026-08-16 and this fix may therefore
+> mean either document: this one is two-channel configuration delivery, `ADR-0002` is the
+> `ENG-NATIVE-*` proposal.
+
 `ENG-SEC-001` is deliberately **not** cited. Reducing how many people must hold a credential is a
 welcome side effect, but that principle governs the lifecycle of secrets that exist — keeping them
 out of source, injecting at runtime, rotating on exposure — and this decision implements none of

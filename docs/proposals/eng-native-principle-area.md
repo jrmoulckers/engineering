@@ -5,7 +5,7 @@
 - Status: Proposed — not Ratified, not in force, and deliberately outside `principles/`.
 - Requested by: the `finance` repository during centralized-practice adoption.
 - Decision record:
-  [`docs/architecture/0001-native-platform-principle-area.md`](../architecture/0001-native-platform-principle-area.md)
+  [`docs/architecture/0002-native-platform-principle-area.md`](../architecture/0002-native-platform-principle-area.md)
 
 This file is a **proposal only**. Nothing here binds any repository. The four principles below are
 written in the exact catalog format so that ratification is a file move plus a manifest update

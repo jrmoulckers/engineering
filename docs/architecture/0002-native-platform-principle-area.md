@@ -1,10 +1,17 @@
-# 0001: Native platform principle area
+# ADR-0002: Native platform principle area
 
 <!-- check-citations: allow-unknown ENG-NATIVE-004 ENG-WEB-042 -->
 
 - Status: Proposed
 - Date: 2026-08-10
 - Owner: repository owner
+
+> **Renumbered from `0001`.** This record was filed as `0001` while
+> [`ADR-0001`](0001-two-channel-config-delivery.md) already held that number — the allocation race
+> [`README.md`](README.md) describes, not a discipline failure: both authors read the directory and
+> both saw the same highest number. The rule there gives the earlier record its number and the later
+> one the next free one, so the two-channel record keeps `0001` and this one becomes `0002`. Nothing
+> about the decision changed; only the number and the filename did.
 
 ## Context
 

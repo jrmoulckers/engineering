@@ -107,3 +107,10 @@ pass review. Restating the uniqueness rule does not prevent the race; sequencing
 When a duplicate has already landed, keep the earlier record at its number with a forward pointer,
 give the later one a fresh number, and cross-link both. Renumbering the earlier record breaks every
 inbound citation to it, including any in source comments.
+
+**This repository has run that procedure once, on its own records.**
+`0001-native-platform-principle-area.md` and `0001-two-channel-config-delivery.md` both landed as
+`0001` — the two-channel record on 2026-08-11, the native-platform record five days later, each
+correct when its author looked. The two-channel record kept `0001`; the native-platform record
+became [`ADR-0002`](0002-native-platform-principle-area.md). Both carry a note naming the other, so
+a bare `ADR-0001` predating the fix can still be resolved rather than guessed at.

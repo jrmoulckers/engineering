@@ -1,5 +1,13 @@
 {
   "$comment": "Ratified principles with no implementing technique guide in practices/. Checked by scripts/check-coverage.mjs, which counts only the principle IDs named in a guide's section headings — a leading 'Implements' claim, a cross-reference, and a sentence stating a principle is NOT implemented all contain the ID, and none of them is an implementation. Fails if this list grows or names a principle that is now covered. Shrinking it is the point; adding to it needs a reason.",
+  "$notesComment": "'Uncovered' means 'no practices/ guide', which is narrower than 'no technique written anywhere'. The ratchet cannot see technique that lives outside practices/, and inventing a stub guide to make the number move would be the phantom coverage this model exists to reject. So where a listed principle does have adoption technique elsewhere, $notes says where instead. A note never removes an ID from the list above and never counts as coverage; it is a pointer, checked by scripts/test/check-coverage.test.mjs so it cannot rot into a dead reference.",
+  "$notes": {
+    "ENG-ARCH-003": {
+      "technique": "docs/adopting.md",
+      "section": "## Recording decisions (ADRs)",
+      "note": "Filename convention, the rule that numbers are unique and never reused, how to fix a collision by re-resolving each reference against the text it claims, and the citation rules — cite once on the index rather than per record, and only if you actually keep ADRs. It is written for adopting repositories rather than for a stack, which is why it is in docs/adopting.md and not a practices/ guide. Read this entry as 'the ratchet does not count it', not as 'no technique exists'."
+    }
+  },
   "uncovered": [
     "ENG-ARCH-003",
     "ENG-INT-004",

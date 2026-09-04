@@ -1,4 +1,4 @@
-# 0003: Record principle applicability instead of inferring it from silence
+# ADR-0003: Record principle applicability instead of inferring it from silence
 
 - Status: Proposed
 - Date: 2026-08-11
